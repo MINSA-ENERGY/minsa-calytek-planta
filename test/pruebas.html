@@ -7,8 +7,13 @@
      recorre los escenarios de docs/plan.md § Verificación mas los de la auditoria del 2026-09-05.
      Sin CSP a proposito (es herramienta de desarrollo, no se publica). Se corre asi:
 
-       node servidor-local.js ../herramientas-dev/pruebas.html
+       node servidor-local.js test/pruebas.html          (vive en app/test/ desde v0.19.4)
        msedge --headless=new --virtual-time-budget=30000 --dump-dom http://localhost:8080/?rol=gerencia
+
+     Modo SOLO MIRAR (obs. 569): `?rol=gerencia&vista=puerta` oculta este <pre> al terminar la
+     corrida y deja abierta esa pestana (puerta · bascula · hoy · padron · prealtas), asi la captura
+     headless muestra la UI y no el log:
+       msedge --headless=new --virtual-time-budget=30000 --window-size=1280,900 --screenshot=captura.png "http://localhost:8080/?rol=gerencia&vista=puerta"
 
      El resultado queda en <pre id="resultados"> y se manda a POST /guardar (_salida-dev.json).
      El Graph falso VALIDA los valores de columnas choice contra esquema.json, como SharePoint:
@@ -52,7 +57,7 @@
 (function () {
     const fetchReal = window.fetch.bind(window);
     const G = 'https://graph.microsoft.com/v1.0';
-    const DB = { listas: {}, carpetas: [], archivos: [], siguienteId: 1, esquema: null, fallas: [], llamadas: [], filtros: [] };
+    const DB = { listas: {}, carpetas: [], archivos: [], siguienteId: 1, esquema: null, fallas: [], llamadas: [], filtros: [], textoLargo: [] };
     window.__DB = DB;
 
     function lista(id) { for (const l of Object.values(DB.listas)) if (l.id === id) return l; return null; }
@@ -65,6 +70,11 @@
         for (const c of esq.columnas) {
             if (c.tipo === 'choice' && campos[c.nombre] !== undefined && campos[c.nombre] !== null && !c.opciones.includes(campos[c.nombre]))
                 return `El valor "${campos[c.nombre]}" no es una opción de la columna ${c.nombre} (choice sin allowTextEntry)`;
+            // SharePoint: texto de una linea = 255; pasarse es un 400 «Invalid request» sin mas detalle. Mordio en
+            // minsa-proyectos (2026-09-12, webUrl de 268) con 251 pruebas en verde: el falso solo rechaza lo que
+            // alguien le enseno a rechazar, y cada limite que muerde en una app entra el mismo dia en el falso
+            // de la otra (obs. 588). La corrida exige DB.textoLargo vacio al cerrar.
+            if (c.tipo === 'text' && typeof campos[c.nombre] === 'string' && campos[c.nombre].length > 255) { DB.textoLargo.push(`${l.nombre}.${c.nombre}=${campos[c.nombre].length}`); return 'Invalid request'; }
         }
         return null;
     }
@@ -514,6 +524,11 @@ try {
         }
         // 12b. Embarque cerrado con folio E-: se ANULA con motivo, el folio no se reutiliza.
         document.querySelector('#pestanas button[data-p="hoy"]').click();
+        // 12a termina esperando el DATO (el renglon ya no esta en el Graph falso), pero el repintado de la
+        // app llega un tick despues: sin esta pausa el boton se capturaba de una tabla que luego se
+        // reemplazaba, el clic caia en un nodo suelto y el dialogo nunca abria — 2 de 4 corridas en rojo
+        // sobre el mismo HEAD (medido 2026-09-13). Se espera al repintado, no al dato.
+        await dormir(150);
         const filaEmb2 = [...document.querySelectorAll('#tbFila tr')].find(tr => tr.textContent.includes(emb2.fields.Title));
         const btnAnular = filaEmb2 && filaEmb2.querySelector('button[data-accion="anular"]');
         R.ok('embarque cerrado con folio ofrece Anular (no eliminar)', !!btnAnular && !(filaEmb2 && filaEmb2.querySelector('button[data-accion="eliminar"]')));
@@ -676,6 +691,7 @@ try {
 } catch (e) {
     R.ok('la corrida terminó sin excepción', false, (e && e.stack) || String(e));
 } finally {
+    R.ok('ningún texto > 255 llegó a Graph en toda la corrida (el falso lo rechaza como SharePoint)', window.__DB.textoLargo.length === 0, window.__DB.textoLargo.join('|'));
     await R.cerrar();
     // ?vista=padron oculta la bitacora y deja esa pestana abierta: para una captura de pantalla.
     if (params.get('vista')) { $('resultados').hidden = true; document.querySelector(`#pestanas button[data-p="${params.get('vista')}"]`).click(); }
