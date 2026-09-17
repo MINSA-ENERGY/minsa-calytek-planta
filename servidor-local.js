@@ -82,7 +82,9 @@ const servidor = http.createServer((req, res) => {
     });
 });
 
-servidor.listen(PUERTO, () => {
+// S-08 (copiado de proyectos v0.80.0): solo la interfaz local. Sin host, Node abre 0.0.0.0/:: y cualquier equipo de la misma
+// Wi-Fi leia la app servida y podia hacer POST /guardar y pisar _salida-dev.json mientras corria la E2E.
+servidor.listen(PUERTO, '127.0.0.1', () => {
     console.log('');
     console.log(`Sirviendo ${RAIZ}`);
     console.log(`Indice: ${INDICE}`);
