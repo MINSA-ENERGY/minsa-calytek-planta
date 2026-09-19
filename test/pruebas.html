@@ -257,10 +257,19 @@ try {
         filas('prealtas').push({ id: DB.siguienteId++, fields: { Title: 'CLIENTE DEMO-POZO 1-2026', Estado: 'borrador', Corriente: 'base-aceite', CarrierId: cId, UnidadesIds: String(uId), ChoferesIds: String(chId), Campana: 'L-26-001' } });
         R.log('nota', `rol ${ROL} no captura: padrón y pre-alta en borrador sembrados directo en las listas`);
     }
+    // U-08 (v0.22.0): el primer inicio de sesion falla (el sitio no contesta): el aviso debe salir DENTRO de la pantalla
+    // de entrada, sobre el boton, y el boton volver a estar disponible; el segundo toque entra.
+    DB.fallas.push({ metodo: 'GET', incluye: '/sites/', status: 500, veces: 1 });
     await import('./app.js');
     R.log('nota', `app importada · rol de prueba: ${ROL} · versión: ${$('pie').textContent}`);
+    await esperar(() => $('entradaAviso').textContent.includes('No se pudo terminar'), 'aviso de entrada fallida');
+    R.ok('U-08: el error de inicio de sesión sale dentro de la pantalla de entrada y no en #avisos; «Entrar» queda disponible',
+        visible('entradaAviso') && !$('btnEntrar').disabled && $('avisos').childElementCount === 0 && $('btnEntrar').textContent.includes('Entrar con cuenta'),
+        `${$('entradaAviso').textContent.slice(0, 60)} · disabled ${$('btnEntrar').disabled}`);
+    clic('btnEntrar');
+    R.ok('U-20: el botón dice en qué va («Entrando…») y queda deshabilitado mientras entra', $('btnEntrar').disabled && $('btnEntrar').classList.contains('ocupado') && /Entrando|Abriendo|Leyendo/.test($('btnEntrar').textContent), $('btnEntrar').textContent);
 
-    // 2. Sesion: entra sola (cuenta ya presente) y aterriza en la pantalla del rol.
+    // 2. Sesion: entra con la cuenta ya presente y aterriza en la pantalla del rol.
     await esperar(() => !visible('pantallaEntrar'), 'sesión iniciada');
     R.ok('sesión iniciada y rol resuelto', $('quien').textContent.includes(ROL), $('quien').textContent);
     const inicial = ['hoy', 'puerta', 'bascula', 'prealtas', 'padron'].find(p => visible('p-' + p));
@@ -269,6 +278,22 @@ try {
     // 3. Padron: carrier (RME 105) + unidad + chofer.
     document.querySelector('#pestanas button[data-p="padron"]').click();
     if (captura) {
+    // U-18 (v0.22.0): los tres grupos vacios lo dicen (antes solo Carriers).
+    R.ok('U-18: Unidades y Choferes vacíos tienen estado vacío', $('pdUnidades').textContent.includes('Sin unidades') && $('pdChoferes').textContent.includes('Sin choferes'), $('pdUnidades').textContent.slice(0, 40));
+    // U-09 (v0.22.0): Escape (evento cancel) sobre un formulario con algo tecleado pregunta; vacio cierra directo.
+    clic('btnNuevoCarrier'); await esperar(() => $('pdFormaCarrier').open, 'forma de carrier');
+    $('pdFormaCarrier').dispatchEvent(new Event('cancel', { cancelable: true })); await dormir(30);
+    R.ok('U-09: Escape sobre un formulario VACÍO no pregunta', !$('dlg').open);
+    clic('btnCancelarCarrier');
+    clic('btnNuevoCarrier'); poner('pcTitle', 'A MEDIAS');
+    $('pdFormaCarrier').dispatchEvent(new Event('cancel', { cancelable: true }));
+    await esperar(() => $('dlg').open, 'confirmación de descarte');
+    R.ok('U-09: Escape con algo capturado abre «Descartar lo capturado» y el formulario sigue abierto', $('dlgTitulo').textContent.includes('Descartar') && $('pdFormaCarrier').open);
+    clic('dlgCancelar'); await dormir(30);
+    R.ok('U-09: al no descartar, lo tecleado sigue ahí', $('pdFormaCarrier').open && $('pcTitle').value === 'A MEDIAS');
+    $('pdFormaCarrier').dispatchEvent(new Event('cancel', { cancelable: true })); await esperar(() => $('dlg').open, 'confirmación 2'); clic('dlgOk');
+    await esperar(() => !$('pdFormaCarrier').open, 'formulario descartado');
+    R.ok('U-09: al confirmar, el formulario se cierra', !$('pdFormaCarrier').open);
     clic('btnNuevoCarrier');
     poner('pcTitle', 'TRANSPORTES DEMO SA DE CV'); poner('pcAut', '00-ASEA-T-RME-00-00'); poner('pcVig', '2028-12-05'); poner('pcFolio', 'UGI-DEMO-0000-2025'); poner('pcCSF', '2027-01-01');
     document.querySelector('input[name="pcCorr"][value="base-aceite"]').checked = true;
@@ -285,6 +310,15 @@ try {
     await esperar(() => avisoCon('Unidad transcrita'), 'unidad guardada');
     R.ok('placa normalizada al guardar', filas('unidades')[0].fields.Title === '55XY9K', filas('unidades')[0].fields.Title);
     const unidadId = filas('unidades')[0].id;
+    // U-15 (v0.22.0): el renglon del padron se abre con teclado y anuncia su estado.
+    {
+        const cab = document.querySelector('#pdUnidades .renglon > div:first-child');
+        const antes = cab.getAttribute('aria-expanded');
+        cab.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        R.ok('U-15: el renglón del padrón es role=button, tabindex=0 y Enter despliega la ficha (aria-expanded)', cab.getAttribute('role') === 'button' && cab.tabIndex === 0 && antes === 'false' && cab.getAttribute('aria-expanded') === 'true' && !document.querySelector('#pdUnidades .ficha').classList.contains('oculto'), `${antes} → ${cab.getAttribute('aria-expanded')}`);
+        cab.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        R.ok('U-15: Espacio la vuelve a plegar', cab.getAttribute('aria-expanded') === 'false');
+    }
 
     clic('btnNuevoChofer');
     poner('pchCarrier', String(carrierId)); poner('pchNombre', 'JUAN PEREZ DEMO'); poner('pchLicVig', '2027-01-15');
@@ -321,8 +355,17 @@ try {
         poner('paPozo', 'Pozo-1');
         poner('paCarrier', String(carrierId)); await dormir(20);
         poner('paFecha', '2026-10-15'); poner('paGondolas', '10');
+        // C-04 (v0.22.0): «otro celular» tomo L-AA-001 hace un segundo (la memoria de esta sesion no lo sabe): la campana
+        // se escoge con la lista RELEIDA, asi que la nuestra debe salir L-AA-002. Luego se retira el ajeno y se recarga.
+        const aaL = String(new Date().getFullYear()).slice(-2);
+        const ajena = { id: DB.siguienteId++, fields: { Title: 'OTRO-POZO-2026', Estado: 'borrador', Corriente: 'base-agua', CarrierId: carrierId, Campana: `L-${aaL}-001` } };
+        filas('prealtas').push(ajena);
         clic('btnGuardarPrealta');
         await esperar(() => avisoCon('Pre-alta guardada como borrador'), 'pre-alta guardada');
+        const nuestra = filas('prealtas').find(p => p.fields.Title === 'CLIENTE DEMO-POZO 1-2026');
+        R.ok('C-04: la campaña se escoge con la lista releída, no con la memoria (la ajena L-AA-001 no se repite)', nuestra && nuestra.fields.Campana === `L-${aaL}-002`, nuestra && nuestra.fields.Campana);
+        filas('prealtas').splice(filas('prealtas').indexOf(ajena), 1);
+        clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras la campaña ajena');
         R.ok('pre-alta en borrador con campaña L-AA-NNN', /^L-\d\d-\d{3}$/.test(filas('prealtas')[0].fields.Campana), filas('prealtas')[0].fields.Campana);
         R.ok('pre-alta liga unidades y choferes del carrier', filas('prealtas')[0].fields.UnidadesIds === String(unidadId) && filas('prealtas')[0].fields.ChoferesIds === String(choferId));
         // Editar el borrador (v0.19.10): PATCH que conserva la campana y el estado.
@@ -381,9 +424,20 @@ try {
         elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
         poner('puManifiesto', 'MINSA/RME/000/2026'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M');
         elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
+        // U-17 (v0.22.0): teclear la placa marca el chip por data-placa (no por el texto, que trae pegado el <small>).
+        R.ok('U-17: al teclear la placa el chip de la unidad se marca (data-placa)', !!document.querySelector('#puUnidades .u.sel') && document.querySelector('#puUnidades .u.sel').dataset.placa === '55XY9K', String(document.querySelector('#puUnidades .u') && document.querySelector('#puUnidades .u').dataset.placa));
+        // U-11 (v0.22.0): en celular (< 900 px) el campo de peso no levanta el teclado del sistema.
+        R.ok('U-11: inputmode del peso = none en celular, numeric en escritorio', $('baKg').inputMode === (window.matchMedia('(min-width: 900px)').matches ? 'numeric' : 'none'), `${window.innerWidth}px → ${$('baKg').inputMode}`);
         clic('btnCompuerta');
         await esperar(() => visible('veredicto'), 'veredicto');
         R.ok('compuerta caso 3: PASA (semáforo verde)', $('veredicto').classList.contains('v-ok') && $('vkW').textContent === 'Pasa', $('vkW').textContent);
+        // U-16 (v0.22.0): Tab cicla dentro del veredicto (Registrar ↔ Corregir), no se sale a la puerta de atras.
+        $('btnVolverVeredicto').focus();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        const trasTab = document.activeElement && document.activeElement.id;
+        $('btnRegistrarPuerta').focus();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+        R.ok('U-16: Tab desde el último botón vuelve al primero y Shift+Tab desde el primero va al último', trasTab === 'btnRegistrarPuerta' && document.activeElement.id === 'btnVolverVeredicto', `${trasTab} · ${document.activeElement.id}`);
         clic('btnRegistrarPuerta');
         await esperar(() => avisoCon('Ya aparece en Báscula'), 'registro de puerta');
         const emb1 = filas('embarques')[0];
@@ -498,6 +552,14 @@ try {
             R.ok('la excepción NO está en planta hasta que se autorice', !$('baLista').textContent.includes(exc.fields.Manifiesto));
             document.querySelector('#pestanas button[data-p="hoy"]').click();
             R.ok('Hoy muestra la franja de excepción con su motivo', visible('hoyFranja') && $('hoyFranja').textContent.includes('Póliza renovada'));
+            // U-12 (v0.22.0): el renglon de la excepcion en «Pendiente revisar» trae los mismos botones que la franja.
+            {
+                const rExc = [...document.querySelectorAll('#tbPendientes .renglon')].find(r => r.textContent.includes('Excepción'));
+                const btnAut = rExc && rExc.querySelector('button[data-accion="autorizar"]');
+                R.ok('U-12: Pendiente revisar lista la excepción UNA vez y con acción (Autorizar para gerencia; Anular/Eliminar para quien corrige)',
+                    !!rExc && document.querySelectorAll('#tbPendientes .renglon').length === [...document.querySelectorAll('#tbPendientes .renglon')].filter(r => !r.textContent.includes('Excepción')).length + 1
+                    && (ROL === 'gerencia' ? !!btnAut : !!rExc.querySelector('button')), rExc ? rExc.textContent.slice(0, 80) : 'sin renglón');
+            }
             if (ROL === 'gerencia') {
                 $('hoyFranja').querySelector('button.si').click(); await confirmar();
                 await esperar(() => avisoCon('Excepción autorizada'), 'autorización');
@@ -626,6 +688,8 @@ try {
             rUn.querySelector('button[data-accion="baja"]').click(); await confirmar('Placa mal transcrita');
             await esperar(() => filas('unidades')[0].fields.Activo === false, 'unidad de baja');
             R.ok('unidad dada de baja (Activo=false), el renglón se conserva', filas('unidades')[0].fields.Activo === false && filas('unidades').length === 1);
+            // C-06 (v0.22.0): el motivo de la baja queda en Notas tambien para unidades y choferes (antes solo carriers).
+            R.ok('C-06: el motivo de la baja de una UNIDAD queda en Notas con quién y cuándo', String(filas('unidades')[0].fields.Notas).includes('BAJA') && String(filas('unidades')[0].fields.Notas).includes('Placa mal transcrita') && String(filas('unidades')[0].fields.Notas).includes(window.__CUENTA.username) && !!avisoCon('el motivo quedó en Notas'), String(filas('unidades')[0].fields.Notas));
             document.querySelector('#pestanas button[data-p="puerta"]').click();
             elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
             poner('puManifiesto', 'MINSA/RME/111/2025'); poner('puPlaca', '55XY9K'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite');
@@ -679,7 +743,18 @@ try {
         R.ok('‹ regresa al primero y se deshabilita', $('tkPos').textContent === primero && $('tkAnt').disabled);
         clic('tkCerrar');
         document.querySelector('#pestanas button[data-p="hoy"]').click();
-        R.ok('«Hoy» dice hasta dónde alcanza lo cargado', $('tbFila').textContent.includes('últimos 90 días'), $('tbFila').textContent.slice(-120));
+        // U-14 (v0.22.0): la linea vive en #tbAlcance, fuera de la tabla que el celular oculta.
+        R.ok('«Hoy» dice hasta dónde alcanza lo cargado, fuera de la tabla (U-14)', $('tbAlcance').textContent.includes('últimos 90 días') && !$('tbFila').textContent.includes('últimos 90 días'), $('tbAlcance').textContent.slice(0, 80));
+        // U-15 (v0.22.0): la tarjeta de la fila del dia (celular) se abre con teclado.
+        {
+            const tar = [...document.querySelectorAll('#tbFilaTarjetas .ftar')].find(t => t.querySelector('.botones-fila'));
+            const antes = tar && tar.getAttribute('aria-expanded');
+            if (tar) tar.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            R.ok('U-15: la tarjeta de la fila es role=button y Enter la abre (aria-expanded true, botones visibles)', !!tar && tar.getAttribute('role') === 'button' && antes === 'false' && tar.getAttribute('aria-expanded') === 'true' && tar.classList.contains('abierta'), `${antes} → ${tar && tar.getAttribute('aria-expanded')}`);
+            // U-07: los botones de la tarjeta llevan la clase de peligro (Anular/Eliminar) que el CSS pinta; Ticket no.
+            const pel = tar && tar.querySelector('.botones-fila button.peligro');
+            R.ok('U-07: Anular/Eliminar de la tarjeta llevan clase peligro y Ticket no', !!pel && !!tar.querySelector('.botones-fila button:not(.peligro)'), tar ? [...tar.querySelectorAll('.botones-fila button')].map(b => b.textContent + ':' + b.className).join(' ') : '');
+        }
         // v0.19.2: Ticket en Hoy abre la ventana sin cambiar de pestaña.
         const btnTkHoy = [...document.querySelectorAll('#tbFila button')].find(b => b.textContent === 'Ticket');
         if (btnTkHoy) { btnTkHoy.click();
@@ -729,7 +804,8 @@ try {
     R.ok('ningún texto > 255 llegó a Graph en toda la corrida (el falso lo rechaza como SharePoint)', window.__DB.textoLargo.length === 0, window.__DB.textoLargo.join('|'));
     await R.cerrar();
     // ?vista=padron oculta la bitacora y deja esa pestana abierta: para una captura de pantalla.
-    if (params.get('vista')) { $('resultados').hidden = true; document.querySelector(`#pestanas button[data-p="${params.get('vista')}"]`).click(); }
+    // Los <dialog> que la corrida dejo abiertos (el detalle de la firmada del paso 12c) taparian la captura.
+    if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); document.querySelector(`#pestanas button[data-p="${params.get('vista')}"]`).click(); }
 }
 </script>
 </body>

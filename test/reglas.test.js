@@ -1,6 +1,6 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -121,6 +121,18 @@ assert.ok(PUEDE.corregir('trazabilidad') && PUEDE.corregir('gerencia') && !PUEDE
     assert.equal(prealtaSinMovimiento(pa, [emb(-20), emb(-2, 'anulado')], 15, hoy).motivo.includes('20'), true, 'un anulado no cuenta como movimiento');
     assert.match(prealtaSinMovimiento(pa, [emb(-1), emb(-1), emb(-1)], 15, hoy).motivo, /ya recibió sus 3/, 'completa aunque sea reciente');
     assert.equal(prealtaSinMovimiento({ ...pa, FechaEstimada: null, FirmadaEl: null }, [], 15, hoy), null, 'sin fechas no se juzga');
+}
+
+// C-10 (v0.22.0): la hora de Mexico nunca imprime «24:05» a medianoche (hourCycle h23, no hour12:false) y los tres modos
+// salen del mismo helper. 06:05Z = 00:05 en Mexico (UTC-6 todo el anio desde 2022).
+{
+    const medianoche = '2026-03-10T06:05:00Z';
+    assert.equal(horaMexico(medianoche, 'hora'), '00:05');
+    assert.ok(horaMexico(medianoche).endsWith('00:05') && horaMexico(medianoche).includes('10/03/2026'), horaMexico(medianoche));
+    assert.ok(!horaMexico(medianoche, 'completa').includes('24:') && horaMexico(medianoche, 'completa').includes('00:05:00'), horaMexico(medianoche, 'completa'));
+    assert.equal(horaMexico('2026-03-10T18:30:00Z', 'hora'), '12:30', 'mediodia sin PM');
+    assert.equal(horaMexico(''), '—');
+    assert.equal(horaMexico('no es fecha'), 'no es fecha');
 }
 
 console.log('reglas: ok');

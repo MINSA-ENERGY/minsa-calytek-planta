@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento } from './reglas.js';
 
-const VERSION = '0.21.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.22.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -48,13 +48,16 @@ function avisar(texto, clase = '') {
     const d = document.createElement('div');
     d.className = 'mensaje' + (clase ? ' ' + clase : '');
     d.textContent = texto;
+    // U-08 (v0.22.0): con la pantalla de entrada visible el aviso va DENTRO de ella, sobre el boton. #avisos vive
+    // arriba de una seccion de 100dvh en un body sin scroll: «No se pudo entrar» empujaba «Entrar» fuera de la vista.
+    if (!$('pantallaEntrar').classList.contains('oculto')) { const z = $('entradaAviso'); z.textContent = texto; z.className = d.className; return; }
     $('avisos').appendChild(d);
     const dlg = document.querySelector('dialog.dlg-forma[open]');
     if (dlg) { const z = dlg.querySelector('.dlg-avisos'); z.textContent = ''; z.appendChild(d.cloneNode(true)); dlg.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     // Sin scrollTo (U-03, v0.21.0): #avisos es sticky y se ve donde este el usuario; el salto al tope alejaba
     // al basculista del formulario de pesaje con cada «Captura el peso» / «Falta la foto».
 }
-function limpiarAvisos() { $('avisos').textContent = ''; for (const z of document.querySelectorAll('.dlg-forma .dlg-avisos')) z.textContent = ''; }
+function limpiarAvisos() { $('avisos').textContent = ''; $('entradaAviso').textContent = ''; $('entradaAviso').className = 'mensaje oculto'; for (const z of document.querySelectorAll('.dlg-forma .dlg-avisos')) z.textContent = ''; }
 // Los formularios de alta viven en <dialog> (v0.19.8): abrir es showModal, cerrar es close. Idempotentes.
 function abrirForma(id) { const d = $(id); limpiarAvisos(); if (!d.open) d.showModal(); d.scrollTo({ top: 0 }); }
 function cerrarForma(id) { const d = $(id); if (d.open) d.close(); }
@@ -124,7 +127,16 @@ function confirmar({ titulo, texto, ok = 'Confirmar', motivo = false, etiquetaMo
     });
 }
 function etiqueta(texto, clase) { return el('span', 'etiqueta ' + (clase || ''), texto); }
-function vaciar(id) { $(id).textContent = ''; }
+/**
+ * Un <div> que se abre al tocarlo (tarjeta de la fila del dia, renglon del padron) se vuelve alcanzable con
+ * teclado y lector de pantalla (U-15, v0.22.0): role=button, tabindex=0, aria-expanded, y Enter/Espacio hacen
+ * lo mismo que el clic. La tecla solo cuenta sobre el propio nodo: un Enter en un boton interior no lo abre.
+ */
+function desplegable(nodo, abierto, alClic) {
+    nodo.setAttribute('role', 'button'); nodo.tabIndex = 0; nodo.setAttribute('aria-expanded', String(!!abierto));
+    nodo.addEventListener('click', alClic);
+    nodo.addEventListener('keydown', ev => { if (ev.target === nodo && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); alClic(ev); } });
+}
 function opciones(sel, items, valor, textoDe, primera = '— elige —') {
     sel.textContent = '';
     const o = el('option', '', primera); o.value = ''; sel.appendChild(o);
@@ -139,11 +151,9 @@ function fechaCorta(iso) {
     const s = String(iso);
     return /^\d{4}-\d{2}-\d{2}/.test(s) ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : s;
 }
-function horaCorta(iso) {
-    if (!iso) return '—';
-    const d = new Date(iso);
-    return d.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-}
+// C-10 (v0.22.0): las cuatro horas de la app salen de reglas.horaMexico (hourCycle h23); antes tres usaban hour12:false
+// (que en Chromium puede dar «24:05») y la fila del dia salia en 12 h con AM/PM: Hoy mezclaba los dos.
+const horaCorta = iso => horaMexico(iso, 'fecha');
 // Acepta dd/mm/aaaa (lo que teclea la gente) y aaaa-mm-dd (lo que traen las pruebas y los pegados). Vacío = null;
 // cualquier otra cosa es un error que se le muestra a quien captura, nunca una fecha adivinada.
 function aIsoDia(texto) {
@@ -184,16 +194,23 @@ async function prepararMsal() {
     msalListo = true;
     return respuesta;
 }
+// U-20 (v0.22.0): el progreso del inicio de sesion se escribe en el PROPIO boton (con anillo girando), no solo en la
+// linea mono de 9.5 px al pie: con la senal lenta de la caseta parecia que no habia pasado nada y se volvia a tocar.
+function pasoEntrada(texto) {
+    const b = $('btnEntrar');
+    b.disabled = !!texto; b.classList.toggle('ocupado', !!texto);
+    b.textContent = texto || 'Entrar con cuenta MINSA';
+    $('textoEntrar').textContent = texto || 'CALYTEK · Planta';
+}
 async function entrar() {
-    $('btnEntrar').disabled = true;
-    $('textoEntrar').textContent = 'Entrando…';
+    pasoEntrada('Entrando…');
     try {
         await prepararMsal();
-        if (pca.getAllAccounts().length === 0) { await pca.loginRedirect({ scopes: CONFIG.scopes }); return; }
+        if (pca.getAllAccounts().length === 0) { pasoEntrada('Abriendo el inicio de sesión de Microsoft…'); await pca.loginRedirect({ scopes: CONFIG.scopes }); return; }
         await sesionIniciada();
     } catch (e) {
+        pasoEntrada(null);
         avisar('No se pudo entrar: ' + (e && e.message ? e.message : e), 'error');
-        $('btnEntrar').disabled = false;
         $('textoEntrar').textContent = 'Vuelve a intentarlo.';
     }
 }
@@ -202,13 +219,13 @@ async function arrancar() {
     try {
         const respuesta = await prepararMsal();
         if (respuesta || pca.getAllAccounts().length > 0) {
-            $('btnEntrar').disabled = true;
-            $('textoEntrar').textContent = 'Entrando…';
+            pasoEntrada('Entrando…');
             await sesionIniciada();
         }
     } catch (e) {
+        pasoEntrada(null);
         avisar('No se pudo terminar el inicio de sesión: ' + (e && e.message ? e.message : e), 'error');
-        $('btnEntrar').disabled = false;
+        $('textoEntrar').textContent = 'Vuelve a intentarlo.';
     }
 }
 async function salir() {
@@ -252,8 +269,9 @@ async function sesionIniciada() {
     await refrescarCliente();
     ponerQuien(estado.cuenta.username);
     $('btnSalir').classList.remove('oculto');
-    $('textoEntrar').textContent = 'Abriendo el sitio de CALYTEK…';
+    pasoEntrada('Abriendo el sitio de CALYTEK…');
     estado.siteId = await estado.cliente.sitio(CONFIG.sharepointHost, CONFIG.sitio);
+    pasoEntrada('Leyendo las listas…');
     await cargarTodo();
     estado.rol = rolDe(estado.cuenta.username, estado.roles);
     ponerQuien(`${estado.cuenta.username} · ${estado.rol}`);
@@ -459,6 +477,7 @@ function pintarUnidadesPuerta() {
     const actual = placaNormal($('puPlaca').value);
     for (const u of us) {
         const b = el('button', 'u' + (placaNormal(u.Title) === actual ? ' sel' : '')); b.type = 'button';
+        b.dataset.placa = placaNormal(u.Title);   // U-17: la seleccion al teclear compara contra esto, no contra el texto del chip
         const t = el('span', 't', u.PlacaPlana ? `${u.Title} / ${u.PlacaPlana}` : u.Title);
         const v = etiquetaVigencia('unidades', u);
         t.appendChild(el('small', '', [u.TipoUnidad || 'unidad', u.CapacidadKg ? `${Number(u.CapacidadKg).toLocaleString('es-MX')} kg` : null, v ? null : 'vigencias al día'].filter(Boolean).join(' · ')));
@@ -644,7 +663,17 @@ function pintarResultadoCompuerta() {
     $('btnRegistrarPuerta').focus();
 }
 document.addEventListener('keydown', ev => {
-    if (ev.key === 'Escape' && !$('veredicto').classList.contains('oculto')) { ev.preventDefault(); cerrarVeredicto(); }
+    const v = $('veredicto');
+    if (v.classList.contains('oculto')) return;
+    if (ev.key === 'Escape') { ev.preventDefault(); cerrarVeredicto(); return; }
+    // U-16 (v0.22.0): el veredicto es role=dialog aria-modal pero no es un <dialog>: Tab se salia a la puerta que esta
+    // detras. Se cicla entre lo enfocable del veredicto (motivo de la excepcion, si esta, y los dos botones).
+    if (ev.key !== 'Tab') return;
+    const focables = [...v.querySelectorAll('button, textarea, input, select')].filter(x => !x.disabled && x.offsetParent !== null);
+    if (!focables.length) return;
+    const i = focables.indexOf(document.activeElement);
+    const siguiente = ev.shiftKey ? (i <= 0 ? focables[focables.length - 1] : focables[i - 1]) : (i < 0 || i === focables.length - 1 ? focables[0] : focables[i + 1]);
+    ev.preventDefault(); siguiente.focus();
 });
 
 async function registrarPuerta() {
@@ -697,16 +726,23 @@ async function registrarPuerta() {
  * Dos celulares pueden pedir el mismo folio en el mismo segundo. Despues de escribir se relee la
  * lista: si el folio quedo repetido, el renglon MAS NUEVO (id mayor) se renumera al siguiente libre.
  * Un hueco se investiga; un duplicado no puede existir.
+ * Parametrizada por lista y columna (C-04, v0.22.0): la campana L- de las pre-altas pasa por aqui igual que R- y E-.
  */
+const FOLIOS = {
+    E: { lista: () => L.embarques, campo: 'Title', releer: embarquesDelAno },
+    R: { lista: () => L.embarques, campo: 'Title', releer: embarquesDelAno },
+    L: { lista: () => L.prealtas, campo: 'Campana', releer: () => estado.cliente.renglones(estado.siteId, L.prealtas) }
+};
 async function asegurarFolioUnico(renglon, tipo) {
-    const todos = await embarquesDelAno();   // el folio lleva el anio: el resto no puede chocar
-    const iguales = todos.filter(x => x.Title === renglon.Title);
-    if (iguales.length <= 1) return renglon.Title;
+    const { lista: lst, campo, releer } = FOLIOS[tipo];
+    const todos = await releer();   // el folio lleva el anio: el resto no puede chocar
+    const iguales = todos.filter(x => x[campo] === renglon[campo]);
+    if (iguales.length <= 1) return renglon[campo];
     const masNuevo = iguales.reduce((a, b) => (a.id > b.id ? a : b));
-    if (masNuevo.id !== renglon.id) return renglon.Title;
-    const nuevoFolio = siguienteFolio(tipo, todos.map(x => x.Title));
-    await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, renglon.id, { Title: nuevoFolio });
-    renglon.Title = nuevoFolio;
+    if (masNuevo.id !== renglon.id) return renglon[campo];
+    const nuevoFolio = siguienteFolio(tipo, todos.map(x => x[campo]));
+    await estado.cliente.actualizarRenglon(estado.siteId, lst(), renglon.id, { [campo]: nuevoFolio });
+    renglon[campo] = nuevoFolio;
     return nuevoFolio;
 }
 
@@ -1222,6 +1258,10 @@ async function guardarPrealta() {
             avisar('Borrador actualizado. Sigue pendiente de firma.', 'bien');   // al final: abrir el detalle limpia los avisos
             return;
         }
+        // C-04 (v0.22.0): la campana se escoge con la lista RELEIDA, no con la de memoria (que puede tener horas), y tras
+        // escribir pasa por asegurarFolioUnico como R- y E-. Dos capturas en dos celulares recibian la misma L-AA-NNN.
+        const todas = await estado.cliente.renglones(estado.siteId, L.prealtas);
+        estado.prealtas = todas; reanclar();
         const campos = limpiar({
             Title: $('paTitulo').value.trim(), Estado: 'borrador', Generador: $('paGenerador').value.trim(),
             GeneradorRegistro: $('paGeneradorRegistro').value.trim(), Pozo: $('paPozo').value.trim(),
@@ -1230,9 +1270,10 @@ async function guardarPrealta() {
             FechaEstimada: aIsoDia($('paFecha').value), GondolasEsperadas: $('paGondolas').value ? Number($('paGondolas').value) : null,
             CorreoFecha: aIsoDia($('paCorreoFecha').value), CorreoRemitente: $('paCorreoRemitente').value.trim(),
             CapturadaPor: estado.cuenta.username, Notas: $('paNotas').value.trim(),
-            Campana: siguienteFolio('L', estado.prealtas.map(p => p.Campana))   // L-AA-NNN (ticket 03)
+            Campana: siguienteFolio('L', todas.map(p => p.Campana))   // L-AA-NNN (ticket 03)
         });
         const nuevo = await estado.cliente.crearRenglon(estado.siteId, L.prealtas, campos);
+        await asegurarFolioUnico(nuevo, 'L');
         estado.prealtas.push(nuevo);
         cerrarForma('paForma');
         avisar('Pre-alta guardada como borrador. Falta la firma del validador.', 'bien');
@@ -1399,10 +1440,10 @@ function conFicha(r, tipo, x, extra) {
     // Los botones (Editar, Dar de baja…) solo se ven con la ficha abierta: la lista se lee limpia y se actúa sobre un inciso a la vez.
     r.classList.toggle('plegado', estado.padronFicha !== `${tipo}:${x.id}`);
     if (estado.padronFicha === `${tipo}:${x.id}`) ficha.classList.remove('oculto');
-    r.firstChild.addEventListener('click', () => {
+    desplegable(r.firstChild, estado.padronFicha === `${tipo}:${x.id}`, () => {
         const llave = `${tipo}:${x.id}`;
         estado.padronFicha = estado.padronFicha === llave ? null : llave;
-        if (extra) extra(); else { ficha.classList.toggle('oculto', estado.padronFicha !== llave); r.classList.toggle('plegado', estado.padronFicha !== llave); }
+        if (extra) extra(); else { ficha.classList.toggle('oculto', estado.padronFicha !== llave); r.classList.toggle('plegado', estado.padronFicha !== llave); r.firstChild.setAttribute('aria-expanded', String(estado.padronFicha === llave)); }
     });
     return r;
 }
@@ -1428,6 +1469,10 @@ function elegirCarrierPadron(c) {
 const ESCRITORIO = window.matchMedia('(min-width: 900px)');
 function abrirGruposPadronEscritorio() { if (ESCRITORIO.matches) for (const id of ['pdGrupoCarriers', 'pdGrupoUnidades', 'pdGrupoChoferes']) $(id).open = true; }
 ESCRITORIO.addEventListener('change', abrirGruposPadronEscritorio);
+// U-11 (v0.22.0): en el celular el campo de peso NO levanta el teclado del sistema (inputmode=none): se captura con el
+// teclado propio, que quedaba tapado por el del telefono. En escritorio el propio se oculta por CSS y el campo vuelve a numeric.
+function ajustarTecladoPeso() { $('baKg').inputMode = ESCRITORIO.matches ? 'numeric' : 'none'; }
+ESCRITORIO.addEventListener('change', ajustarTecladoPeso); ajustarTecladoPeso();
 function resumenPadron(tipo, items, unidad) {
     const vivos = items.filter(x => x.Activo !== false);
     const vencidos = vivos.filter(x => vigenciasPadron(tipo, x).some(h => !h.ok && !sinFecha(h))).length;
@@ -1485,6 +1530,11 @@ function pintarPadron() {
         else { const v = etiquetaVigencia('choferes', ch); if (v) r.firstChild.firstChild.appendChild(v); }
         c3.appendChild(conFicha(r, 'choferes', ch));
     }
+    // U-18 (v0.22.0): un grupo sin renglones lo dice, y distinto si el vacio es por el filtro de carrier. Antes solo
+    // Carriers tenia estado vacio y «0 unidades» se leia igual que «este carrier no tiene».
+    const filtrado = sel !== null && sel !== undefined;
+    if (!q && !c2.querySelector('.renglon')) c2.appendChild(el('p', 'pista', filtrado ? `${nombreDe(estado.carriers, sel)} no tiene unidades en el padrón.` : 'Sin unidades. Se transcriben del oficio del carrier con «+ Alta».'));
+    if (!q && !c3.querySelector('.renglon')) c3.appendChild(el('p', 'pista', filtrado ? `${nombreDe(estado.carriers, sel)} no tiene choferes en el padrón.` : 'Sin choferes. Se dan de alta con su licencia con «+ Alta».'));
     // Con texto en el buscador: los grupos con resultado se abren, los vacios lo dicen, y la cuenta va junto al campo.
     if (q) {
         for (const [g, cont] of [['pdGrupoCarriers', c1], ['pdGrupoUnidades', c2], ['pdGrupoChoferes', c3]]) {
@@ -1565,11 +1615,22 @@ async function activarPadron(clave, x, activo) {
     try {
         await refrescarCliente();
         const campos = { Activo: activo };
-        if (!activo && motivo && clave === 'carriers') campos.Notas = `${x.Notas ? x.Notas + '\n' : ''}BAJA ${fechaMexico()} por ${estado.cuenta.username}: ${motivo}`;
-        await estado.cliente.actualizarRenglon(estado.siteId, L[clave], x.id, campos);
+        // C-06 (v0.22.0): el motivo queda en Notas para las TRES claves, como promete el dialogo (unidades y choferes tienen
+        // Notas desde la tarea 9). Si la lista aun no trae la columna, se da de baja igual, sin motivo, y se dice.
+        if (!activo && motivo) campos.Notas = `${x.Notas ? x.Notas + '\n' : ''}BAJA ${fechaMexico()} por ${estado.cuenta.username}: ${motivo}`;
+        let sinNotas = false;
+        try { await estado.cliente.actualizarRenglon(estado.siteId, L[clave], x.id, campos); }
+        catch (e) {
+            if (!campos.Notas || !/Notas/.test(String(e.message))) throw e;
+            delete campos.Notas; sinNotas = true;
+            await estado.cliente.actualizarRenglon(estado.siteId, L[clave], x.id, campos);
+        }
         Object.assign(x, campos);
         if (clave === 'carriers') for (const v of vigenciasDelCarrier(x)) { await estado.cliente.actualizarRenglon(estado.siteId, L.vigencias, v.id, { Activo: activo }); v.Activo = activo; }
-        avisar(activo ? `${NOMBRE_PADRON[clave]} reactivado.` : `${NOMBRE_PADRON[clave]} dado de baja${motivo && clave !== 'carriers' ? ' (' + motivo + ')' : ''}.`, 'bien'); pintarPadron();
+        if (activo) avisar(`${NOMBRE_PADRON[clave]} reactivado.`, 'bien');
+        else if (sinNotas) avisar(`${NOMBRE_PADRON[clave]} dado de baja, pero el motivo NO quedó: la lista no tiene todavía la columna Notas (setup, tarea 9).`, 'ojo');
+        else avisar(`${NOMBRE_PADRON[clave]} dado de baja${motivo ? ' · el motivo quedó en Notas' : ''}.`, 'bien');
+        pintarPadron();
     } catch (e) { avisar('No se pudo cambiar: ' + e.message, 'error'); }
 }
 
@@ -1711,6 +1772,14 @@ function pintarHoy() {
     $('hoyKicker').textContent = `Hoy · ${estado.rol}`;
 
     // Franja: la excepcion que espera a gerencia es la unica decision que «Hoy» le pide a alguien.
+    // U-12 (v0.22.0): los mismos botones (Autorizar · Anular/Eliminar) salen tambien en su renglon de «Pendiente revisar»,
+    // que era la unica entrada de esa tarjeta sin accion; la excepcion se cuenta una sola vez (en la tarjeta).
+    const botonesExcepcion = e => {
+        const bs = [];
+        if (PUEDE.autorizarExcepcion(estado.rol)) bs.push({ texto: 'Autorizar con motivo', accion: 'autorizar', clase: 'si', alClic: () => autorizarExcepcion(e) });
+        for (const b of botonCorreccion(e)) bs.push({ ...b, clase: 'no' });
+        return bs;
+    };
     const fr = $('hoyFranja'); fr.textContent = '';
     fr.classList.toggle('oculto', !pendientes.length);
     for (const e of pendientes) {
@@ -1718,15 +1787,8 @@ function pintarHoy() {
         it.appendChild(el('b', 'w', 'Espera'));
         it.appendChild(el('span', 't', `${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)} · ${e.Manifiesto || 'sin manifiesto'}`));
         it.appendChild(el('span', 's', `«${e.ExcepcionMotivo || 'sin motivo'}» · ${e.CapturadoPor || '?'}, ${horaCorta(e.Arribo)}`));
-        if (PUEDE.autorizarExcepcion(estado.rol) || PUEDE.corregir(estado.rol)) {
-            const bs = el('div', 'botones');
-            if (PUEDE.autorizarExcepcion(estado.rol)) {
-                const si = el('button', 'si', 'Autorizar con motivo'); si.type = 'button'; si.addEventListener('click', () => autorizarExcepcion(e));
-                bs.appendChild(si);
-            }
-            for (const b of botonCorreccion(e)) { const x = botonAccion(b); x.className = 'no'; bs.appendChild(x); }
-            it.appendChild(bs);
-        }
+        const bs = botonesExcepcion(e);
+        if (bs.length) { const d = el('div', 'botones'); for (const b of bs) d.appendChild(botonAccion(b)); it.appendChild(d); }
         fr.appendChild(it);
     }
 
@@ -1767,7 +1829,7 @@ function pintarHoy() {
         const etiquetaCompuerta = e => e.Etapa === 'anulado' ? etiqueta('anulado', 'anulado')
             : etiqueta(e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'no entró' : e.ExcepcionAutorizo ? 'excepción ok' : 'espera',
                        e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'rechazo-legal' : 'excepcion-comercial');
-        const hora = e => e.Arribo ? new Date(e.Arribo).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' }) : '—';
+        const hora = e => horaMexico(e.Arribo, 'hora');
         const botonesDe = e => {
             const bf = el('div', 'botones-fila');
             if (e.Title) { const b = el('button', '', 'Ticket'); b.type = 'button';
@@ -1786,7 +1848,7 @@ function pintarHoy() {
             c.appendChild(etiquetaCompuerta(e));
             t.appendChild(c);
             const bf = botonesDe(e);
-            if (bf.childElementCount) { t.appendChild(bf); t.addEventListener('click', () => t.classList.toggle('abierta')); }
+            if (bf.childElementCount) { t.appendChild(bf); desplegable(t, false, () => { t.classList.toggle('abierta'); t.setAttribute('aria-expanded', String(t.classList.contains('abierta'))); }); }
             tt.appendChild(t);
         }
         const t = el('table', 'fila'); const th = el('tr');
@@ -1807,7 +1869,7 @@ function pintarHoy() {
                 co.appendChild(etiqueta(e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'no entró' : e.ExcepcionAutorizo ? 'excepción ok' : 'espera', cl)); }
             tr.appendChild(co);
             tr.appendChild(el('td', 'num mono' + (e.NetoKg ? '' : ' mudo'), e.NetoKg ? Number(e.NetoKg).toLocaleString('es-MX') : e.BrutoKg ? `bruto ${Number(e.BrutoKg).toLocaleString('es-MX')}` : '—'));
-            tr.appendChild(el('td', 'mono', e.Arribo ? new Date(e.Arribo).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' }) : '—'));
+            tr.appendChild(el('td', 'mono', hora(e)));
             const ac = el('td'); const bf = el('div', 'botones-fila');
             if (e.Title) { const b = el('button', '', 'Ticket'); b.type = 'button';
                 b.addEventListener('click', () => abrirTicketDeHoy(e));
@@ -1822,7 +1884,8 @@ function pintarHoy() {
     $('btnExportar').classList.toggle('oculto', !estado.embarques.length);
     // Que la consola diga hasta donde alcanza lo que muestra: sin esta linea, «4 rechazos esta
     // semana» y «0 hace cuatro meses» se leen igual y el segundo es solo que no se cargo.
-    tw.appendChild(el('p', 'pista', `Se cargan los últimos ${CONFIG.ventanaDias} días (desde el ${fechaCorta(estado.ventanaDesde)}) más todo lo que sigue abierto. El historial completo vive en SharePoint.`));
+    // U-14 (v0.22.0): va en #tbAlcance, fuera de la tabla, que en el celular esta oculta: ahi nunca se veia.
+    $('tbAlcance').textContent = `Se cargan los últimos ${CONFIG.ventanaDias} días (desde el ${fechaCorta(estado.ventanaDesde)}) más todo lo que sigue abierto. El historial completo vive en SharePoint.`;
 
     // Pendiente revisar: pre-altas por firmar, excepciones y programas dormidos. Con algo, la tarjeta se pinta en ambar
     // con el conteo en rojo (Carlos, 2026-09-08: es lo primero que hay que atender).
@@ -1834,7 +1897,7 @@ function pintarHoy() {
     if (!nPend) pf.appendChild(el('p', 'vacio', 'Nada pendiente.'));
     for (const { p, sm } of dormidas) pf.appendChild(renglon(`Programa · ${p.Title}`, `${sm.motivo} · ¿se cierra? Sigue saliendo en la puerta`, 'Ver', () => verPrealta(p)));
     for (const p of borradores) { const d = diasPara(p.FechaEstimada); pf.appendChild(renglon(`Pre-alta · ${p.Title}`, `firma del validador · 1er envío ${fechaCorta(p.FechaEstimada)}${d !== null ? ` (en ${d} días)` : ''} · capturó ${p.CapturadaPor || '?'}`, 'Ver', () => verPrealta(p))); }
-    for (const e of pendientes) pf.appendChild(renglon(`Excepción · ${e.PlacaTractor}`, `autorización de gerencia · ${horaCorta(e.Arribo)}`));
+    for (const e of pendientes) pf.appendChild(renglon(`Excepción · ${e.PlacaTractor}`, `autorización de gerencia · «${e.ExcepcionMotivo || 'sin motivo'}» · ${horaCorta(e.Arribo)}`, null, null, botonesExcepcion(e).map(b => ({ ...b, clase: b.accion === 'autorizar' ? '' : 'peligro' }))));
 
     const rj = $('tbRechazos'); rj.textContent = '';
     const rech = estado.embarques.filter(e => e.Etapa !== 'anulado' && (e.Etapa === 'rechazado' || e.Compuerta === 'excepcion-comercial')).sort((a, b) => b.id - a.id).slice(0, 10);
@@ -1865,7 +1928,7 @@ function pintarHoy() {
 /** CSV (UTF-8 con BOM, separado por coma, fechas en hora de Mexico) de todos los embarques cargados en la ventana. */
 function exportarCsv() {
     const cab = ['Folio', 'Etapa', 'Compuerta', 'PlacaTractor', 'PlacaPlana', 'Carrier', 'Chofer', 'Manifiesto', 'Corriente', 'Programa', 'Arribo', 'BrutoKg', 'BrutoHora', 'TaraKg', 'TaraHora', 'NetoKg', 'CapturadoPor', 'ExcepcionAutorizo', 'AnuladoMotivo'];
-    const hora = iso => iso ? new Date(iso).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour12: false }) : '';
+    const hora = iso => iso ? horaMexico(iso, 'completa') : '';
     // Texto que empieza con = + - @ (o tabulador / retorno de carro, S-02) lleva apostrofo delante: Excel lo
     // ejecutaria como formula (auditoria 2026-09-08, hallazgo 4).
     const celda = v => { let t = v === null || v === undefined ? '' : String(v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
@@ -1931,7 +1994,9 @@ if (CONFIG.refrescoMs > 0) setInterval(() => {
 }, CONFIG.refrescoMs);
 for (const b of $('pestanas').querySelectorAll('button')) b.addEventListener('click', () => irA(b.dataset.p));
 $('puPrealta').addEventListener('change', () => { pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta(); });
-$('puPlaca').addEventListener('input', () => { const a = placaNormal($('puPlaca').value); for (const x of $('puUnidades').querySelectorAll('.u')) x.classList.toggle('sel', placaNormal(x.firstChild.textContent.split(' / ')[0]) === a); });
+// U-17 (v0.22.0): se compara con data-placa; el textContent del chip trae pegado el <small> («55XY9Kgóndola · 20,000 kg»)
+// y una unidad sin placa plana nunca se marcaba al teclear.
+$('puPlaca').addEventListener('input', () => { const a = placaNormal($('puPlaca').value); for (const x of $('puUnidades').querySelectorAll('.u')) x.classList.toggle('sel', !!a && x.dataset.placa === a); });
 $('puChofer').addEventListener('change', () => {
     // El nombre se rellena con el del padrón y se REEMPLAZA al cambiar de chofer, salvo que alguien lo haya editado a mano
     // (se distingue porque el valor ya no es el que puso la app). Antes solo se llenaba si estaba vacío y se quedaba el anterior.
@@ -1964,6 +2029,16 @@ $('btnGuardarPrealta').addEventListener('click', guardarPrealta);
 $('btnCancelarPrealta').addEventListener('click', () => cerrarForma('paForma'));
 // Escape cierra el <dialog> sin pasar por Cancelar: la edicion pendiente del padron se suelta igual.
 for (const clave of Object.keys(FORMA_PADRON)) $(FORMA_PADRON[clave].forma).addEventListener('close', () => { if (estado.padronEdit && estado.padronEdit.clave === clave) estado.padronEdit = null; });
+// U-09 (v0.22.0): Escape sobre un formulario CON algo capturado pregunta antes de tirarlo — el <dialog> nativo cerraba sin
+// pasar por Cancelar y la pre-alta de 14 campos se perdia. Vacio (o solo con los valores por omision) cierra directo; el
+// boton Cancelar sigue cerrando sin preguntar. Un select cuenta solo si no esta en su primera opcion.
+const hayCaptura = d => [...d.querySelectorAll('input:not([type=hidden]):not([type=checkbox]), textarea, select')].some(c => c.tagName === 'SELECT' ? c.selectedIndex > 0 : String(c.value).trim() !== '');
+for (const id of ['paForma', 'pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer']) $(id).addEventListener('cancel', async ev => {
+    if (!hayCaptura($(id))) return;
+    ev.preventDefault();
+    const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: 'Este formulario tiene datos sin guardar. Si lo cierras, se pierden.' });
+    if (ok) cerrarForma(id);
+});
 $('btnFirmar').addEventListener('click', firmarPrealta);
 $('btnCerrarPrealta').addEventListener('click', cerrarPrealta);
 $('btnEliminarPrealta').addEventListener('click', eliminarPrealta);

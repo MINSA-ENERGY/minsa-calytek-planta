@@ -200,6 +200,22 @@ export function fechaMexico(ahora = new Date()) {
     return `${v('year')}-${v('month')}-${v('day')}`;
 }
 
+/**
+ * Hora de Mexico como texto: 'fecha' → dd/mm/aaaa HH:MM (pantalla y ticket), 'hora' → HH:MM (fila del dia),
+ * 'completa' → con segundos (CSV). Un solo helper para los cuatro sitios (C-10, v0.22.0) y con hourCycle h23,
+ * nunca hour12:false: en Chromium hour12:false cae en h24 para varias locales e imprime «24:05» a medianoche —
+ * justo la gondola que cierra 00:10 (F1). Vacio → '—'; lo que no es fecha se devuelve tal cual.
+ */
+export function horaMexico(iso, modo = 'fecha') {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    const base = { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
+    if (modo === 'hora') return d.toLocaleTimeString('es-MX', base);
+    const fecha = { day: '2-digit', month: '2-digit', year: 'numeric' };
+    return d.toLocaleString('es-MX', modo === 'completa' ? { ...base, ...fecha, second: '2-digit' } : { ...base, ...fecha });
+}
+
 /** Slug del contrato de nombres (pasos c01-c08 de contrato-nombres-captura.md). */
 export function slug(texto) {
     let s = String(texto || '').trim().toLowerCase();

@@ -60,7 +60,9 @@
           <h1 class="entrada-titulo">Recepción<br>bajo <em>control.</em></h1>
           <p class="lema">Pre-alta, compuerta documental y báscula, en un solo lugar.</p>
           <div class="semaforo-demo" aria-hidden="true"><span class="ok">Pasa</span><span class="warn">Espera</span><span class="bad">No entra</span></div>
-          <button id="btnEntrar" class="principal" type="button">Entrar con cuenta MINSA</button>
+          <!-- U-08: con la entrada visible los avisos van aquí, sobre el botón, no en #avisos (empujaba «Entrar» fuera de la vista). -->
+          <p id="entradaAviso" class="mensaje oculto" role="alert"></p>
+          <button id="btnEntrar" class="principal" type="button" aria-live="polite">Entrar con cuenta MINSA</button>
           <p class="pista" id="textoEntrar">CALYTEK · Planta</p>
         </div>
       </div>
@@ -84,6 +86,8 @@
           <div class="h2-con-boton"><h2>Fila del día</h2><button id="btnExportar" class="alta oculto" type="button" title="Descarga en CSV todo lo cargado (la ventana de días más lo abierto)">Exportar CSV</button></div>
           <div class="tabla-scroll" id="tbFila"></div>
           <div class="fila-tarjetas" id="tbFilaTarjetas"></div>
+          <!-- U-14: hasta dónde alcanza lo cargado, fuera de la tabla (que en el celular está oculta). -->
+          <p class="pista" id="tbAlcance"></p>
         </div>
         <div class="pila">
           <div class="tarjeta"><h2>Vigencias a 30 días</h2><div id="tbVigencias"></div></div>
