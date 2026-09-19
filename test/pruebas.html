@@ -388,6 +388,15 @@ try {
         await esperar(() => avisoCon('Ya aparece en Báscula'), 'registro de puerta');
         const emb1 = filas('embarques')[0];
         R.ok('embarque registrado en etapa compuerta, sin folio, con hallazgos JSON', emb1.fields.Etapa === 'compuerta' && !emb1.fields.Title && JSON.parse(emb1.fields.CompuertaDetalle).length > 3);
+        // U-02 (v0.21.0): la puerta vuelve a cero tras registrar — chofer sin elegir, chips sin marcar, bloques sin «Listo».
+        R.ok('U-02: tras registrar, la puerta queda en cero (chofer sin elegir, bloque de placa sin «Listo», botón «Faltan»)',
+            $('puChofer').value === '' && $('puEst2').textContent !== 'Listo' && $('btnCompuerta').classList.contains('incompleto') && !document.querySelector('#puUnidades .u.sel'),
+            `chofer "${$('puChofer').value}" · est2 ${$('puEst2').textContent} · botón ${$('btnCompuerta').textContent}`);
+        // U-01 (v0.21.0): con datos faltantes el botón no abre el veredicto: enfoca el primer faltante (aquí, la placa).
+        clic('btnCompuerta'); await dormir(30);
+        R.ok('U-01: con datos faltantes el botón NO abre el veredicto y enfoca el primer campo que falta',
+            !visible('veredicto') && document.activeElement && document.activeElement.id === 'puPlaca' && !!avisoCon('Falta la placa'),
+            `veredicto ${visible('veredicto')} · foco ${document.activeElement && document.activeElement.id}`);
 
         // 6. Bascula: bruto (nace E-) con foto; colision de folio con "otro celular".
         document.querySelector('#pestanas button[data-p="bascula"]').click();
@@ -416,6 +425,10 @@ try {
         const btnTara = [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(emb1.fields.Title)).querySelector('button');
         R.ok('la góndola espera la TARA', btnTara.textContent === 'Pesar tara');
         btnTara.click(); await esperar(() => visible('baPesar'), 'pesaje tara');
+        // C-01 (v0.21.0): un refresco con el pesaje abierto sustituye estado.embarques; el embarque en la mano
+        // debe re-anclarse al objeto fresco, si no la tara se guarda sobre una copia huérfana y la góndola sigue «en planta».
+        clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con pesaje abierto');
+        R.ok('C-01: Actualizar con el pesaje abierto no lo cierra (captura a medias)', visible('baPesar') && $('baTitulo').textContent.includes(emb1.fields.Title));
         poner('baKg', '23380'); await foto();
         const carpetasAntes = DB.carpetas.length;
         DB.fallas.push({ metodo: 'PATCH', incluye: `items/${emb1.id}/fields`, status: 500, veces: 1 });
@@ -429,6 +442,7 @@ try {
         await esperar(() => avisoCon('cerrado: neto 21220'), 'tara guardada');
         R.ok('neto = bruto − tara, etapa cerrado, InicioAlmacen = hora del bruto', emb1.fields.NetoKg === 21220 && emb1.fields.Etapa === 'cerrado' && emb1.fields.InicioAlmacen === emb1.fields.BrutoHora);
         R.ok('ticket final con NETO', $('ticket').textContent.includes('21220'));
+        R.ok('C-01: la góndola cerrada tras el refresco ya NO está en «En planta» (se cerró la de la lista, no una copia)', !$('baLista').textContent.includes(emb1.fields.Title), $('baLista').textContent.slice(0, 120));
 
         // 8. Neto fuera de banda pide motivo.
         document.querySelector('#pestanas button[data-p="puerta"]').click();
@@ -503,6 +517,27 @@ try {
         filas('unidades')[0].fields.PolizaVigencia = '2027-03-01T18:00:00.000Z';
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga 11');
         R.ok('fila del día lista los embarques de hoy con folio y neto', $('tbFila').textContent.includes(emb1.fields.Title) && $('tbFila').textContent.includes('21,220'));
+        // C-02 (v0.21.0): el CSV de «Exportar» se parsea del Blob (se intercepta createObjectURL; el <a download> no se dispara).
+        {
+            const urlReal = URL.createObjectURL; let blobCsv = null;
+            URL.createObjectURL = b => { if (b && b.type && b.type.startsWith('text/csv')) blobCsv = b; return urlReal.call(URL, b); };
+            const clickReal = HTMLAnchorElement.prototype.click;
+            HTMLAnchorElement.prototype.click = function () { if (!this.download) clickReal.call(this); };
+            try {
+                clic('btnExportar'); await esperar(() => blobCsv, 'blob del CSV');
+                // Blob.text() QUITA el BOM al decodificar (UTF-8 decode del estándar): se mira en los bytes.
+                const bytes = new Uint8Array(await blobCsv.arrayBuffer());
+                const conBom = bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF;
+                const csv = new TextDecoder().decode(bytes);
+                const celdas = l => { const out = []; let cur = '', q = false; for (let i = 0; i < l.length; i++) { const c = l[i]; if (q) { if (c === '"') { if (l[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; } else if (c === '"') q = true; else if (c === ',') { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out; };
+                const lineas = csv.replace(/^﻿/, '').split('\r\n').map(celdas);
+                const cab = lineas[0], iC = cab.indexOf('Corriente'), iP = cab.indexOf('Programa');
+                const f1 = lineas.find(f => f[0] === emb1.fields.Title);
+                R.ok('C-02: el CSV trae BOM, cabecera con Corriente y Programa, y una fila por embarque cargado', conBom && iC > 0 && iP > 0 && lineas.length === 1 + filas('embarques').length, `BOM ${conBom} · ${lineas.length} líneas · cab ${cab.length} · ${filas('embarques').length} embarques en el Graph falso`);
+                R.ok('C-02: Corriente y Programa salen LLENOS (CorrienteDeclarada / PreAltaId)', !!f1 && f1[iC] === 'base-aceite' && f1[iP] === 'CLIENTE DEMO-POZO 1-2026', f1 ? `${f1[iC]} · ${f1[iP]}` : 'sin fila');
+                R.ok('C-02: el CSV es de la app (aviso de descarga)', !!avisoCon('CSV con'));
+            } finally { URL.createObjectURL = urlReal; HTMLAnchorElement.prototype.click = clickReal; }
+        }
 
         // 12. ELIMINAR / ANULAR (lo que pidio Carlos el 2026-09-05).
         // 12a. Embarque en compuerta (sin folio): se elimina.

@@ -7,7 +7,8 @@
 // Cada peticion del armazon lleva `cache: 'reload'`: GitHub Pages sirve con max-age=600 y sin
 // eso el service worker nuevo se llena con los archivos VIEJOS (medido en captura, 2026-08-17).
 
-const CACHE = 'calytek-planta-v58';
+// La cache lleva la MISMA cadena que VERSION (app.js) y package.json: test/version.test.js falla si difieren (C-09, v0.21.0).
+const CACHE = 'calytek-planta-v0.21.0';
 
 function traerDeLaRed(recurso) {
     return fetch(new Request(recurso, { cache: 'reload', credentials: 'same-origin' }));
@@ -44,9 +45,11 @@ self.addEventListener('install', evento => {
                     return c.put(recurso, respuesta);
                 })
             )))
-            .then(() => self.skipWaiting())
+        // Sin skipWaiting (S-06, v0.21.0): el SW nuevo espera a que la app lo pida («Actualizar») o a que se
+        // cierre la ultima pestana. Activarlo solo recargaba la pagina a media captura.
     );
 });
+self.addEventListener('message', evento => { if (evento.data === 'activar') self.skipWaiting(); });
 
 self.addEventListener('activate', evento => {
     evento.waitUntil(

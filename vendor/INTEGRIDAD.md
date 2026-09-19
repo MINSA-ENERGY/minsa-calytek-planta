@@ -16,3 +16,10 @@ curl -sL https://cdn.jsdelivr.net/npm/@azure/msal-browser@4.29.0/lib/msal-browse
 
 Los dos hashes deben coincidir entre sí y con la tabla. Al subir de versión: nueva fila, nunca
 sobrescribir la anterior (la vieja prueba qué se corrió hasta esa fecha).
+
+**`integrity=` de `index.html` (S-03, 2026-09-19):** el `<script>` lleva el sha384 del mismo archivo,
+`sha384-8rQAl229+briV9tfGmSO/NUMdiZrVcD/TzWsAcIt/NsxuH7yYizuHByfyygUVwVe` (`openssl dgst -sha384
+-binary vendor/msal-browser.min.js | base64`). `test/vendor.test.js` (en `npm test`) coteja el sha256 de
+la ÚLTIMA fila de esta tabla y el `integrity=` contra el archivo del repo: subir el vendor obliga a
+tocar los tres a la vez. **Cierre de versión (S-05):** `npm view @azure/msal-browser version` contra la
+fila vigente; se sube cuando el changelog de la versión nueva traiga «security».

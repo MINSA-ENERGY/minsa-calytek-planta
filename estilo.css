@@ -228,8 +228,9 @@ button:not(:disabled):active { transform: translateY(1px); }
 .renglon > div:first-child { min-width: 0; }
 .renglon .t { font-weight: 600; font-size: .88rem; }
 .renglon .s { font-size: .74rem; color: var(--mute); }
-.renglon button { flex: 0 0 auto; background: var(--acc-soft); color: var(--acc); border: 0; border-radius: 5px; padding: .4rem .75rem; font-weight: 700; font-size: .76rem; }
-.renglon .acciones { display: flex; flex-direction: column; gap: .3rem; flex: 0 0 auto; margin: 0; padding: 0; }
+/* min-height 2.6rem (≈36 px): objetivo táctil del botón más frecuente del basculista (U-05, v0.21.0); antes ≈27 px. */
+.renglon button { flex: 0 0 auto; min-height: 2.6rem; background: var(--acc-soft); color: var(--acc); border: 0; border-radius: 5px; padding: .4rem .75rem; font-weight: 700; font-size: .76rem; }
+.renglon .acciones { display: flex; flex-direction: column; gap: .5rem; flex: 0 0 auto; margin: 0; padding: 0; }
 .renglon .acciones button { width: 100%; }
 #p-padron .renglon.plegado > button, #p-padron .renglon.plegado > .acciones { display: none; }
 .renglon button.peligro, .fila button.peligro { background: transparent; color: var(--bad); border: 1px solid var(--bad-soft); }
@@ -284,6 +285,9 @@ button:not(:disabled):active { transform: translateY(1px); }
 .mensaje.bien { border-color: var(--ok); color: var(--ok); }
 .mensaje.error { border-color: var(--bad); color: var(--bad); }
 .mensaje.ojo { border-color: var(--warn); color: var(--warn); }
+.nueva-version { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.nueva-version.oculto { display: none; }
+.nueva-version button { min-height: 2.6rem; padding: 0 .9rem; border: 0; border-radius: 5px; background: var(--acc); color: #fff; font-weight: 700; font-size: .8rem; }
 #avance { margin-top: .7rem; font-size: .82rem; }
 .barra { height: .3rem; border-radius: 1rem; background: var(--line); overflow: hidden; margin-top: .3rem; }
 .barra > div { height: 100%; background: var(--acc); width: 0; transition: width .2s; }

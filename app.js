@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento } from './reglas.js';
 
-const VERSION = '0.20.0';
+const VERSION = '0.21.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -51,7 +51,8 @@ function avisar(texto, clase = '') {
     $('avisos').appendChild(d);
     const dlg = document.querySelector('dialog.dlg-forma[open]');
     if (dlg) { const z = dlg.querySelector('.dlg-avisos'); z.textContent = ''; z.appendChild(d.cloneNode(true)); dlg.scrollTo({ top: 0, behavior: 'smooth' }); return; }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Sin scrollTo (U-03, v0.21.0): #avisos es sticky y se ve donde este el usuario; el salto al tope alejaba
+    // al basculista del formulario de pesaje con cada «Captura el peso» / «Falta la foto».
 }
 function limpiarAvisos() { $('avisos').textContent = ''; for (const z of document.querySelectorAll('.dlg-forma .dlg-avisos')) z.textContent = ''; }
 // Los formularios de alta viven en <dialog> (v0.19.8): abrir es showModal, cerrar es close. Idempotentes.
@@ -349,6 +350,24 @@ async function cargarTodo() {
             c.renglones(s, L.roles)
         ]);
     estado.cargadoEl = Date.now();
+    reanclar();
+}
+
+/**
+ * C-01 (v0.21.0): lo que la pantalla tiene «en la mano» —el embarque que se esta pesando, la pre-alta
+ * abierta o en edicion, el renglon del padron en edicion— apunta a un OBJETO de la lista anterior.
+ * cargarTodo() sustituye las listas enteras, asi que tras un refresco silencioso (cada 2 min, al volver
+ * del bolsillo) ese objeto queda huerfano: la tara se guardaba sobre el, pintarBascula leia la lista
+ * nueva y la gondola seguia «en planta» (un segundo toque subia otro lote). Aqui se vuelve a apuntar
+ * por id al objeto fresco; si ya no esta (lo borro otra sesion), se conserva el viejo y el guardado
+ * lo reporta como hoy.
+ */
+function reanclar() {
+    const fresco = (col, x) => (x && porId(col, x.id)) || x;
+    if (estado.pesando) estado.pesando.embarque = fresco(estado.embarques, estado.pesando.embarque);
+    estado.prealtaAbierta = fresco(estado.prealtas, estado.prealtaAbierta);
+    estado.prealtaEdit = fresco(estado.prealtas, estado.prealtaEdit);
+    if (estado.padronEdit) estado.padronEdit.x = fresco(estado[estado.padronEdit.clave], estado.padronEdit.x);
 }
 
 /**
@@ -380,8 +399,11 @@ async function recargar(silencioso = false) {
         await cargarTodo();
         estado.rol = rolDe(estado.cuenta.username, estado.roles);
         ponerQuien(`${estado.cuenta.username} · ${estado.rol}`);
-        if (!capturaAMedias()) irA(estado.pestana);   // no pisar una captura a medias
-        else pintarInsignias();
+        // No pisar una captura a medias. El refresco SILENCIOSO repinta en su lugar (U-04, v0.21.0): irA()
+        // limpiaba el aviso que se estaba leyendo y mandaba la pagina al tope cada 2 minutos.
+        if (capturaAMedias()) pintarInsignias();
+        else if (silencioso) repintar();
+        else irA(estado.pestana);
         if (!silencioso) avisar('Datos actualizados.', 'bien');
     } catch (e) {
         avisar('No se pudo actualizar: ' + (e && e.message ? e.message : e), 'error');
@@ -394,14 +416,16 @@ async function recargar(silencioso = false) {
 
 // ---------------------------------------------------------------- navegacion
 
+const PINTORES = { hoy: () => pintarHoy(), puerta: () => pintarPuerta(), bascula: () => pintarBascula(), prealtas: () => pintarPrealtas(), padron: () => pintarPadron() };
+/** Repinta la pestana abierta SIN tocar avisos, veredicto ni scroll (refresco silencioso y cambios de pre-alta). */
+function repintar() { pintarInsignias(); PINTORES[estado.pestana](); }
 function irA(p) {
     estado.pestana = p;
     for (const b of $('pestanas').querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.p === p));
     for (const s of ['hoy', 'puerta', 'bascula', 'prealtas', 'padron']) $('p-' + s).classList.toggle('oculto', s !== p);
     limpiarAvisos();
     cerrarVeredicto();
-    pintarInsignias();
-    ({ hoy: pintarHoy, puerta: pintarPuerta, bascula: pintarBascula, prealtas: pintarPrealtas, padron: pintarPadron })[p]();
+    repintar();
     window.scrollTo({ top: 0 });
 }
 
@@ -482,8 +506,13 @@ function evaluarPuerta() {
 
 function correrCompuerta() {
     limpiarAvisos();
+    // U-01 (v0.21.0): mientras falte un campo de CAMPOS_PUERTA el boton dice «Faltan N datos» y NO abre el
+    // veredicto: enfoca el primer faltante. Antes con manifiesto o corriente vacios abria «No entra» y un toque
+    // mas dejaba un folio R- por un dato que no se habia tecleado (reglas.js los cuenta como hallazgo legal).
+    const falta = CAMPOS_PUERTA.find(([id]) => !String($(id).value).trim());
+    if (falta) { avisar(`Falta ${falta[1]}.`, 'error'); $(falta[0]).focus(); return; }
     const e = evaluarPuerta();
-    if (!e.placa) { avisar('Falta la placa del tractor.', 'error'); return; }
+    if (!e.placa) { avisar('Falta la placa del tractor.', 'error'); $('puPlaca').focus(); return; }
     estado.ultimaCompuerta = e;
     pintarResultadoCompuerta();
 }
@@ -651,9 +680,14 @@ async function registrarPuerta() {
             'Registrado. Gerencia lo ve en Báscula › Excepciones por autorizar.', 'bien');
         for (const id of ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo']) $(id).value = '';
         $('pu79').checked = false;
+        // U-02 (v0.21.0): tambien el chofer (la siguiente gondola heredaba su ChoferId) y se repintan chips y vista
+        // previa: antes los bloques seguian en «Listo» con los campos vacios. El programa y la corriente se quedan:
+        // las gondolas del mismo programa llegan en fila.
+        $('puChofer').value = ''; delete $('puChoferNombre').dataset.auto;
         cerrarVeredicto();
         pintarInsignias();
         estado.ultimaCompuerta = null;
+        pintarUnidadesPuerta(); pintarPrevioPuerta();
     } catch (e) {
         avisar('No se pudo registrar: ' + (e && e.message ? e.message : e), 'error');
     } finally { $('btnRegistrarPuerta').disabled = false; }
@@ -1210,8 +1244,7 @@ async function guardarPrealta() {
 // Tras firmar / cerrar / eliminar: se cierra el pop-up y se repinta la pestana que esta abierta (Hoy o Pre-altas) sin
 // borrar el aviso. Antes saltaba a Pre-altas aunque se hubiera abierto desde Hoy (Carlos, 2026-09-08).
 function trasCambioPrealta() {
-    cerrarForma('paDetalle'); pintarInsignias();
-    ({ hoy: pintarHoy, puerta: pintarPuerta, bascula: pintarBascula, prealtas: pintarPrealtas, padron: pintarPadron })[estado.pestana]();
+    cerrarForma('paDetalle'); repintar();
 }
 function verPrealta(p) {
     estado.prealtaAbierta = p;
@@ -1833,11 +1866,13 @@ function pintarHoy() {
 function exportarCsv() {
     const cab = ['Folio', 'Etapa', 'Compuerta', 'PlacaTractor', 'PlacaPlana', 'Carrier', 'Chofer', 'Manifiesto', 'Corriente', 'Programa', 'Arribo', 'BrutoKg', 'BrutoHora', 'TaraKg', 'TaraHora', 'NetoKg', 'CapturadoPor', 'ExcepcionAutorizo', 'AnuladoMotivo'];
     const hora = iso => iso ? new Date(iso).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour12: false }) : '';
-    // Texto que empieza con = + - @ lleva apostrofo delante: Excel lo ejecutaria como formula (auditoria 2026-09-08, hallazgo 4).
-    const celda = v => { let t = v === null || v === undefined ? '' : String(v); if (/^[=+\-@]/.test(t)) t = "'" + t; return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    // Texto que empieza con = + - @ (o tabulador / retorno de carro, S-02) lleva apostrofo delante: Excel lo
+    // ejecutaria como formula (auditoria 2026-09-08, hallazgo 4).
+    const celda = v => { let t = v === null || v === undefined ? '' : String(v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    // Los nombres de columna son los de esquema.json (CorrienteDeclarada, PreAltaId): C-02, v0.21.0 — antes salian vacias.
     const filas = [...estado.embarques].sort((a, b) => a.id - b.id).map(e => [
         e.Title, e.Etapa, e.Compuerta, e.PlacaTractor, e.PlacaPlana, nombreDe(estado.carriers, e.CarrierId), e.ChoferNombre || nombreDe(estado.choferes, e.ChoferId),
-        e.Manifiesto, e.Corriente, nombreDe(estado.prealtas, e.PrealtaId), hora(e.Arribo), e.BrutoKg, hora(e.BrutoHora), e.TaraKg, hora(e.TaraHora), e.NetoKg,
+        e.Manifiesto, e.CorrienteDeclarada, nombreDe(estado.prealtas, e.PreAltaId), hora(e.Arribo), e.BrutoKg, hora(e.BrutoHora), e.TaraKg, hora(e.TaraHora), e.NetoKg,
         e.CapturadoPor, e.ExcepcionAutorizo, e.AnuladoMotivo]);
     const csv = '\ufeff' + [cab, ...filas].map(f => f.map(celda).join(',')).join('\r\n');
     const a = document.createElement('a');
@@ -1947,14 +1982,30 @@ $('btnGuardarChofer').addEventListener('click', () => guardarPadron('choferes'))
 $('pie').textContent = `CALYTEK Planta ${VERSION}`;
 arrancar();
 
+// S-06 (v0.21.0): el service worker nuevo ya NO se activa solo sobre una pestana abierta. Antes skipWaiting +
+// controllerchange recargaban la pagina en cuanto se publicaba una version: a media tara se perdian foto y peso.
+// Ahora el SW nuevo queda ESPERANDO, la app ofrece «Actualizar» y solo al tocarlo (o al cerrar la app) se activa.
 if ('serviceWorker' in navigator) {
     const habiaControlador = !!navigator.serviceWorker.controller;
-    let recargando = false;
+    let recargandoSw = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!habiaControlador || recargando) return;
-        recargando = true; window.location.reload();
+        if (!habiaControlador || recargandoSw) return;
+        recargandoSw = true; window.location.reload();
     });
+    const ofrecer = sw => {
+        const caja = $('nuevaVersion'); if (!caja || !sw) return;
+        caja.classList.remove('oculto');
+        $('btnNuevaVersion').onclick = () => { caja.classList.add('oculto'); sw.postMessage('activar'); };
+    };
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').then(r => r.update()).catch(() => {});
+        navigator.serviceWorker.register('./sw.js').then(r => {
+            if (typeof r.addEventListener !== 'function') return r.update && r.update();
+            if (r.waiting) ofrecer(r.waiting);
+            r.addEventListener('updatefound', () => {
+                const nuevo = r.installing; if (!nuevo) return;
+                nuevo.addEventListener('statechange', () => { if (nuevo.state === 'installed' && navigator.serviceWorker.controller) ofrecer(nuevo); });
+            });
+            return r.update();
+        }).catch(() => {});
     });
 }
