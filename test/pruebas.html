@@ -276,8 +276,30 @@ try {
     const inicial = ['hoy', 'puerta', 'bascula', 'prealtas', 'padron'].find(p => visible('p-' + p));
     R.ok('pantalla inicial por rol', ROL === 'trazabilidad' ? inicial === 'puerta' : ROL === 'validador' ? inicial === 'prealtas' : inicial === 'hoy', inicial);
 
+    // C-08 (v0.23.0): el pill de tema fija el tema, marca aria-pressed y repinta <meta theme-color> con el --bg real.
+    {
+        // El <head> de la app no se monta aqui: se crea el <meta theme-color> que pintarBarraEstado repinta.
+        if (!$('metaTema')) { const m = document.createElement('meta'); m.name = 'theme-color'; m.id = 'metaTema'; document.head.appendChild(m); }
+        const bgDe = () => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+        const pill = tema => document.querySelector(`.tema button[data-tema="${tema}"]`);
+        pill('oscuro').click();
+        const oscuroOk = document.documentElement.dataset.tema === 'oscuro' && $('metaTema').getAttribute('content') === bgDe() && pill('oscuro').getAttribute('aria-pressed') === 'true';
+        const bgOscuro = bgDe();
+        pill('claro').click();
+        R.ok('C-08: aplicarTema fija data-tema, aria-pressed y theme-color = --bg vigente (oscuro y claro, distintos)',
+            oscuroOk && document.documentElement.dataset.tema === 'claro' && $('metaTema').getAttribute('content') === bgDe() && bgDe() !== bgOscuro && pill('claro').getAttribute('aria-pressed') === 'true' && pill('oscuro').getAttribute('aria-pressed') === 'false' && localStorage.getItem('calytek-planta-tema') === 'claro',
+            `${bgOscuro} → ${bgDe()}`);
+        try { localStorage.removeItem('calytek-planta-tema'); } catch (_) {}
+    }
+
     // 3. Padron: carrier (RME 105) + unidad + chofer.
     document.querySelector('#pestanas button[data-p="padron"]').click();
+    // C-08 (v0.23.0): en escritorio (>= 900 px) los tres grupos del padron se abren solos; en celular se quedan cerrados.
+    {
+        const esc = window.matchMedia('(min-width: 900px)').matches;
+        const abiertos = ['pdGrupoCarriers', 'pdGrupoUnidades', 'pdGrupoChoferes'].filter(id => $(id).open).length;
+        R.ok('C-08: abrirGruposPadronEscritorio abre los 3 grupos en escritorio y ninguno en celular', abiertos === (esc ? 3 : 0), `${window.innerWidth}px → ${abiertos} abiertos`);
+    }
     if (captura) {
     // U-18 (v0.22.0): los tres grupos vacios lo dicen (antes solo Carriers).
     R.ok('U-18: Unidades y Choferes vacíos tienen estado vacío', $('pdUnidades').textContent.includes('Sin unidades') && $('pdChoferes').textContent.includes('Sin choferes'), $('pdUnidades').textContent.slice(0, 40));
@@ -354,6 +376,19 @@ try {
         poner('paCliente', 'cliente demo'); poner('paPozoTitulo', 'pozo 1'); poner('paMes', '2026'); poner('paGenerador', 'GENERADOR DEMO'); poner('paCorriente', 'base-aceite');
         R.ok('el nombre del programa se arma CLIENTE-POZO-AÑO en mayúsculas y rellena el pozo', $('paTitulo').value === 'CLIENTE DEMO-POZO 1-2026' && $('paPozo').value === 'POZO 1', $('paTitulo').value);
         poner('paPozo', 'Pozo-1');
+        // U-10 (v0.23.0): «+ Alta de carrier» abre la forma del padron ENCIMA de la pre-alta; al guardar, el nuevo queda elegido
+        // y lo capturado en los bloques 1 y 2 sigue ahi. El aviso sale en la forma de encima (avisar mira la ULTIMA abierta).
+        {
+            clic('btnAltaCarrierPrealta'); await esperar(() => $('pdFormaCarrier').open, 'forma de carrier sobre la pre-alta');
+            R.ok('U-10: la forma del carrier se abre ENCIMA y la pre-alta sigue abierta', $('pdFormaCarrier').open && $('paForma').open);
+            clic('btnGuardarCarrier'); await dormir(30);
+            R.ok('U-10: el aviso de validación sale en la forma de encima (la del carrier), no en la pre-alta', $('pdFormaCarrier').querySelector('.dlg-avisos').textContent.includes('razón social') && !$('paForma').querySelector('.dlg-avisos').textContent.trim(), $('pdFormaCarrier').querySelector('.dlg-avisos').textContent);
+            poner('pcTitle', 'CARRIER DESDE PREALTA'); clic('btnGuardarCarrier');
+            await esperar(() => !$('pdFormaCarrier').open, 'carrier desde pre-alta guardado');
+            const nuevoC = filas('carriers').find(c => c.fields.Title === 'CARRIER DESDE PREALTA');
+            R.ok('U-10: al guardar, el carrier nuevo queda ELEGIDO en la pre-alta y los bloques 1 y 2 conservan lo capturado', !!nuevoC && $('paForma').open && $('paCarrier').value === String(nuevoC.id) && $('paTitulo').value === 'CLIENTE DEMO-POZO 1-2026' && $('paGenerador').value === 'GENERADOR DEMO' && $('paUnidades').textContent.includes('no tiene unidades'), `${$('paCarrier').value} · ${$('paTitulo').value}`);
+            R.ok('U-10: el aviso del alta se ve en la pre-alta (única forma abierta)', $('paForma').querySelector('.dlg-avisos').textContent.includes('Carrier dado de alta'));
+        }
         poner('paCarrier', String(carrierId)); await dormir(20);
         poner('paFecha', '2026-10-15'); poner('paGondolas', '10');
         // C-04 (v0.22.0): «otro celular» tomo L-AA-001 hace un segundo (la memoria de esta sesion no lo sabe): la campana
@@ -462,16 +497,32 @@ try {
         clic('btnGuardarPeso'); await dormir(50);
         R.ok('sin foto del indicador no se guarda', !!avisoCon('Falta la foto del indicador'));
         await foto();
-        // Otro celular tomo E-26-00001 hace un segundo (estado local rancio).
+        // C-03 (v0.23.0): otro celular toma E-AA-00001 DESPUES de que releimos la lista, justo cuando reservamos el folio; el
+        // suyo es mas viejo (id menor), asi que asegurarFolioUnico renumera el NUESTRO. Antes la colision se sembraba antes
+        // de releer, el camino de renumerar nunca corria y «la carpeta lleva el folio definitivo» pasaba sin probarlo.
         const aa = String(new Date().getFullYear()).slice(-2);
-        filas('embarques').push({ id: DB.siguienteId++, fields: { Title: `E-${aa}-00001`, Etapa: 'bruto', PlacaTractor: 'OTRO01', Compuerta: 'pasa', Arribo: new Date().toISOString(), BrutoKg: 30000 } });
+        const fetchApp = window.fetch; let sembrado = false; const nLlamadas0 = DB.llamadas.length;
+        window.fetch = async function (u, o = {}) {
+            if (!sembrado && (o.method || 'GET').toUpperCase() === 'PATCH' && String(u).includes(`/items/${emb1.id}/fields`) && /"Title"/.test(String(o.body))) {
+                sembrado = true;
+                filas('embarques').push({ id: emb1.id - 0.5, fields: { Title: `E-${aa}-00001`, Etapa: 'bruto', PlacaTractor: 'OTRO01', Compuerta: 'pasa', Arribo: new Date().toISOString(), BrutoKg: 30000 } });
+            }
+            return fetchApp(u, o);
+        };
         clic('btnGuardarPeso');
         await esperar(() => avisoCon('Bruto guardado'), 'bruto guardado');
+        window.fetch = fetchApp;
         const folios = filas('embarques').map(e => e.fields.Title).filter(Boolean);
-        R.ok('folio E- único tras la colisión (el nuestro se renumeró)', new Set(folios).size === folios.length && emb1.fields.Title === `E-${aa}-00002`, folios.join(', '));
+        R.ok('C-03: folio E- único tras la colisión sembrada DESPUÉS de releer (el nuestro se renumeró a 00002)', sembrado && new Set(folios).size === folios.length && emb1.fields.Title === `E-${aa}-00002`, folios.join(', '));
         R.ok('lote de evidencia del bruto en el buzón (carpeta + foto + _lote.json)', DB.carpetas.some(c => c.ruta.includes('_Embarque_bruto-')) && DB.archivos.some(a => a.ruta.endsWith('_lote.json')) && DB.archivos.some(a => a.ruta.endsWith('-01.jpg')));
         const loteBruto = DB.carpetas.find(c => c.ruta.includes('_Embarque_bruto-'));
-        R.ok('la carpeta del lote lleva el folio definitivo del embarque', loteBruto && loteBruto.ruta.includes(emb1.fields.Title.toLowerCase()), loteBruto && loteBruto.ruta);
+        R.ok('C-03: la carpeta del lote y BrutoFoto llevan el folio DEFINITIVO', loteBruto && loteBruto.ruta.includes(emb1.fields.Title.toLowerCase()) && String(emb1.fields.BrutoFoto).includes(emb1.fields.Title), `${loteBruto && loteBruto.ruta} · ${emb1.fields.BrutoFoto}`);
+        {
+            const ll = DB.llamadas.slice(nLlamadas0);
+            const iReserva = ll.findIndex(x => x.startsWith('PATCH') && x.includes(`/items/${emb1.id}/fields`));
+            const iCarpeta = ll.findIndex(x => x.startsWith('POST') && x.includes('/drive/root:') && x.endsWith(':/children'));
+            R.ok('C-03: el folio se reserva (PATCH Title) ANTES de crear la carpeta del lote', iReserva >= 0 && iCarpeta > iReserva, `reserva #${iReserva} · carpeta #${iCarpeta}`);
+        }
         R.ok('ticket con folio y bruto', $('ticket').textContent.includes(emb1.fields.Title) && $('ticket').textContent.includes('44600'));
         R.ok('«Capturó» muestra el Nombre de PLANTA_Roles, no el correo', $('ticket').textContent.includes('Prueba') && !$('ticket').textContent.includes(window.__CUENTA.username), $('ticket').textContent.slice(-160));
 
@@ -700,6 +751,20 @@ try {
             document.querySelector('#pestanas button[data-p="padron"]').click();
             const rUn2 = document.querySelector('#pdUnidades .renglon');
             if (rUn2 && rUn2.querySelector('button[data-accion="reactivar"]')) { rUn2.querySelector('button[data-accion="reactivar"]').click(); await confirmar(); await esperar(() => filas('unidades')[0].fields.Activo === true, 'reactivada'); R.ok('unidad reactivada', filas('unidades')[0].fields.Activo === true); }
+        }
+        // C-08 (v0.23.0): editar una unidad cambiando la vigencia de la poliza pide motivo y lo deja en Notas.
+        {
+            const rEd = document.querySelector('#pdUnidades .renglon');
+            const btnEd = rEd && rEd.querySelector('button[data-accion="editar"]');
+            if (btnEd) {
+                btnEd.click(); await esperar(() => $('pdFormaUnidad').open, 'edición de unidad');
+                poner('puuPolizaVig', '2027-09-30'); clic('btnGuardarUnidad');
+                await esperar(() => $('dlg').open && $('dlgTitulo').textContent.includes('Cambio de vigencia'), 'diálogo de cambio de vigencia');
+                await confirmar('Póliza renovada, endoso 2');
+                await esperar(() => avisoCon('unidad actualizado'), 'unidad editada');
+                const u = filas('unidades')[0].fields;
+                R.ok('C-08: editar la unidad con cambio de PolizaVigencia pide motivo y lo deja en Notas (VIGENCIA, quién, cuándo)', String(u.PolizaVigencia).startsWith('2027-09-30') && /VIGENCIA/.test(String(u.Notas)) && String(u.Notas).includes('endoso 2') && String(u.Notas).includes(window.__CUENTA.username) && !$('pdFormaUnidad').open, String(u.Notas));
+            } else R.ok('C-08: la unidad activa ofrece Editar', false, rEd ? rEd.textContent.slice(0, 60) : 'sin renglón');
         }
         // 13. Regla que sorprende: un carrier SIN vigencia CSF capturada vuelve cada gondola una excepcion.
         const csf = filas('carriers')[0].fields.CSFVigencia; delete filas('carriers')[0].fields.CSFVigencia;

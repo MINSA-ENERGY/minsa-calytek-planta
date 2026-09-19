@@ -585,7 +585,10 @@ button:not(:disabled):active { transform: translateY(1px); }
 /* Titulo de tarjeta con un boton a la derecha (Exportar CSV en «Hoy», F4 del 7-sep). */
 .h2-con-boton { display: flex; align-items: center; gap: .6rem; margin-bottom: .6rem; }
 .h2-con-boton h2 { flex: 1; margin: 0; }
-.h2-con-boton .alta { background: transparent; color: var(--acc); border: 1px solid var(--line); border-radius: 5px; min-height: 2.6rem; padding: .2rem .7rem; font-family: var(--mono); font-weight: 600; font-size: .66rem; flex: none; text-transform: uppercase; letter-spacing: .05em; }
+/* U-10 (v0.23.0): select + boton en un mismo campo (el carrier de la pre-alta con su «+ Alta de carrier»). */
+.con-boton { display: flex; gap: .5rem; align-items: stretch; }
+.con-boton select { flex: 1; min-width: 0; }
+.h2-con-boton .alta, .con-boton .alta { background: transparent; color: var(--acc); border: 1px solid var(--line); border-radius: 5px; min-height: 2.6rem; padding: .2rem .7rem; font-family: var(--mono); font-weight: 600; font-size: .66rem; flex: none; text-transform: uppercase; letter-spacing: .05em; }
 
 /* ---- I2 (7-sep): pesaje con neto en vivo, foto compacta y Guardar pegado abajo */
 .neto-vivo { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; font-size: .68rem; color: var(--mute); margin: .5rem 0 0; font-variant-numeric: tabular-nums; text-transform: uppercase; letter-spacing: .05em; }

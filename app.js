@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento } from './reglas.js';
 
-const VERSION = '0.22.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.23.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -52,7 +52,10 @@ function avisar(texto, clase = '') {
     // arriba de una seccion de 100dvh en un body sin scroll: «No se pudo entrar» empujaba «Entrar» fuera de la vista.
     if (!$('pantallaEntrar').classList.contains('oculto')) { const z = $('entradaAviso'); z.textContent = texto; z.className = d.className; return; }
     $('avisos').appendChild(d);
-    const dlg = document.querySelector('dialog.dlg-forma[open]');
+    // U-10 (v0.23.0): con dos formas abiertas (la del carrier encima de la pre-alta) el aviso va a la de ENCIMA, que es la
+    // ultima abierta y, en el DOM, la ultima de las abiertas (las del padron van despues de #paForma).
+    const abiertas = document.querySelectorAll('dialog.dlg-forma[open]');
+    const dlg = abiertas[abiertas.length - 1];
     if (dlg) { const z = dlg.querySelector('.dlg-avisos'); z.textContent = ''; z.appendChild(d.cloneNode(true)); dlg.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     // Sin scrollTo (U-03, v0.21.0): #avisos es sticky y se ve donde este el usuario; el salto al tope alejaba
     // al basculista del formulario de pesaje con cada «Captura el peso» / «Falta la foto».
@@ -965,14 +968,20 @@ async function guardarPeso() {
             const idx = estado.embarques.findIndex(x => x.id === e.id);
             if (idx >= 0) estado.embarques[idx] = e; else estado.embarques.push(e);
             if (e.Etapa !== 'compuerta') throw new Error(`este embarque ya está en ${e.Etapa} (lo movió otra sesión). Actualiza la lista.`);
-            const folio = siguienteFolio('E', delAno.map(x => x.Title));
+            // C-03 (v0.23.0): el folio se RESERVA (PATCH Title) y se confirma unico ANTES de subir la foto, para que la
+            // carpeta, la foto y el _lote.json nazcan con el definitivo. Antes, si asegurarFolioUnico renumeraba, el lote ya
+            // subido y BrutoFoto se quedaban con el folio viejo, que ahora era de otra gondola. Si la subida o el PATCH
+            // final fallan, el renglon queda en compuerta CON folio y el reintento lo reusa (no nace otro numero).
+            const folio = /^E-/.test(e.Title || '') ? e.Title : siguienteFolio('E', delAno.map(x => x.Title));
+            await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, { Title: folio });
+            e.Title = folio;
+            await asegurarFolioUnico(e, 'E');
             paso('Subiendo la foto…');
-            const lote = await subirEvidencia(folio, 'bruto', kg);
+            const lote = await subirEvidencia(e.Title, 'bruto', kg);
             paso('Guardando…');
-            const campos = { Title: folio, Etapa: 'bruto', BrutoKg: kg, BrutoHora: ahora, BrutoFoto: lote.ref };
+            const campos = { Etapa: 'bruto', BrutoKg: kg, BrutoHora: ahora, BrutoFoto: lote.ref };
             await guardarConLote(lote, campos);
             Object.assign(e, campos);
-            await asegurarFolioUnico(e, 'E');
             avisar(`Bruto guardado. Folio ${e.Title}. La góndola puede descargar en la fosa.`, 'bien');
         } else {
             paso('Subiendo la foto…');
@@ -1590,6 +1599,10 @@ function botonesPadron(clave, x) {
 }
 const NOMBRE_PADRON = { carriers: 'carrier', unidades: 'unidad', choferes: 'chofer' };
 function vigenciasDelCarrier(c) { return estado.vigencias.filter(v => v.Rol === 'carrier' && String(v.Title).endsWith(`· ${c.Title}`)); }
+// C-05 (v0.23.0): el SEGUNDO paso de una escritura en dos pasos (carrier + su vigencia del tablero) corre aparte: si falla,
+// el primero SI quedo y el aviso lo dice en ambar. Antes salia «No se pudo guardar» sobre un carrier ya guardado, el
+// operador lo reintentaba y lo duplicaba. Devuelve el mensaje del error, o null si el paso paso.
+async function segundoPaso(fn) { try { await fn(); return null; } catch (e) { return e && e.message ? e.message : String(e); } }
 async function eliminarPadron(clave, x) {
     let citas;
     try { citas = await referenciasPadronVivas(clave, x); }
@@ -1600,9 +1613,11 @@ async function eliminarPadron(clave, x) {
     if (!ok) return;
     try {
         await refrescarCliente();
+        // C-05 (v0.23.0): las vigencias ANTES que el carrier. Si falla a medias queda un carrier sin vigencia (se ve en el
+        // padron y se reintenta), no una vigencia huerfana pintandose en «Hoy» sin carrier.
+        if (clave === 'carriers') for (const v of vigenciasDelCarrier(x)) { await estado.cliente.borrarRenglon(estado.siteId, L.vigencias, v.id); estado.vigencias = estado.vigencias.filter(y => y.id !== v.id); }
         await estado.cliente.borrarRenglon(estado.siteId, L[clave], x.id);
         estado[clave] = estado[clave].filter(y => y.id !== x.id);
-        if (clave === 'carriers') for (const v of vigenciasDelCarrier(x)) { await estado.cliente.borrarRenglon(estado.siteId, L.vigencias, v.id); estado.vigencias = estado.vigencias.filter(y => y.id !== v.id); }
         avisar(`${NOMBRE_PADRON[clave]} eliminado.`, 'bien'); pintarPadron();
     } catch (e) { avisar('No se pudo eliminar: ' + e.message, 'error'); }
 }
@@ -1626,8 +1641,9 @@ async function activarPadron(clave, x, activo) {
             await estado.cliente.actualizarRenglon(estado.siteId, L[clave], x.id, campos);
         }
         Object.assign(x, campos);
-        if (clave === 'carriers') for (const v of vigenciasDelCarrier(x)) { await estado.cliente.actualizarRenglon(estado.siteId, L.vigencias, v.id, { Activo: activo }); v.Activo = activo; }
-        if (activo) avisar(`${NOMBRE_PADRON[clave]} reactivado.`, 'bien');
+        const pendiente = clave === 'carriers' ? await segundoPaso(async () => { for (const v of vigenciasDelCarrier(x)) { await estado.cliente.actualizarRenglon(estado.siteId, L.vigencias, v.id, { Activo: activo }); v.Activo = activo; } }) : null;
+        if (pendiente) avisar(`${NOMBRE_PADRON[clave]} ${activo ? 'reactivado' : 'dado de baja'}, pero su vigencia ASEA del tablero no cambió (${pendiente}). Edítalo y guarda para sincronizarla.`, 'ojo');
+        else if (activo) avisar(`${NOMBRE_PADRON[clave]} reactivado.`, 'bien');
         else if (sinNotas) avisar(`${NOMBRE_PADRON[clave]} dado de baja, pero el motivo NO quedó: la lista no tiene todavía la columna Notas (setup, tarea 9).`, 'ojo');
         else avisar(`${NOMBRE_PADRON[clave]} dado de baja${motivo ? ' · el motivo quedó en Notas' : ''}.`, 'bien');
         pintarPadron();
@@ -1729,19 +1745,26 @@ async function guardarPadron(clave) {
             try { await estado.cliente.actualizarRenglon(estado.siteId, L[clave], edit.id, paraPatch(campos)); }
             catch (e) { if (campos.Notas && /Notas/.test(e.message)) throw new Error('la lista no tiene la columna Notas todavía (tarea 9 de setup-carlos.md); mientras, la vigencia no se cambia'); throw e; }
             Object.assign(edit, campos);
-            if (clave === 'carriers') {
-                // La vigencia ASEA del tablero se llama por el carrier y guarda su fecha: se corrige junto con él.
-                if (vsAntes.length) for (const v of vsAntes) { const c = { Title: `Autorización ASEA transporte · ${edit.Title}`, Vence: edit.VigenciaASEA || null, Folio: edit.FolioOficio || null }; await estado.cliente.actualizarRenglon(estado.siteId, L.vigencias, v.id, c); Object.assign(v, c); }
+            // La vigencia ASEA del tablero se llama por el carrier y guarda su fecha: se corrige junto con él. Es el segundo
+            // paso (C-05): si falla, el carrier ya quedo y el aviso lo dice; guardar de nuevo la sincroniza (Activo incluido).
+            const pendiente = clave === 'carriers' ? await segundoPaso(async () => {
+                if (vsAntes.length) for (const v of vsAntes) { const c = { Title: `Autorización ASEA transporte · ${edit.Title}`, Vence: edit.VigenciaASEA || null, Folio: edit.FolioOficio || null, Activo: edit.Activo !== false }; await estado.cliente.actualizarRenglon(estado.siteId, L.vigencias, v.id, c); Object.assign(v, c); }
                 else if (edit.VigenciaASEA) await altaVigencia(`Autorización ASEA transporte · ${edit.Title}`, 'tercero', 'carrier', 'legal', edit.VigenciaASEA, edit.FolioOficio);
-            }
+            }) : null;
             cerrarFormaPadron(clave);
-            avisarAlta(`${NOMBRE_PADRON[clave]} actualizado.`, clave, edit); pintarPadron();
+            if (pendiente) avisar(`${NOMBRE_PADRON[clave]} actualizado, pero su vigencia ASEA del tablero no se sincronizó (${pendiente}). Guárdalo de nuevo para reintentar.`, 'ojo');
+            else avisarAlta(`${NOMBRE_PADRON[clave]} actualizado.`, clave, edit);
+            pintarPadron();
         } else {
             const nuevo = await estado.cliente.crearRenglon(estado.siteId, L[clave], limpiar(campos));
             estado[clave].push(nuevo);
-            if (clave === 'carriers' && nuevo.VigenciaASEA) await altaVigencia(`Autorización ASEA transporte · ${nuevo.Title}`, 'tercero', 'carrier', 'legal', nuevo.VigenciaASEA, nuevo.FolioOficio);
+            const pendiente = clave === 'carriers' && nuevo.VigenciaASEA ? await segundoPaso(() => altaVigencia(`Autorización ASEA transporte · ${nuevo.Title}`, 'tercero', 'carrier', 'legal', nuevo.VigenciaASEA, nuevo.FolioOficio)) : null;
             vaciarFormaPadron(clave); cerrarFormaPadron(clave);
-            avisarAlta(AVISO_ALTA[clave], clave, nuevo); pintarPadron();
+            if (pendiente) avisar(`${NOMBRE_PADRON[clave]} dado de alta, pero su vigencia ASEA NO quedó en el tablero (${pendiente}). Edítalo y guarda para crearla.`, 'ojo');
+            else avisarAlta(AVISO_ALTA[clave], clave, nuevo);
+            // U-10 (v0.23.0): si el alta vino desde la pre-alta (que sigue abierta atras), el carrier nuevo queda elegido en ella.
+            if (clave === 'carriers' && $('paForma').open) elegirCarrierEnPrealta(nuevo);
+            pintarPadron();
         }
     } catch (e) { avisar('No se pudo guardar: ' + e.message, 'error'); }
 }
@@ -1752,34 +1775,35 @@ async function altaVigencia(titulo, titular, rol, fuente, vence, folio) {
 
 // ================================================================ HOY (la consola)
 
-function pintarHoy() {
-    const hoy = fechaMexico();
-    const ayer = fechaMexico(new Date(Date.now() - 86400000));
-    const lunes = (() => { const d = new Date(); const dia = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dia); return fechaMexico(d); })();
-    const dia = e => e.Arribo ? fechaMexico(new Date(e.Arribo)) : '';
-    // Una gondola CERRADA cuenta el dia en que se cerro (hora de la tara), no el de arribo: la que llega
-    // 23:50 y cierra 00:10 es del dia siguiente, que es el que reporta la bascula (hallazgo abierto del 5-sep, F1).
-    const diaCierre = e => e.TaraHora ? fechaMexico(new Date(e.TaraHora)) : dia(e);
-    const cerrados = f => estado.embarques.filter(e => e.Etapa === 'cerrado' && f(diaCierre(e)));
-    const cerradosHoy = cerrados(d => d === hoy), cerradosAyer = cerrados(d => d === ayer), cerradosSemana = cerrados(d => d >= lunes);
-    const kg = xs => xs.reduce((a, e) => a + (Number(e.NetoKg) || 0), 0);
-    const activos = estado.embarques.filter(enPlanta);
-    const pendientes = excepcionesPendientes();
-    const borradores = estado.prealtas.filter(p => p.Estado === 'borrador');
-    const rechazosSemana = estado.embarques.filter(e => e.Etapa === 'rechazado' && dia(e) >= lunes);
+// C-07 (v0.23.0): pintarHoy se parte por tarjeta (franja, KPI, fila del dia, pendientes, rechazos, vigencias) y la fila
+// del dia se pinta dos veces —tarjetas en celular, tabla en escritorio— con ESTAS mismas piezas. Antes cada vista traia
+// su copia de ETAPAS, los segmentos y la etiqueta de compuerta, y un cambio de etapa habia que hacerlo en dos sitios.
+const ETAPAS_FILA = { compuerta: 1, bruto: 2, cerrado: 3, rechazado: 0, anulado: 0 };
+function segmentosEtapa(e) {
+    const seg = el('span', 'etapa');
+    for (let i = 0; i < 3; i++) { const s = el('i'); if (e.Etapa === 'rechazado' && i === 0) s.className = 'x'; else if (i < (ETAPAS_FILA[e.Etapa] ?? 0)) s.className = 'f'; seg.appendChild(s); }
+    return seg;
+}
+function etiquetaCompuertaDe(e) {
+    if (e.Etapa === 'anulado') return etiqueta('anulado', 'anulado');
+    return etiqueta(e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'no entró' : e.ExcepcionAutorizo ? 'excepción ok' : 'espera',
+                    e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'rechazo-legal' : 'excepcion-comercial');
+}
+/** «neto 21,220» / «bruto 44,600» / null; `rotuloNeto` vacio deja el neto solo (la tabla ya tiene la columna). */
+function pesoFila(e, rotuloNeto = 'neto ') {
+    return e.NetoKg ? `${rotuloNeto}${Number(e.NetoKg).toLocaleString('es-MX')}` : e.BrutoKg ? `bruto ${Number(e.BrutoKg).toLocaleString('es-MX')}` : null;
+}
+/** Ticket (si hay folio) + Anular/Eliminar. `detener` frena la propagacion: en la tarjeta el clic tambien la despliega. */
+function botonesFila(e, abrirTicket, detener) {
+    const bf = el('div', 'botones-fila');
+    if (e.Title) { const b = el('button', '', 'Ticket'); b.type = 'button'; b.addEventListener('click', ev => { if (detener) ev.stopPropagation(); abrirTicket(e); }); bf.appendChild(b); }
+    for (const b of botonCorreccion(e)) { const x = botonAccion(b); if (detener) x.addEventListener('click', ev => ev.stopPropagation()); bf.appendChild(x); }
+    return bf;
+}
+const horaFila = e => horaMexico(e.Arribo, 'hora');
 
-    $('hoyTitulo').textContent = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long', day: 'numeric', month: 'long' });
-    $('hoyKicker').textContent = `Hoy · ${estado.rol}`;
-
-    // Franja: la excepcion que espera a gerencia es la unica decision que «Hoy» le pide a alguien.
-    // U-12 (v0.22.0): los mismos botones (Autorizar · Anular/Eliminar) salen tambien en su renglon de «Pendiente revisar»,
-    // que era la unica entrada de esa tarjeta sin accion; la excepcion se cuenta una sola vez (en la tarjeta).
-    const botonesExcepcion = e => {
-        const bs = [];
-        if (PUEDE.autorizarExcepcion(estado.rol)) bs.push({ texto: 'Autorizar con motivo', accion: 'autorizar', clase: 'si', alClic: () => autorizarExcepcion(e) });
-        for (const b of botonCorreccion(e)) bs.push({ ...b, clase: 'no' });
-        return bs;
-    };
+// Franja: la excepcion que espera a gerencia es la unica decision que «Hoy» le pide a alguien.
+function pintarFranjaHoy(pendientes, botonesExcepcion) {
     const fr = $('hoyFranja'); fr.textContent = '';
     fr.classList.toggle('oculto', !pendientes.length);
     for (const e of pendientes) {
@@ -1791,8 +1815,11 @@ function pintarHoy() {
         if (bs.length) { const d = el('div', 'botones'); for (const b of bs) d.appendChild(botonAccion(b)); it.appendChild(d); }
         fr.appendChild(it);
     }
+}
 
-    // KPI: numero, tendencia y techo.
+// KPI: numero, tendencia y techo.
+function pintarKpisHoy({ cerradosHoy, cerradosAyer, cerradosSemana, activos, rechazosSemana, borradores }) {
+    const kg = xs => xs.reduce((a, e) => a + (Number(e.NetoKg) || 0), 0);
     const k = $('tbKpis'); k.textContent = '';
     const kpi = (l, n, unidad, t, clase) => {
         const d = el('div', 'kpi'); d.appendChild(el('div', 'l', l));
@@ -1811,8 +1838,11 @@ function pintarHoy() {
     enP.appendChild(el('div', 't', `techo ${CONFIG.techoGondolasDia} al día`));
     kpi('Rechazos esta semana', rechazosSemana.length, null, el('div', 't', rechazosSemana.length ? 'legal · el residuo no entró' : 'ninguno'), rechazosSemana.length ? 'mal' : '');
     kpi('Pre-altas por firmar', borradores.length, null, el('div', 't', borradores.length ? 'esperan al validador' : 'todas firmadas'), borradores.length ? 'ojo' : '');
+}
 
-    // Fila del dia: los embarques de hoy en una tabla; si no hay, los ultimos 5.
+// Fila del dia: los embarques de hoy; si no hay, los ultimos 5. Tarjetas (celular) y tabla (escritorio) de la MISMA lista
+// y con las mismas piezas de arriba. I3 (7-sep): en celular la tabla de 8 columnas escondia seis; tocar la tarjeta muestra sus botones.
+function pintarFilaDia(hoy, dia) {
     const deHoy = estado.embarques.filter(e => dia(e) === hoy).sort((a, b) => a.id - b.id);
     const fila = deHoy.length ? deHoy : [...estado.embarques].sort((a, b) => b.id - a.id).slice(0, 5);
     // v0.19.2 (Carlos, 8-sep): Ticket abre la misma ventana que Cerrados, sin salir de Hoy; ‹ › recorren los de la fila con folio.
@@ -1820,75 +1850,41 @@ function pintarHoy() {
     const abrirTicketDeHoy = e => abrirTicketPop(conFolio, conFolio.indexOf(e));
     const tw = $('tbFila'); tw.textContent = '';
     const tt = $('tbFilaTarjetas'); tt.textContent = '';
-    if (!fila.length) { tw.appendChild(el('p', 'vacio', 'Ninguna góndola registrada todavía.')); tt.appendChild(el('p', 'vacio', 'Ninguna góndola registrada todavía.')); }
-    else {
-        if (!deHoy.length) { tw.appendChild(el('p', 'vacio', 'Hoy no ha llegado ninguna; estos son los últimos.')); tt.appendChild(el('p', 'vacio', 'Hoy no ha llegado ninguna; estos son los últimos.')); }
-        // I3 (7-sep): en celular, una tarjeta por gondola (la tabla de 8 columnas escondia seis). Tocarla muestra sus botones.
-        const ETAPAS3 = { compuerta: 1, bruto: 2, cerrado: 3, rechazado: 0, anulado: 0 };
-        const segmentos = e => { const seg = el('span', 'etapa'); for (let i = 0; i < 3; i++) { const s = el('i'); if (e.Etapa === 'rechazado' && i === 0) s.className = 'x'; else if (i < (ETAPAS3[e.Etapa] ?? 0)) s.className = 'f'; seg.appendChild(s); } return seg; };
-        const etiquetaCompuerta = e => e.Etapa === 'anulado' ? etiqueta('anulado', 'anulado')
-            : etiqueta(e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'no entró' : e.ExcepcionAutorizo ? 'excepción ok' : 'espera',
-                       e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'rechazo-legal' : 'excepcion-comercial');
-        const hora = e => horaMexico(e.Arribo, 'hora');
-        const botonesDe = e => {
-            const bf = el('div', 'botones-fila');
-            if (e.Title) { const b = el('button', '', 'Ticket'); b.type = 'button';
-                b.addEventListener('click', ev => { ev.stopPropagation(); abrirTicketDeHoy(e); });
-                bf.appendChild(b); }
-            for (const b of botonCorreccion(e)) { const x = botonAccion(b); x.addEventListener('click', ev => ev.stopPropagation()); bf.appendChild(x); }
-            return bf;
-        };
-        for (const e of fila) {
-            const t = el('div', 'ftar' + (e.Etapa === 'anulado' ? ' anulado' : ''));
-            t.appendChild(el('span', 'f' + (e.Title ? '' : ' mudo'), e.Title || 'sin folio'));
-            t.appendChild(segmentos(e));
-            const c = el('span', 'c');
-            const peso = e.NetoKg ? `neto ${Number(e.NetoKg).toLocaleString('es-MX')}` : e.BrutoKg ? `bruto ${Number(e.BrutoKg).toLocaleString('es-MX')}` : null;
-            c.textContent = [e.PlacaTractor || '—', nombreDe(estado.carriers, e.CarrierId), peso, hora(e)].filter(Boolean).join(' · ');
-            c.appendChild(etiquetaCompuerta(e));
-            t.appendChild(c);
-            const bf = botonesDe(e);
-            if (bf.childElementCount) { t.appendChild(bf); desplegable(t, false, () => { t.classList.toggle('abierta'); t.setAttribute('aria-expanded', String(t.classList.contains('abierta'))); }); }
-            tt.appendChild(t);
-        }
-        const t = el('table', 'fila'); const th = el('tr');
-        for (const c of ['Folio', 'Unidad', 'Transportista', 'Etapa', 'Compuerta', 'Neto kg', 'Arribo', '']) th.appendChild(el('th', '', c));
-        t.appendChild(th);
-        const ETAPAS = { compuerta: 1, bruto: 2, cerrado: 3, rechazado: 0, anulado: 0 };
-        for (const e of fila) {
-            const tr = el('tr', e.Etapa === 'anulado' ? 'anulado' : '');
-            tr.appendChild(el('td', 'mono' + (e.Title ? '' : ' mudo'), e.Title || '—'));
-            tr.appendChild(el('td', 'mono', e.PlacaTractor || '—'));
-            tr.appendChild(el('td', '', nombreDe(estado.carriers, e.CarrierId)));
-            const et = el('td'); const seg = el('span', 'etapa');
-            for (let i = 0; i < 3; i++) { const s = el('i'); if (e.Etapa === 'rechazado' && i === 0) s.className = 'x'; else if (i < (ETAPAS[e.Etapa] ?? 0)) s.className = 'f'; seg.appendChild(s); }
-            et.appendChild(seg); tr.appendChild(et);
-            const co = el('td');
-            if (e.Etapa === 'anulado') co.appendChild(etiqueta('anulado', 'anulado'));
-            else { const cl = e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'rechazo-legal' : 'excepcion-comercial';
-                co.appendChild(etiqueta(e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'no entró' : e.ExcepcionAutorizo ? 'excepción ok' : 'espera', cl)); }
-            tr.appendChild(co);
-            tr.appendChild(el('td', 'num mono' + (e.NetoKg ? '' : ' mudo'), e.NetoKg ? Number(e.NetoKg).toLocaleString('es-MX') : e.BrutoKg ? `bruto ${Number(e.BrutoKg).toLocaleString('es-MX')}` : '—'));
-            tr.appendChild(el('td', 'mono', hora(e)));
-            const ac = el('td'); const bf = el('div', 'botones-fila');
-            if (e.Title) { const b = el('button', '', 'Ticket'); b.type = 'button';
-                b.addEventListener('click', () => abrirTicketDeHoy(e));
-                bf.appendChild(b); }
-            for (const b of botonCorreccion(e)) bf.appendChild(botonAccion(b));
-            ac.appendChild(bf); tr.appendChild(ac);
-            t.appendChild(tr);
-        }
-        tw.appendChild(t);
+    if (!fila.length) { tw.appendChild(el('p', 'vacio', 'Ninguna góndola registrada todavía.')); tt.appendChild(el('p', 'vacio', 'Ninguna góndola registrada todavía.')); return; }
+    if (!deHoy.length) { tw.appendChild(el('p', 'vacio', 'Hoy no ha llegado ninguna; estos son los últimos.')); tt.appendChild(el('p', 'vacio', 'Hoy no ha llegado ninguna; estos son los últimos.')); }
+    for (const e of fila) {
+        const t = el('div', 'ftar' + (e.Etapa === 'anulado' ? ' anulado' : ''));
+        t.appendChild(el('span', 'f' + (e.Title ? '' : ' mudo'), e.Title || 'sin folio'));
+        t.appendChild(segmentosEtapa(e));
+        const c = el('span', 'c');
+        c.textContent = [e.PlacaTractor || '—', nombreDe(estado.carriers, e.CarrierId), pesoFila(e), horaFila(e)].filter(Boolean).join(' · ');
+        c.appendChild(etiquetaCompuertaDe(e));
+        t.appendChild(c);
+        const bf = botonesFila(e, abrirTicketDeHoy, true);
+        if (bf.childElementCount) { t.appendChild(bf); desplegable(t, false, () => { t.classList.toggle('abierta'); t.setAttribute('aria-expanded', String(t.classList.contains('abierta'))); }); }
+        tt.appendChild(t);
     }
-    // Exportar lo cargado a CSV (F4): para el reporte al cliente y la bitacora, sin copiar cifras de la pantalla.
-    $('btnExportar').classList.toggle('oculto', !estado.embarques.length);
-    // Que la consola diga hasta donde alcanza lo que muestra: sin esta linea, «4 rechazos esta
-    // semana» y «0 hace cuatro meses» se leen igual y el segundo es solo que no se cargo.
-    // U-14 (v0.22.0): va en #tbAlcance, fuera de la tabla, que en el celular esta oculta: ahi nunca se veia.
-    $('tbAlcance').textContent = `Se cargan los últimos ${CONFIG.ventanaDias} días (desde el ${fechaCorta(estado.ventanaDesde)}) más todo lo que sigue abierto. El historial completo vive en SharePoint.`;
+    const t = el('table', 'fila'); const th = el('tr');
+    for (const c of ['Folio', 'Unidad', 'Transportista', 'Etapa', 'Compuerta', 'Neto kg', 'Arribo', '']) th.appendChild(el('th', '', c));
+    t.appendChild(th);
+    for (const e of fila) {
+        const tr = el('tr', e.Etapa === 'anulado' ? 'anulado' : '');
+        tr.appendChild(el('td', 'mono' + (e.Title ? '' : ' mudo'), e.Title || '—'));
+        tr.appendChild(el('td', 'mono', e.PlacaTractor || '—'));
+        tr.appendChild(el('td', '', nombreDe(estado.carriers, e.CarrierId)));
+        const et = el('td'); et.appendChild(segmentosEtapa(e)); tr.appendChild(et);
+        const co = el('td'); co.appendChild(etiquetaCompuertaDe(e)); tr.appendChild(co);
+        tr.appendChild(el('td', 'num mono' + (e.NetoKg ? '' : ' mudo'), pesoFila(e, '') || '—'));
+        tr.appendChild(el('td', 'mono', horaFila(e)));
+        const ac = el('td'); ac.appendChild(botonesFila(e, abrirTicketDeHoy, false)); tr.appendChild(ac);
+        t.appendChild(tr);
+    }
+    tw.appendChild(t);
+}
 
-    // Pendiente revisar: pre-altas por firmar, excepciones y programas dormidos. Con algo, la tarjeta se pinta en ambar
-    // con el conteo en rojo (Carlos, 2026-09-08: es lo primero que hay que atender).
+// Pendiente revisar: pre-altas por firmar, excepciones y programas dormidos. Con algo, la tarjeta se pinta en ambar
+// con el conteo en rojo (Carlos, 2026-09-08: es lo primero que hay que atender).
+function pintarPendientesHoy(borradores, pendientes, botonesExcepcion) {
     const pf = $('tbPendientes'); pf.textContent = '';
     const dormidas = estado.prealtas.filter(p => p.Estado === 'firmada').map(p => ({ p, sm: sinMovimientoDe(p) })).filter(x => x.sm);
     const nPend = borradores.length + pendientes.length + dormidas.length;
@@ -1898,7 +1894,9 @@ function pintarHoy() {
     for (const { p, sm } of dormidas) pf.appendChild(renglon(`Programa · ${p.Title}`, `${sm.motivo} · ¿se cierra? Sigue saliendo en la puerta`, 'Ver', () => verPrealta(p)));
     for (const p of borradores) { const d = diasPara(p.FechaEstimada); pf.appendChild(renglon(`Pre-alta · ${p.Title}`, `firma del validador · 1er envío ${fechaCorta(p.FechaEstimada)}${d !== null ? ` (en ${d} días)` : ''} · capturó ${p.CapturadaPor || '?'}`, 'Ver', () => verPrealta(p))); }
     for (const e of pendientes) pf.appendChild(renglon(`Excepción · ${e.PlacaTractor}`, `autorización de gerencia · «${e.ExcepcionMotivo || 'sin motivo'}» · ${horaCorta(e.Arribo)}`, null, null, botonesExcepcion(e).map(b => ({ ...b, clase: b.accion === 'autorizar' ? '' : 'peligro' }))));
+}
 
+function pintarRechazosHoy() {
     const rj = $('tbRechazos'); rj.textContent = '';
     const rech = estado.embarques.filter(e => e.Etapa !== 'anulado' && (e.Etapa === 'rechazado' || e.Compuerta === 'excepcion-comercial')).sort((a, b) => b.id - a.id).slice(0, 10);
     if (!rech.length) rj.appendChild(el('p', 'pista', 'Ninguno.'));
@@ -1909,8 +1907,10 @@ function pintarHoy() {
         r.firstChild.firstChild.appendChild(etiqueta(e.Compuerta === 'rechazo-legal' ? 'legal' : 'comercial', e.Compuerta === 'rechazo-legal' ? 'legal' : 'comercial'));
         rj.appendChild(r);
     }
+}
 
-    // Vigencias como tiempo restante: barra llena = hoy vence; roja = ya vencio.
+// Vigencias como tiempo restante: barra llena = hoy vence; roja = ya vencio.
+function pintarVigenciasHoy() {
     const vg = $('tbVigencias'); vg.textContent = '';
     const prox = estado.vigencias.filter(v => v.Activo !== false).map(v => ({ v, d: diasPara(v.Vence) })).filter(x => x.d !== null && x.d <= (Number(x.v.AvisoDias) || CONFIG.avisoVigenciaDias)).sort((a, b) => a.d - b.d);
     if (!prox.length) vg.appendChild(el('p', 'vacio', `Nada vence en ${CONFIG.avisoVigenciaDias} días.`));
@@ -1923,6 +1923,45 @@ function pintarHoy() {
         const bar = el('span', 'bar'); const i = el('i', clase); i.style.width = Math.max(4, Math.min(100, Math.round((1 - d / ventana) * 100))) + '%'; bar.appendChild(i); r.appendChild(bar);
         vg.appendChild(r);
     }
+}
+
+function pintarHoy() {
+    const hoy = fechaMexico();
+    const ayer = fechaMexico(new Date(Date.now() - 86400000));
+    const lunes = (() => { const d = new Date(); const dia = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dia); return fechaMexico(d); })();
+    const dia = e => e.Arribo ? fechaMexico(new Date(e.Arribo)) : '';
+    // Una gondola CERRADA cuenta el dia en que se cerro (hora de la tara), no el de arribo: la que llega
+    // 23:50 y cierra 00:10 es del dia siguiente, que es el que reporta la bascula (hallazgo abierto del 5-sep, F1).
+    const diaCierre = e => e.TaraHora ? fechaMexico(new Date(e.TaraHora)) : dia(e);
+    const cerrados = f => estado.embarques.filter(e => e.Etapa === 'cerrado' && f(diaCierre(e)));
+    const activos = estado.embarques.filter(enPlanta);
+    const pendientes = excepcionesPendientes();
+    const borradores = estado.prealtas.filter(p => p.Estado === 'borrador');
+
+    $('hoyTitulo').textContent = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long', day: 'numeric', month: 'long' });
+    $('hoyKicker').textContent = `Hoy · ${estado.rol}`;
+
+    // U-12 (v0.22.0): los mismos botones (Autorizar · Anular/Eliminar) salen en la franja y en su renglon de «Pendiente
+    // revisar», que era la unica entrada de esa tarjeta sin accion; la excepcion se cuenta una sola vez (en la tarjeta).
+    const botonesExcepcion = e => {
+        const bs = [];
+        if (PUEDE.autorizarExcepcion(estado.rol)) bs.push({ texto: 'Autorizar con motivo', accion: 'autorizar', clase: 'si', alClic: () => autorizarExcepcion(e) });
+        for (const b of botonCorreccion(e)) bs.push({ ...b, clase: 'no' });
+        return bs;
+    };
+    pintarFranjaHoy(pendientes, botonesExcepcion);
+    pintarKpisHoy({ cerradosHoy: cerrados(d => d === hoy), cerradosAyer: cerrados(d => d === ayer), cerradosSemana: cerrados(d => d >= lunes),
+        activos, borradores, rechazosSemana: estado.embarques.filter(e => e.Etapa === 'rechazado' && dia(e) >= lunes) });
+    pintarFilaDia(hoy, dia);
+    // Exportar lo cargado a CSV (F4): para el reporte al cliente y la bitacora, sin copiar cifras de la pantalla.
+    $('btnExportar').classList.toggle('oculto', !estado.embarques.length);
+    // Que la consola diga hasta donde alcanza lo que muestra: sin esta linea, «4 rechazos esta
+    // semana» y «0 hace cuatro meses» se leen igual y el segundo es solo que no se cargo.
+    // U-14 (v0.22.0): va en #tbAlcance, fuera de la tabla, que en el celular esta oculta: ahi nunca se veia.
+    $('tbAlcance').textContent = `Se cargan los últimos ${CONFIG.ventanaDias} días (desde el ${fechaCorta(estado.ventanaDesde)}) más todo lo que sigue abierto. El historial completo vive en SharePoint.`;
+    pintarPendientesHoy(borradores, pendientes, botonesExcepcion);
+    pintarRechazosHoy();
+    pintarVigenciasHoy();
 }
 
 /** CSV (UTF-8 con BOM, separado por coma, fechas en hora de Mexico) de todos los embarques cargados en la ventana. */
@@ -2025,6 +2064,15 @@ $('btnImprimir').addEventListener('click', () => window.print());
 // El boton vive dentro del <summary>: sin preventDefault el clic pliega el grupo (igual que en el padron).
 $('btnNuevaPrealta').addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); $('paGrupoBorradores').open = true; nuevaPrealta(); });
 $('paCarrier').addEventListener('change', pintarUnidadesChoferesPrealta);
+// U-10 (v0.23.0): «+ Alta de carrier» desde la pre-alta abre la forma del padron ENCIMA (dialog anidado: la pre-alta
+// capturada se queda atras, intacta) y al guardar el carrier nuevo queda elegido aqui, con sus unidades/choferes (vacios).
+// Antes habia que Cancelar (se perdia todo), ir a Padron, dar de alta y reteclear los bloques 1 y 2.
+function elegirCarrierEnPrealta(c) {
+    opciones($('paCarrier'), estado.carriers.filter(x => x.Activo !== false || x.id === c.id), x => x.id, x => x.Title);
+    $('paCarrier').value = String(c.id);
+    pintarUnidadesChoferesPrealta(); pintarEstadoPrealta();
+}
+$('btnAltaCarrierPrealta').addEventListener('click', () => abrirFormaPadron('carriers'));
 $('btnGuardarPrealta').addEventListener('click', guardarPrealta);
 $('btnCancelarPrealta').addEventListener('click', () => cerrarForma('paForma'));
 // Escape cierra el <dialog> sin pasar por Cancelar: la edicion pendiente del padron se suelta igual.
