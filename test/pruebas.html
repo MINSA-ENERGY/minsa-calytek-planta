@@ -258,7 +258,8 @@ try {
         R.log('nota', `rol ${ROL} no captura: padrón y pre-alta en borrador sembrados directo en las listas`);
     }
     // U-08 (v0.22.0): el primer inicio de sesion falla (el sitio no contesta): el aviso debe salir DENTRO de la pantalla
-    // de entrada, sobre el boton, y el boton volver a estar disponible; el segundo toque entra.
+    // de entrada, sobre el boton, y el boton volver a estar disponible; el segundo toque entra. Status 500, no 503:
+    // graph.js REINTENTA 429/503/504 y la falla inyectada se consumia en el reintento sin que la app fallara.
     DB.fallas.push({ metodo: 'GET', incluye: '/sites/', status: 500, veces: 1 });
     await import('./app.js');
     R.log('nota', `app importada · rol de prueba: ${ROL} · versión: ${$('pie').textContent}`);
