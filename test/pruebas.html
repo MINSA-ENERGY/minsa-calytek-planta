@@ -240,7 +240,14 @@ async function foto() {
     const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', .8));
     const dt = new DataTransfer(); dt.items.add(new File([blob], 'indicador.jpg', { type: 'image/jpeg' }));
     $('baFotoEntrada').files = dt.files; $('baFotoEntrada').dispatchEvent(new Event('change', { bubbles: true }));
-    await esperar(() => visible('baFotoPrevia'), 'foto previa');
+    // Instrumentado (obs. 603, 2026-09-20): si no aparece, decir QUIEN fallo — la app (aviso «No se pudo leer la foto») o
+    // el arnes (createImageBitmap / toBlob son trabajo REAL y el reloj virtual sigue corriendo mientras tanto).
+    const t0 = Date.now();
+    try { await esperar(() => visible('baFotoPrevia'), 'foto previa'); }
+    catch (e) {
+        const av = avisoCon('No se pudo leer la foto');
+        throw new Error(av ? `foto previa: la APP fallo: ${av.textContent}` : `foto previa: sin error de la app tras ${Date.now() - t0} ms virtuales: la decodificacion real no alcanzo al reloj virtual`);
+    }
 }
 // Si la version bajo prueba trae el dialogo propio (<dialog id="dlg">), lo contesta; si no, confirm() ya dijo si.
 // Espera hasta 8 s VIRTUALES a que abra (v0.24.0; antes 2 s): bajo --virtual-time-budget el reloj de la pagina corre mientras

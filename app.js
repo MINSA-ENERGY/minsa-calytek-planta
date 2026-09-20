@@ -1899,7 +1899,7 @@ async function guardarPadron(clave) {
             // La vigencia ASEA del tablero se llama por el carrier y guarda su fecha: se corrige junto con él. Es el segundo
             // paso (C-05): si falla, el carrier ya quedo y el aviso lo dice; guardar de nuevo la sincroniza (Activo incluido).
             const pendiente = clave === 'carriers' ? await segundoPaso(async () => {
-                if (vsAntes.length) for (const v of vsAntes) { const c = { Title: `Autorización ASEA transporte · ${edit.Title}`, Vence: edit.VigenciaASEA || null, Folio: edit.FolioOficio || null, Activo: edit.Activo !== false }; await estado.cliente.actualizarRenglon(estado.siteId, L.vigencias, v.id, c); Object.assign(v, c); }
+                if (vsAntes.length) for (const v of vsAntes) { const c = { Title: `Autorización ASEA transporte · ${edit.Title}`, Vence: edit.VigenciaASEA || null, Folio: edit.FolioOficio || null, Activo: edit.Activo !== false }; await estado.cliente.actualizarRenglon(estado.siteId, L.vigencias, v.id, c); aplicar('vigencias', v, c); }
                 else if (edit.VigenciaASEA) await altaVigencia(`Autorización ASEA transporte · ${edit.Title}`, 'tercero', 'carrier', 'legal', edit.VigenciaASEA, edit.FolioOficio);
             }) : null;
             cerrarFormaPadron(clave);
