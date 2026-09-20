@@ -1,6 +1,6 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -172,4 +172,15 @@ console.log('reglas: ok');
     assert.equal(plural(2, 'anulado o rechazado', 'anulados o rechazados'), '2 anulados o rechazados');
     assert.deepEqual(limpiar({ a: 1, b: '', c: null, d: undefined, e: 0, f: false }), { a: 1, e: 0, f: false });
     assert.deepEqual(paraPatch({ a: 1, b: '', c: null, d: undefined, e: 0 }), { a: 1, b: null, c: null, d: null, e: 0 });
+    // tipoDeArchivo (v0.33.0, Archivos): por nombre, con lo que la app y /archivar-calytek escriben de verdad.
+    assert.equal(tipoDeArchivo('2026-09-05_CALYTEK_Foto_bruto-e-26-00001-44600-kg-01.jpg'), 'foto');
+    assert.equal(tipoDeArchivo('_lote.json'), 'lote');
+    assert.equal(tipoDeArchivo('2026-09-20_CALYTEK_Ticket_E-26-00012_XRT-402-A.pdf'), 'ticket');
+    assert.equal(tipoDeArchivo('2026-09-20_MINSA_Manifiesto_RME-147-2026.pdf'), 'manifiesto');
+    assert.equal(tipoDeArchivo('2025-03-14_ASEA_Oficio-UGI-DEMO-0212-2025_Transportes-Demo.pdf'), 'oficio');
+    assert.equal(tipoDeArchivo('2026-01-09_SAT_CSF_Transportes-Demo.pdf'), 'csf');
+    assert.equal(tipoDeArchivo('Constancia de Situaci\u00f3n Fiscal.pdf'), 'csf');
+    assert.equal(tipoDeArchivo('2026-09-01_CALYTEK_Recibo_telmex.pdf'), 'otro');
+    assert.equal(tipoDeArchivo('foto-del-indicador.PNG'), 'foto');
+    assert.equal(tipoDeArchivo(''), 'otro'); assert.equal(tipoDeArchivo(null), 'otro');
 }

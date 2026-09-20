@@ -608,6 +608,30 @@ button:not(:disabled):active { transform: scale(.98); }
 .semanas .hoy i { opacity: 1; background: var(--acc); }
 @media (max-width: 900px) { .rep-rejilla { grid-template-columns: 1fr; } }
 
+/* ---------------------------------------------------------------- ARCHIVOS (v0.33.0): el árbol de la biblioteca (details anidados) + filtros */
+
+.archivos-filtros { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; margin: 0 0 var(--sp-4); }
+.archivos-filtros select { flex: 1 1 12rem; min-height: var(--control-h-sm); padding: 0 var(--sp-3); }
+.archivos-filtros .buscador { flex: 2 1 14rem; min-height: var(--control-h-sm); -webkit-appearance: none; appearance: none; }
+.arbol { display: grid; gap: 2px; font-size: .9rem; }
+.arbol details { min-width: 0; }
+.arbol summary { list-style: none; display: flex; align-items: center; gap: var(--sp-2); min-height: var(--control-h-sm); padding: 4px var(--sp-2); cursor: pointer; border-radius: var(--r-sm); color: var(--ink); min-width: 0; }
+.arbol summary::-webkit-details-marker { display: none; }
+.arbol summary:hover { background: var(--rail-hover); }
+.arbol summary > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* el nombre va tras los dos svg: first-of-type, no nth-child */
+.arbol summary .sub { font-size: .76rem; color: var(--mute); white-space: nowrap; }
+.arbol svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; color: var(--mute); transition: transform .12s; }
+.arbol details[open] > summary > svg.flecha { transform: rotate(90deg); }
+.arbol .n { margin-left: auto; font-family: var(--mono); font-size: .72rem; color: var(--mute); white-space: nowrap; flex: none; }
+.arbol .hijos { padding-left: 22px; display: grid; gap: 2px; }
+.arbol .hijos > .vacio { padding: 4px var(--sp-2); }
+.arbol .arch { display: flex; align-items: center; gap: var(--sp-2); min-height: var(--control-h-sm); padding: 4px var(--sp-2); border-radius: var(--r-sm); color: var(--ink); text-decoration: none; min-width: 0; }
+.arbol .arch:hover { background: var(--rail-hover); }
+.arbol .arch > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arbol .arch .ext { font-family: var(--mono); font-size: .62rem; font-weight: 600; letter-spacing: .06em; color: var(--mute); width: 30px; flex: none; }
+.arbol .arch .d { margin-left: auto; font-family: var(--mono); font-size: .72rem; color: var(--mute); white-space: nowrap; flex: none; }
+@media (max-width: 720px) { .arbol .hijos { padding-left: 14px; } .arbol .arch .d, .arbol summary .sub { display: none; } }
+
 /* ---------------------------------------------------------------- VEREDICTO (semáforo) */
 
 .veredicto { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto; }

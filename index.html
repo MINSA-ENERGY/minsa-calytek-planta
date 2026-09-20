@@ -44,9 +44,10 @@
       <button type="button" data-p="prealtas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><span>Pre-altas</span><b class="n" id="nPrealtas" hidden></b></button>
       <button type="button" data-p="padron"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h13l5 5v5H3z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Padrón</span></button>
     </nav>
-    <!-- Sección aparte tras Padrón (Carlos, 20-sep): solo una raya, sin rótulo, la ven todos los roles. Archivos llega en v0.33.0. -->
+    <!-- Sección aparte tras Padrón (Carlos, 20-sep): solo una raya, sin rótulo, la ven todos los roles. Reportes (v0.32.0) · Archivos (v0.33.0). -->
     <div class="extra" id="pestanasExtra" aria-label="Más secciones">
       <button type="button" data-p="reportes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Reportes</span></button>
+      <button type="button" data-p="archivos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Archivos</span></button>
     </div>
     <!-- La sesión en dos renglones (Proyectos v0.48.0): nombre + rol como rótulo de datos y el menú «···» a la derecha, que
          guarda Actualizar con la hora de la última lectura, Ver en SharePoint y Salir; debajo el tema como segmento Claro | Oscuro. -->
@@ -288,6 +289,19 @@
         <div class="tarjeta"><h2>Rechazos y excepciones · lo cargado</h2><div id="repRechazos"></div></div>
         <div class="tarjeta"><h2>Netos fuera de banda · lo cargado</h2><div id="repNetos"></div></div>
       </div>
+    </section>
+
+    <!-- ARCHIVOS (v0.33.0, sección aparte): el árbol de la biblioteca Ambiental-CALYTEK leído por Graph, tres ramas (evidencia de
+         báscula por mes y lote · oficios y CSF de los carriers · el buzón 99_Pendiente-Archivar). Cada carpeta se lee al abrirla.
+         Los filtros actúan sobre lo ya leído. Lo pinta pintarArchivos; las rutas base viven en config.js. -->
+    <section id="p-archivos" class="oculto">
+      <header class="cabecera"><span class="titulo-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><h1>Archivos</h1><a id="lnkArchivosSharePoint" class="mn-btn is-sm" href="#" target="_blank" rel="noopener" title="La biblioteca entera en SharePoint">Ver en SharePoint</a><p class="sub">Lo que la planta genera y lo que la ampara, en la biblioteca Ambiental-CALYTEK: fotos del indicador, tickets y manifiestos por lote; oficios ASEA y CSF por carrier.</p></header>
+      <div class="archivos-filtros">
+        <select id="arPrograma" aria-label="Programa"></select>
+        <select id="arTipo" aria-label="Tipo"><option value="">Todo tipo</option><option value="ticket">Tickets</option><option value="foto">Fotos del indicador</option><option value="manifiesto">Manifiestos</option><option value="oficio">Oficios ASEA</option><option value="csf">CSF</option><option value="lote">Lotes (_lote.json)</option><option value="otro">Otros</option></select>
+        <input class="buscador" type="search" id="arBusca" placeholder="Buscar por folio, placa o nombre" autocomplete="off" aria-label="Buscar en los archivos">
+      </div>
+      <div class="tarjeta"><div class="arbol" id="arArbol"></div><p class="vacio oculto" id="arVacio">Nada de lo leído coincide con el filtro; abre más carpetas o quítalo.</p></div>
     </section>
 
     <p class="pie" id="pie"></p>

@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo } from './reglas.js';
 
-const VERSION = '0.32.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.33.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -33,6 +33,7 @@ const estado = {
     padronCarrier: null,     // id del carrier que filtra unidades y choferes en el padron
     ultimoCarrierPadron: null,   // U-46: el ultimo carrier dado de alta o usado en un alta de unidad/chofer (solo esta sesion)
     pestana: 'hoy',
+    archivos: null,          // v0.33.0: { biblioteca, ramas: Map ruta -> hijos } de la seccion Archivos; null = se relee al pintar
     cargadoEl: 0,
     ventanaDesde: ''      // ISO: inicio de la ventana de carga (cubeta 3)
 };
@@ -523,6 +524,7 @@ async function recargar(silencioso = false) {
     // solo se frenaba el REPINTADO (capturaAMedias); cargarTodo() corria igual. El timer lo vuelve a intentar al minuto.
     if (escrituras > 0 || $('dlg').open) { if (!silencioso && escrituras > 0) avisar('Espera a que termine de guardar y vuelve a actualizar.', 'ojo'); return; }
     recargando = true;
+    if (!silencioso) estado.archivos = null;   // v0.33.0: el Actualizar a mano relee el arbol; el refresco de 2 min no lo tira (se pierden las carpetas abiertas)
     for (const id of ['btnActualizar', 'btnActualizarMovil']) $(id).disabled = true;
     pintarSync(true);
     try {
@@ -547,7 +549,7 @@ async function recargar(silencioso = false) {
 
 // ---------------------------------------------------------------- navegacion
 
-const PINTORES = { hoy: () => pintarHoy(), puerta: () => pintarPuerta(), bascula: () => pintarBascula(), prealtas: () => pintarPrealtas(), padron: () => pintarPadron(), reportes: () => pintarReportes() };
+const PINTORES = { hoy: () => pintarHoy(), puerta: () => pintarPuerta(), bascula: () => pintarBascula(), prealtas: () => pintarPrealtas(), padron: () => pintarPadron(), reportes: () => pintarReportes(), archivos: () => pintarArchivos() };
 const SECCIONES = Object.keys(PINTORES);
 /** Los botones del rail: las pestañas de siempre más la sección aparte (Reportes, v0.32.0). */
 const botonesRail = () => [...$('pestanas').querySelectorAll('button'), ...$('pestanasExtra').querySelectorAll('button')];
@@ -2118,6 +2120,107 @@ function pintarReportes() {
     for (const e of fuera) nt.appendChild(renglon(`${e.Title} · ${e.PlacaTractor}`, `${fechaCorta(e.TaraHora || e.Arribo)} · neto ${Number(e.NetoKg).toLocaleString('es-MX')} kg · ${(e.Notas || '').replace(/\n.*$/s, '')}`));
 }
 
+// ================================================================ ARCHIVOS (v0.33.0, sección aparte; artifact 1GvBJaYooYvjZT4rMRtL9Q)
+// El árbol de la biblioteca Ambiental-CALYTEK leído por Graph (Sites.Selected; la misma ruta drive/root: con la que sube la
+// evidencia): tres ramas —evidencia de báscula (carpeta por mes → lote por pesaje → foto, ticket, manifiesto), oficios ASEA y
+// CSF de los carriers, y el buzón 99_Pendiente-Archivar, donde la app deja los lotes hasta que /archivar-calytek los acomode—.
+// Cada carpeta se lee al abrirla (una llamada, paginada) y se recuerda hasta el siguiente Actualizar a mano. Los filtros
+// (programa · tipo · buscador) actúan sobre lo ya leído: una carpeta cerrada no se juzga porque no se conoce. Solo lectura.
+const RAMAS_ARCHIVOS = () => [
+    { ruta: CONFIG.evidencia.destinoBase, titulo: 'Evidencia de báscula', nota: 'por mes · un lote por pesaje' },
+    { ruta: CONFIG.archivos.padron, titulo: 'Oficios ASEA y CSF de los carriers', nota: '' },
+    { ruta: CONFIG.buzon, titulo: 'Pendiente de archivar', nota: 'lo que la app acaba de subir' }
+];
+const ICONO_CARPETA = 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z';
+const TIPOS_ARCHIVO = { ticket: 'ticket', foto: 'foto del indicador', manifiesto: 'manifiesto', oficio: 'oficio ASEA', csf: 'CSF', lote: 'lote de la app', otro: 'otro' };
+function svgIcono(d, clase) {
+    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true'); if (clase) s.setAttribute('class', clase);
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); s.appendChild(p);
+    return s;
+}
+const tamano = n => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n || 0} B`;
+async function hijosDe(ruta) {
+    const a = estado.archivos;
+    if (!a.ramas.has(ruta)) a.ramas.set(ruta, await estado.cliente.hijos(estado.siteId, ruta, m => avisar(m, 'ojo')));
+    return a.ramas.get(ruta);
+}
+function pintarArchivos() {
+    // el filtro de programa sale de las pre-altas cargadas (todas: una cerrada sigue teniendo sus lotes en la biblioteca)
+    opciones($('arPrograma'), [...estado.prealtas].sort((x, y) => y.id - x.id), p => p.id, p => `${p.Title}${p.Estado === 'cerrada' ? ' · cerrada' : ''}`, 'Todos los programas');
+    if (!estado.archivos) { estado.archivos = { biblioteca: null, ramas: new Map() }; construirArbol(); }
+    else filtrarArbol();
+}
+async function construirArbol() {
+    const a = estado.archivos;
+    const caja = $('arArbol'); caja.textContent = ''; caja.appendChild(el('p', 'vacio', 'Abriendo la biblioteca…'));
+    const lnk = $('lnkArchivosSharePoint'); lnk.href = `https://${CONFIG.sharepointHost}${CONFIG.sitio}`;
+    try { a.biblioteca = await estado.cliente.biblioteca(estado.siteId); if (a.biblioteca.webUrl) lnk.href = a.biblioteca.webUrl; }
+    catch (err) { avisar('No se pudo abrir la biblioteca: ' + err.message, 'error'); }
+    if (a !== estado.archivos) return;   // hubo un Actualizar en medio: lo pinta la lectura nueva
+    caja.textContent = '';
+    for (const r of RAMAS_ARCHIVOS()) caja.appendChild(nodoCarpeta({ name: r.ruta }, r.ruta, r.titulo, r.nota));
+    caja.firstChild.open = true;   // la evidencia abierta de entrada, como en el artifact
+}
+/** Una carpeta del árbol: <details> que lee sus hijos por Graph la primera vez que se abre. `titulo` solo en las tres raíces. */
+function nodoCarpeta(item, ruta, titulo, nota) {
+    const d = el('details'); d.dataset.ruta = ruta; d.dataset.nombre = normaliza(titulo ? `${titulo} ${item.name}` : item.name);
+    const s = el('summary'); s.appendChild(svgIcono('M9 6l6 6-6 6', 'flecha')); s.appendChild(svgIcono(ICONO_CARPETA));
+    s.appendChild(el('span', '', titulo || item.name));
+    if (nota) s.appendChild(el('span', 'sub', nota));
+    if (titulo) s.title = ruta;
+    const n = el('span', 'n', item.folder && item.folder.childCount !== undefined ? String(item.folder.childCount) : ''); s.appendChild(n);
+    d.appendChild(s);
+    const hijos = el('div', 'hijos'); d.appendChild(hijos);
+    let leida = false;
+    d.addEventListener('toggle', async () => {
+        if (!d.open || leida) return;
+        leida = true;
+        hijos.textContent = ''; hijos.appendChild(el('p', 'vacio', 'Leyendo…'));
+        let items;
+        try { items = await hijosDe(ruta); }
+        catch (err) { hijos.textContent = ''; hijos.appendChild(el('p', 'vacio', 'No se pudo leer: ' + err.message)); leida = false; return; }
+        hijos.textContent = ''; d.dataset.leida = '1';   // desde aquí el filtro sí la juzga
+        if (items === null) { hijos.appendChild(el('p', 'vacio', 'Esta carpeta aún no existe en la biblioteca.')); n.textContent = '—'; return; }
+        if (!items.length) hijos.appendChild(el('p', 'vacio', 'Vacía.'));
+        // carpetas primero y lo más reciente arriba: los nombres de la casa empiezan por la fecha
+        const orden = items.slice().sort((x, y) => ((y.folder ? 1 : 0) - (x.folder ? 1 : 0)) || y.name.localeCompare(x.name, 'es'));
+        for (const it of orden) hijos.appendChild(it.folder ? nodoCarpeta(it, `${ruta}/${it.name}`) : nodoArchivo(it));
+        const nc = orden.filter(x => x.folder).length, na = orden.length - nc;
+        n.textContent = [nc ? plural(nc, 'carpeta') : '', na ? plural(na, 'archivo') : ''].filter(Boolean).join(' · ') || '0';
+        filtrarArbol();
+    });
+    return d;
+}
+/** Un archivo del árbol: enlace a SharePoint (abre en otra pestaña), extensión, nombre y «fecha · tamaño» en mono. */
+function nodoArchivo(it) {
+    const a = el('a', 'arch'); a.href = it.webUrl || '#'; a.target = '_blank'; a.rel = 'noopener';
+    const tipo = tipoDeArchivo(it.name); a.dataset.tipo = tipo; a.dataset.nombre = normaliza(it.name);
+    const ext = (String(it.name).match(/\.([a-z0-9]{1,4})$/i) || [])[1] || '';
+    a.appendChild(el('span', 'ext', ext.toUpperCase()));
+    a.appendChild(el('span', '', it.name));
+    a.title = `${it.name} · ${TIPOS_ARCHIVO[tipo]}`;
+    a.appendChild(el('span', 'd', `${fechaCorta(it.lastModifiedDateTime)} · ${tamano(Number(it.size) || 0)}`));
+    return a;
+}
+/** Aplica los tres filtros sobre lo ya leído: un archivo pega por nombre y tipo; una carpeta leída se esconde si no le queda nada visible. */
+function filtrarArbol() {
+    const q = normaliza($('arBusca').value.trim());
+    const tipo = $('arTipo').value;
+    const pre = porId(estado.prealtas, $('arPrograma').value);
+    // programa = los folios de sus góndolas (E-26-00012 → e-26-00012, que es como viaja en el nombre del lote y de la foto)
+    const folios = pre ? estado.embarques.filter(e => Number(e.PreAltaId) === pre.id && e.Title).map(e => normaliza(e.Title)) : [];
+    const pegaNombre = nombre => (!q || nombre.includes(q)) && (!pre || folios.some(f => nombre.includes(f)));
+    const hayFiltro = !!(q || tipo || pre);
+    const caja = $('arArbol');
+    for (const a of caja.querySelectorAll('.arch')) a.classList.toggle('oculto', hayFiltro && !(pegaNombre(a.dataset.nombre) && (!tipo || a.dataset.tipo === tipo)));
+    for (const d of [...caja.querySelectorAll('details')].reverse()) {   // de adentro hacia afuera: el padre juzga hijos ya juzgados
+        const alguno = [...d.querySelectorAll(':scope > .hijos > .arch, :scope > .hijos > details')].some(x => !x.classList.contains('oculto'));
+        const propio = !tipo && pegaNombre(d.dataset.nombre);
+        d.classList.toggle('oculto', hayFiltro && d.dataset.leida === '1' && !alguno && !propio);   // una carpeta sin leer no se juzga
+    }
+    $('arVacio').classList.toggle('oculto', !hayFiltro || [...caja.children].some(x => !x.classList.contains('oculto')));
+}
+
 // Fila del dia: los embarques de hoy; si no hay, los ultimos 5. Tarjetas (celular) y tabla (escritorio) de la MISMA lista
 // y con las mismas piezas de arriba. I3 (7-sep): en celular la tabla de 8 columnas escondia seis; tocar la tarjeta muestra sus botones.
 function pintarFilaDia(hoy, dia) {
@@ -2344,6 +2447,9 @@ $('btnPlegar').addEventListener('click', () => plegarRail(false));
 document.addEventListener('click', ev => { const m = $('menuRail'); if (m.open && !m.contains(ev.target)) m.open = false; });
 // Imprimir los reportes: la hoja de impresión solo deja ver el ticket; con esta clase deja ver la sección (estilo.css @media print).
 $('btnImprimirReportes').addEventListener('click', () => { document.body.classList.add('imprimiendo-reportes'); window.print(); });
+// Archivos (v0.33.0): los filtros no releen nada, solo esconden y muestran lo ya leído.
+$('arBusca').addEventListener('input', filtrarArbol);
+for (const id of ['arTipo', 'arPrograma']) $(id).addEventListener('change', filtrarArbol);
 window.addEventListener('afterprint', () => document.body.classList.remove('imprimiendo-reportes'));
 // El menu «···» se cierra al elegir algo o al tocar fuera.
 document.addEventListener('click', ev => { const m = $('menuMovil'); if (m.open && !m.contains(ev.target)) m.open = false; });

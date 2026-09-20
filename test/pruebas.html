@@ -179,6 +179,20 @@
             DB.archivos.push({ ruta: ruta2, bytes: opts.body ? (opts.body.byteLength || opts.body.length || 0) : 0 });
             return json(201, { name: ruta2.slice(ruta2.lastIndexOf('/') + 1) });
         }
+        // v0.33.0 (Archivos): la biblioteca (webUrl) y los hijos de una carpeta por ruta, como los devuelve Graph
+        // (folder.childCount / file, size, lastModifiedDateTime, webUrl). Una carpeta que no esta sembrada ni creada es 404.
+        if (/^\/sites\/sitio-falso\/drive\?/.test(ruta) && metodo === 'GET') return json(200, { id: 'drive-falso', webUrl: 'https://tenant.example.invalid/sites/Ambiental-CALYTEK/Documentos%20compartidos' });
+        if ((m = /^\/sites\/sitio-falso\/drive\/root:\/(.+):\/children\?/.exec(ruta)) && metodo === 'GET') {
+            const padre = decodeURIComponent(m[1]);
+            if (!DB.carpetas.find(c => c.ruta === padre)) return error(404, 'la carpeta no existe: ' + padre);
+            const hijoDe = (p, r) => r.startsWith(p + '/') && !r.slice(p.length + 1).includes('/');
+            const cuantos = p => DB.carpetas.filter(c => hijoDe(p, c.ruta)).length + DB.archivos.filter(a => hijoDe(p, a.ruta)).length;
+            const value = [
+                ...DB.carpetas.filter(c => hijoDe(padre, c.ruta)).map(c => ({ id: c.id, name: c.nombre, folder: { childCount: cuantos(c.ruta) }, lastModifiedDateTime: c.fecha || '2026-09-20T15:00:00Z', webUrl: 'https://tenant.example.invalid/' + c.ruta })),
+                ...DB.archivos.filter(a => hijoDe(padre, a.ruta)).map(a => ({ id: 'archivo-' + a.ruta, name: a.ruta.slice(padre.length + 1), size: a.bytes, file: { mimeType: 'application/octet-stream' }, lastModifiedDateTime: a.fecha || '2026-09-20T15:00:00Z', webUrl: 'https://tenant.example.invalid/' + a.ruta }))
+            ];
+            return json(200, { value });
+        }
         if ((m = /^\/sites\/sitio-falso\/drive\/(?:items\/([^/]+)|root:\/(.+))$/.exec(ruta)) && metodo === 'DELETE') {
             const c = m[1] ? DB.carpetas.find(x => x.id === m[1]) : DB.carpetas.find(x => x.ruta === decodeURIComponent(m[2]));
             if (!c) return error(404, 'carpeta');
@@ -196,6 +210,18 @@
         roles.push({ id: DB.siguienteId++, fields: { Title: window.__CUENTA.username, Nombre: 'Prueba', Rol: rol, Activo: true } });
         roles.push({ id: DB.siguienteId++, fields: { Title: 'validador@example.invalid', Nombre: 'Validadora', Rol: 'validador', Activo: true } });
         roles.push({ id: DB.siguienteId++, fields: { Title: 'gerente@example.invalid', Nombre: 'Gerente', Rol: 'gerencia', Activo: true } });   // S-11 (v0.28.0)
+        // v0.33.0 (Archivos): la biblioteca con las tres ramas que la seccion lee. Nombres del contrato de la casa, sin datos
+        // reales (repo publico). El lote sembrado es de OTRO ano (e-25-00042) para que no choque con los folios de la corrida.
+        const carpeta = (ruta, fecha) => DB.carpetas.push({ id: 'carpeta-' + DB.siguienteId++, ruta, nombre: ruta.slice(ruta.lastIndexOf('/') + 1), fecha });
+        const archivo = (ruta, bytes, fecha) => DB.archivos.push({ ruta, bytes, fecha });
+        for (const r of ['02_Planta', '02_Planta/Bascula', '02_Planta/Bascula/2025', '02_Planta/Bascula/2025/2025-11', '02_Planta/Bascula/2025/2025-11/2025-11-03_Embarque_bruto-e-25-00042-31200-kg']) carpeta(r, '2025-11-03T16:00:00Z');
+        archivo('02_Planta/Bascula/2025/2025-11/2025-11-03_Embarque_bruto-e-25-00042-31200-kg/2025-11-03_CALYTEK_Foto_bruto-e-25-00042-31200-kg-01.jpg', 1150000, '2025-11-03T16:02:00Z');
+        archivo('02_Planta/Bascula/2025/2025-11/2025-11-03_Embarque_bruto-e-25-00042-31200-kg/2025-11-03_CALYTEK_Ticket_E-25-00042_DEMO-01.pdf', 84000, '2025-11-03T16:40:00Z');
+        archivo('02_Planta/Bascula/2025/2025-11/2025-11-03_Embarque_bruto-e-25-00042-31200-kg/_lote.json', 512, '2025-11-03T16:02:00Z');
+        for (const r of ['04_SGI', '04_SGI/02_Ambiental', '04_SGI/02_Ambiental/Permisos-y-Autorizaciones']) carpeta(r, '2025-03-14T12:00:00Z');
+        archivo('04_SGI/02_Ambiental/Permisos-y-Autorizaciones/2025-03-14_ASEA_Oficio-UGI-DEMO-0000-2025_Transportes-Demo.pdf', 2400000, '2025-03-14T12:00:00Z');
+        archivo('04_SGI/02_Ambiental/Permisos-y-Autorizaciones/2026-01-09_SAT_CSF_Transportes-Demo.pdf', 310000, '2026-01-09T12:00:00Z');
+        carpeta('99_Pendiente-Archivar', '2026-09-01T12:00:00Z');
     };
 })();
 
@@ -250,6 +276,66 @@ async function foto() {
         const av = avisoCon('No se pudo leer la foto');
         throw new Error(av ? `foto previa: la APP fallo: ${av.textContent}` : `foto previa: sin error de la app tras ${Date.now() - t0} ms virtuales: la decodificacion real no alcanzo al reloj virtual`);
     }
+}
+/**
+ * v0.33.0: la seccion Archivos sobre la biblioteca sembrada (+ el lote del buzon que subio la corrida, si `emb1`). Cada
+ * carpeta se lee al abrirla: se abre por codigo y se espera al DOM, no al dato. Deja los filtros vacios y vuelve a Hoy.
+ */
+async function probarArchivos(emb1) {
+    const arbol = () => $('arArbol');
+    const abrir = async (sel, que) => { const d = await esperar(() => arbol().querySelector(sel), 'carpeta ' + que); d.open = true; await esperar(() => d.querySelector(':scope > .hijos > details, :scope > .hijos > .arch, :scope > .hijos > .vacio:not(:empty)') && !d.querySelector(':scope > .hijos > .vacio')?.textContent.startsWith('Leyendo'), 'hijos de ' + que); return d; };
+    const oculto = x => !x || x.classList.contains('oculto') || !!x.closest('.oculto');
+    const gets0 = DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length;
+    document.querySelector('#pestanasExtra button[data-p="archivos"]').click();
+    R.ok('v0.33.0: «Archivos» vive en la sección aparte del rail y abre #p-archivos con su cabecera', visible('p-archivos') && document.querySelector('#pestanasExtra button[data-p="archivos"]').getAttribute('aria-current') === 'page' && $('p-archivos').querySelector('.cabecera .titulo-ico') !== null);
+    await esperar(() => arbol().querySelectorAll(':scope > details').length === 3, 'las tres ramas');
+    await esperar(() => $('lnkArchivosSharePoint').href.includes('example.invalid'), 'webUrl de la biblioteca');
+    R.ok('v0.33.0: tres ramas (evidencia · oficios/CSF · buzón) con la ruta de config en title, y «Ver en SharePoint» apunta al webUrl de la biblioteca', [...arbol().querySelectorAll(':scope > details > summary')].map(s => s.title).join('|') === '02_Planta/Bascula|04_SGI/02_Ambiental/Permisos-y-Autorizaciones|99_Pendiente-Archivar' && $('lnkArchivosSharePoint').href.includes('Documentos%20compartidos') && $('lnkArchivosSharePoint').target === '_blank', [...arbol().querySelectorAll(':scope > details > summary')].map(s => s.title).join('|'));
+    const raizEv = arbol().querySelector(':scope > details');
+    await esperar(() => raizEv.querySelector(':scope > .hijos > details'), 'la evidencia abierta de entrada');
+    R.ok('v0.33.0: la evidencia se abre de entrada y solo se leyó ESA carpeta (una llamada por carpeta abierta)', raizEv.open && raizEv.querySelector(':scope > .hijos > details > summary span:nth-of-type(1)').textContent === '2025' && DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length - gets0 === 1, `GET ${DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length - gets0}`);
+    await abrir('details[data-ruta="02_Planta/Bascula/2025"]', '2025');
+    await abrir('details[data-ruta="02_Planta/Bascula/2025/2025-11"]', '2025-11');
+    const lote = await abrir('details[data-ruta="02_Planta/Bascula/2025/2025-11/2025-11-03_Embarque_bruto-e-25-00042-31200-kg"]', 'lote');
+    const archs = [...lote.querySelectorAll('.arch')];
+    const ticket = archs.find(a => a.dataset.tipo === 'ticket');
+    R.ok('v0.33.0: carpeta → mes → lote → sus 3 archivos, tipados por nombre (foto · ticket · lote) y con el conteo en la carpeta', archs.length === 3 && archs.map(a => a.dataset.tipo).sort().join() === 'foto,lote,ticket' && lote.querySelector(':scope > summary .n').textContent === '3 archivos', `${archs.map(a => a.dataset.tipo).join()} · «${lote.querySelector(':scope > summary .n').textContent}»`);
+    R.ok('v0.33.0: cada archivo es un enlace a su webUrl en otra pestaña, con extensión, fecha y tamaño en mono', !!ticket && ticket.tagName === 'A' && ticket.href.includes('example.invalid') && ticket.target === '_blank' && ticket.rel === 'noopener' && ticket.querySelector('.ext').textContent === 'PDF' && /03\/11\/2025 · 82 KB/.test(ticket.querySelector('.d').textContent), ticket && ticket.querySelector('.d').textContent);
+    // filtros sobre lo leido
+    poner('arTipo', 'foto');
+    const raizPadron = arbol().querySelectorAll(':scope > details')[1];
+    R.ok('v0.33.0: filtro Tipo=foto esconde el PDF y el _lote.json, deja la JPG, y no juzga la carpeta que no se ha leído', oculto(ticket) && !oculto(archs.find(a => a.dataset.tipo === 'foto')) && oculto(archs.find(a => a.dataset.tipo === 'lote')) && !oculto(raizPadron) && !visible('arVacio'));
+    poner('arTipo', 'csf');
+    R.ok('v0.33.0: filtro Tipo=csf esconde la rama de evidencia entera (todo lo leído quedó fuera) y la rama sin leer sigue', oculto(raizEv) && !oculto(raizPadron) && !visible('arVacio'));
+    await abrir('details[data-ruta="04_SGI/02_Ambiental/Permisos-y-Autorizaciones"]', 'oficios');
+    const padronArchs = [...raizPadron.querySelectorAll('.arch')];
+    R.ok('v0.33.0: los oficios ASEA y la CSF se leen al abrir su rama; con Tipo=csf solo queda la CSF', padronArchs.length === 2 && padronArchs.filter(a => !oculto(a)).length === 1 && padronArchs.find(a => !oculto(a)).dataset.tipo === 'csf', padronArchs.map(a => `${a.dataset.tipo}:${oculto(a)}`).join());
+    poner('arTipo', ''); poner('arBusca', 'E-25-00042');
+    R.ok('v0.33.0: el buscador (sin acentos ni mayúsculas) deja el lote y sus archivos y esconde los oficios', !oculto(lote) && !oculto(ticket) && oculto(raizPadron) && !oculto(raizEv), `lote ${oculto(lote)} · padrón ${oculto(raizPadron)}`);
+    poner('arBusca', 'no-existe-zzz');
+    const raizBuzon = arbol().querySelectorAll(':scope > details')[2];
+    R.ok('v0.33.0: sin coincidencias en lo leído se esconden las ramas leídas; la que no se ha abierto no se juzga (y no hay #arVacio)', oculto(raizEv) && oculto(raizPadron) && !oculto(raizBuzon) && !visible('arVacio'));
+    await abrir('details[data-ruta="99_Pendiente-Archivar"]', 'buzón');
+    // los lotes que esta corrida dejo en el buzon son carpetas sin leer: se abren para que el filtro las juzgue
+    for (const d of raizBuzon.querySelectorAll(':scope > .hijos > details')) await abrir(`details[data-ruta="${d.dataset.ruta}"]`, d.dataset.ruta);
+    R.ok('v0.33.0: leídas las tres ramas (y los lotes del buzón) sin coincidencia, lo dice (#arVacio)', visible('arVacio') && oculto(raizBuzon), `buzón leído ${raizBuzon.dataset.leida} · lotes ${raizBuzon.querySelectorAll(':scope > .hijos > details').length}`);
+    poner('arBusca', '');
+    R.ok('v0.33.0: sin filtro todo vuelve', !oculto(raizEv) && !oculto(raizPadron) && !oculto(ticket) && !visible('arVacio'));
+    if (emb1) {
+        // el programa filtra por los folios de sus gondolas: el lote de ESTA corrida (en el buzon) pega, el sembrado (e-25-…) no
+        const buzon = raizBuzon;
+        const folio = String(emb1.fields.Title).toLowerCase();
+        const loteApp = [...buzon.querySelectorAll(':scope > .hijos > details')].find(d => d.dataset.nombre.includes(folio));
+        elegirPorTexto('arPrograma', 'CLIENTE DEMO');
+        R.ok('v0.33.0: filtro Programa deja el lote que esta corrida subió al buzón (su folio) y esconde el sembrado de otro año', !!loteApp && !oculto(loteApp) && oculto(lote) && !oculto(buzon), `folio ${folio} · lote app ${!!loteApp}`);
+        poner('arPrograma', '');
+    }
+    // Actualizar a mano relee el arbol; el refresco silencioso no lo tira
+    const gets1 = DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length;
+    clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga desde Archivos');
+    await esperar(() => arbol().querySelectorAll(':scope > details').length === 3 && arbol().querySelector(':scope > details > .hijos > details'), 'árbol releído');
+    R.ok('v0.33.0: «Actualizar» vuelve a leer el árbol (las tres ramas de nuevo, la evidencia abierta)', DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length > gets1 && arbol().querySelectorAll(':scope > details').length === 3);
+    document.querySelector('#pestanas button[data-p="hoy"]').click();
 }
 // Si la version bajo prueba trae el dialogo propio (<dialog id="dlg">), lo contesta; si no, confirm() ya dijo si.
 // Espera hasta 8 s VIRTUALES a que abra (v0.24.0; antes 2 s): bajo --virtual-time-budget el reloj de la pagina corre mientras
@@ -635,7 +721,7 @@ try {
         const folios = filas('embarques').map(e => e.fields.Title).filter(Boolean);
         R.ok('C-03: folio E- único tras la colisión sembrada DESPUÉS de releer (el nuestro se renumeró a 00002)', sembrado && new Set(folios).size === folios.length && emb1.fields.Title === `E-${aa}-00002`, folios.join(', '));
         R.ok('lote de evidencia del bruto en el buzón (carpeta + foto + _lote.json)', DB.carpetas.some(c => c.ruta.includes('_Embarque_bruto-')) && DB.archivos.some(a => a.ruta.endsWith('_lote.json')) && DB.archivos.some(a => a.ruta.endsWith('-01.jpg')));
-        const loteBruto = DB.carpetas.find(c => c.ruta.includes('_Embarque_bruto-'));
+        const loteBruto = DB.carpetas.find(c => c.ruta.startsWith('99_Pendiente-Archivar/') && c.ruta.includes('_Embarque_bruto-'));   // v0.33.0: la biblioteca sembrada trae otro lote de bruto
         R.ok('C-03: la carpeta del lote y BrutoFoto llevan el folio DEFINITIVO', loteBruto && loteBruto.ruta.includes(emb1.fields.Title.toLowerCase()) && String(emb1.fields.BrutoFoto).includes(emb1.fields.Title), `${loteBruto && loteBruto.ruta} · ${emb1.fields.BrutoFoto}`);
         {
             const ll = DB.llamadas.slice(nLlamadas0);
@@ -837,6 +923,9 @@ try {
                 R.ok('C-02: el CSV es de la app (aviso de descarga)', !!avisoCon('CSV con'));
             } finally { URL.createObjectURL = urlReal; HTMLAnchorElement.prototype.click = clickReal; }
         }
+
+        // 11b. Archivos (v0.33.0): el arbol de la biblioteca, con el lote que ESTA corrida subio al buzon.
+        await probarArchivos(emb1);
 
         // 12. ELIMINAR / ANULAR (lo que pidio Carlos el 2026-09-05).
         // 12a. Embarque en compuerta (sin folio): se elimina.
@@ -1226,6 +1315,7 @@ try {
         R.ok('U-50: el texto de la Puerta nombra el rol real (validador ≠ lectura)', ROL === 'validador' ? $('puSoloLectura').textContent.includes('validador') && $('puSoloLectura').textContent.includes('Pre-altas') : $('puSoloLectura').textContent.includes('lectura'), $('puSoloLectura').textContent);
         document.querySelector('#pestanas button[data-p="padron"]').click();
         R.ok('rol de lectura: sin botones de alta en el padrón', !visible('btnNuevoCarrier') && !visible('btnNuevaUnidad'));
+        await probarArchivos(null);   // v0.33.0: Archivos la ven todos los roles
     }
 } catch (e) {
     R.ok('la corrida terminó sin excepción', false, (e && e.stack) || String(e));

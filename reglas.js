@@ -295,4 +295,20 @@ export const plural = (n, uno, varios = uno + 's') => `${n} ${n === 1 ? uno : va
 /** Para el POST: lo vacio no viaja. */
 export function limpiar(obj) { const o = {}; for (const k in obj) if (obj[k] !== null && obj[k] !== undefined && obj[k] !== '') o[k] = obj[k]; return o; }
 /** Para el PATCH: lo vacio va como null para que SharePoint lo borre; `limpiar()` lo omitiria y el dato viejo sobreviviria. */
+/**
+ * v0.33.0 (Archivos): el tipo de un archivo de la biblioteca por su NOMBRE (contrato de nombres de la casa y de la app):
+ * ticket · foto (indicador de bascula) · manifiesto · oficio (ASEA) · csf · lote (_lote.json) · otro. Es lo que filtra «Tipo».
+ * Primero lo especifico (ticket, manifiesto, csf, oficio) y al final la foto, que se reconoce por la extension.
+ */
+export function tipoDeArchivo(nombre) {
+    const n = String(nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (n === '_lote.json') return 'lote';
+    if (/ticket/.test(n)) return 'ticket';
+    if (/manifiesto/.test(n)) return 'manifiesto';
+    if (/(^|[_\-. ])csf([_\-. ]|$)|situacion[_\- ]?fiscal/.test(n)) return 'csf';
+    if (/asea|oficio|autorizaci/.test(n)) return 'oficio';
+    if (/_foto_|bascula|indicador|\.(jpe?g|png|heic|webp)$/.test(n)) return 'foto';
+    return 'otro';
+}
+
 export function paraPatch(campos) { const o = {}; for (const k in campos) o[k] = campos[k] === '' || campos[k] === undefined ? null : campos[k]; return o; }

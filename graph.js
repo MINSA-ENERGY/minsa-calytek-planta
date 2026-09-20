@@ -203,6 +203,32 @@ export function crearCliente(graph, token) {
             return await r.json();
         },
 
+        /** v0.33.0 (Archivos): la biblioteca del sitio; su webUrl es el destino de «Ver en SharePoint» (la URL no se deduce). */
+        async biblioteca(siteId) {
+            const r = await pedir(`${graph}/sites/${siteId}/drive?$select=id,webUrl`);
+            if (!r.ok) throw await fallo(r, 'no se pudo abrir la biblioteca: ');
+            return await r.json();
+        },
+
+        /**
+         * v0.33.0 (Archivos): los hijos de una carpeta de la biblioteca por su ruta, paginando ($top=200 + nextLink). Devuelve
+         * null si la carpeta NO existe (404): el arbol lo dice en vez de fallar — 02_Planta/Bascula nace con el primer lote
+         * que /archivar-calytek acomode. Misma ruta drive/root: con la que la app sube la evidencia (Sites.Selected alcanza).
+         */
+        async hijos(siteId, ruta, avisar) {
+            let url = `${graph}/sites/${siteId}/drive/root:/${rutaUrl(ruta)}:/children?$select=id,name,size,folder,file,lastModifiedDateTime,webUrl&$top=200`;
+            const todos = [];
+            while (url) {
+                const r = await pedir(url, {}, avisar);
+                if (r.status === 404) return null;
+                if (!r.ok) throw await fallo(r, `no se pudo leer la carpeta ${ruta}: `);
+                const j = await r.json();
+                todos.push(...j.value);
+                url = j['@odata.nextLink'] || null;
+            }
+            return todos;
+        },
+
         /** Borra una carpeta o archivo de la biblioteca por id. Solo se usa para deshacer un lote que quedo a medias. */
         async borrarItemDrive(siteId, itemId, avisar) {
             const r = await pedir(`${graph}/sites/${siteId}/drive/items/${itemId}`, { method: 'DELETE' }, avisar);

@@ -37,6 +37,12 @@ export const CONFIG = {
         destinoBase: '02_Planta/Bascula'
     },
 
+    // ARCHIVOS (v0.33.0): las tres ramas del arbol que la seccion lee por Graph. La evidencia sale de evidencia.destinoBase
+    // y el buzon de `buzon`; aqui solo la que no existia: donde viven los oficios ASEA y las CSF de los carriers. El artifact
+    // del rediseno decia «05_Padron», pero en la biblioteca 05_ es Comercial-y-Cotizaciones y los oficios de transporte
+    // estan en 04_SGI (permisos-arranque.md, 2026-08-22). Una carpeta que aun no exista sale como «aun no existe», no como error.
+    archivos: { padron: '04_SGI/02_Ambiental/Permisos-y-Autorizaciones' },
+
     // Prefijo comun de las listas (esquema.json). Cambiarlo obliga a re-provisionar.
     listas: {
         carriers: 'PLANTA_Carriers',
