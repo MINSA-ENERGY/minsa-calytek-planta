@@ -193,6 +193,7 @@
         const roles = DB.listas.roles.items;
         roles.push({ id: DB.siguienteId++, fields: { Title: window.__CUENTA.username, Nombre: 'Prueba', Rol: rol, Activo: true } });
         roles.push({ id: DB.siguienteId++, fields: { Title: 'validador@example.invalid', Nombre: 'Validadora', Rol: 'validador', Activo: true } });
+        roles.push({ id: DB.siguienteId++, fields: { Title: 'gerente@example.invalid', Nombre: 'Gerente', Rol: 'gerencia', Activo: true } });   // S-11 (v0.28.0)
     };
 })();
 
@@ -535,6 +536,9 @@ try {
         elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
         // U-17 (v0.22.0): teclear la placa marca el chip por data-placa (no por el texto, que trae pegado el <small>).
         R.ok('U-17: al teclear la placa el chip de la unidad se marca (data-placa)', !!document.querySelector('#puUnidades .u.sel') && document.querySelector('#puUnidades .u.sel').dataset.placa === '55XY9K', String(document.querySelector('#puUnidades .u') && document.querySelector('#puUnidades .u').dataset.placa));
+    // C-28 (v0.28.0): teclear la placa marca el chip tambien en aria-pressed (U-33 solo lo hacia al clic); y borrarla lo desmarca.
+    R.ok('C-28: al teclear la placa el chip marcado lleva aria-pressed=true y los demás false', [...document.querySelectorAll('#puUnidades .u')].every(x => x.getAttribute('aria-pressed') === String(x.classList.contains('sel'))) && document.querySelector('#puUnidades .u.sel').getAttribute('aria-pressed') === 'true');
+    { const placaAntes = $('puPlaca').value; poner('puPlaca', 'ZZZ999'); R.ok('C-28: con una placa que no está en el padrón ningún chip queda marcado ni con aria-pressed', !document.querySelector('#puUnidades .u.sel') && [...document.querySelectorAll('#puUnidades .u')].every(x => x.getAttribute('aria-pressed') === 'false')); poner('puPlaca', placaAntes); }
         // U-11 (v0.22.0): en celular (< 900 px) el campo de peso no levanta el teclado del sistema.
         R.ok('U-11: inputmode del peso = none en celular, numeric en escritorio', $('baKg').inputMode === (window.matchMedia('(min-width: 900px)').matches ? 'numeric' : 'none'), `${window.innerWidth}px → ${$('baKg').inputMode}`);
         clic('btnCompuerta');
@@ -703,6 +707,31 @@ try {
                 delete exc.fields.ExcepcionAutorizo; delete exc.fields.ExcepcionEl;
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras retirar el sello');
                 document.querySelector('#pestanas button[data-p="hoy"]').click();
+
+                // S-11 (v0.28.0): la firma solo vale si el Firmante tiene el ROL que el Tipo exige y es la misma cuenta que el sello.
+                // Un validador (Colaborar en PLANTA_Firmas) crea por Graph una firma de excepcion y se pone el sello: no pasa.
+                {
+                    const firmaDe = (firmante) => ({ id: DB.siguienteId++, fields: { Title: 'excepcion · x', Tipo: 'excepcion', ObjetoId: exc.id, Firmante: firmante, FirmadoEl: new Date().toISOString() } });
+                    const probar = async (firmante, sello) => {
+                        filas('firmas').push(firmaDe(firmante)); exc.fields.ExcepcionAutorizo = sello; exc.fields.ExcepcionEl = new Date().toISOString();
+                        clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), `recarga S-11 ${firmante}`);
+                        document.querySelector('#pestanas button[data-p="bascula"]').click();
+                        const enBascula = $('baLista').textContent.includes(exc.fields.Manifiesto);
+                        document.querySelector('#pestanas button[data-p="hoy"]').click();
+                        const franja = visible('hoyFranja') ? $('hoyFranja').textContent : '';
+                        filas('firmas').splice(0, filas('firmas').length, ...filas('firmas').filter(f => f.fields.Title !== 'excepcion · x'));
+                        delete exc.fields.ExcepcionAutorizo; delete exc.fields.ExcepcionEl;
+                        return { enBascula, franja };
+                    };
+                    const v = await probar('validador@example.invalid', 'validador@example.invalid');
+                    R.ok('S-11: una firma de excepción cuyo Firmante tiene rol validador NO vale: la góndola sigue fuera de báscula y Hoy dice «sin firma registrada»', !v.enBascula && v.franja.includes('sin firma registrada'), v.franja.slice(0, 100));
+                    const g = await probar('gerente@example.invalid', 'validador@example.invalid');
+                    R.ok('S-11: una firma legítima de gerencia NO vale para un sello de OTRA cuenta (Firmante ≠ ExcepcionAutorizo)', !g.enBascula && g.franja.includes('sin firma registrada'), g.franja.slice(0, 100));
+                    const ok11 = await probar('gerente@example.invalid', 'gerente@example.invalid');
+                    R.ok('S-11: firma de gerencia + sello de la misma cuenta SÍ vale: entra a báscula', ok11.enBascula, ok11.franja.slice(0, 60));
+                    clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras S-11');
+                    document.querySelector('#pestanas button[data-p="hoy"]').click();
+                }
             }
             if (ROL === 'gerencia') {
                 // S-01: sin permiso en PLANTA_Firmas (403) la autorizacion NO procede: ni sello, ni renglon, sigue pendiente.
@@ -1060,6 +1089,71 @@ try {
                 const av = avisoCon('No se pudo anular');
                 R.ok('C-15: un 401 al anular sube como «la sesión caducó (401)», no como «la app no puede anular todavía»', falla401.veces === 0 && av.textContent.includes('caducó') && !av.textContent.includes('anular todavía') && emb1.fields.Etapa === 'cerrado', av.textContent.slice(0, 120));
             } else R.ok('C-15: el embarque cerrado de hoy ofrece Anular para la prueba del 401', false, trEmb1 ? trEmb1.textContent.slice(0, 80) : 'sin renglón');
+        }
+
+
+        // C-27 / U-41 (v0.28.0): cambiar de pestana con un pesaje a medias pasa por la misma compuerta que «Cancelar» (U-24):
+        // con kg o foto pregunta; al descartar suelta estado.pesando y la foto (revoca el blob URL) y la tarjeta no reaparece.
+        // C-23 / C-24 (v0.28.0): con el confirm de Anular abierto, Actualizar NO sustituye las listas (ni con escritura en
+        // vuelo); el boton que disparo queda deshabilitado mientras dura; y un doble toque en Guardar del padron crea UN renglon.
+        {
+            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
+            poner('puManifiesto', 'MINSA/RME/112/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
+            clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 112'); clic('btnRegistrarPuerta');
+            await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/112/2025'), 'embarque 112');
+            const e112 = filas('embarques').find(e => e.fields.Manifiesto === 'MINSA/RME/112/2025');
+            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/112')).querySelector('button').click();
+            await esperar(() => visible('baPesar'), 'pesaje 112'); poner('baKg', '43000'); await foto(); clic('btnGuardarPeso');
+            await esperar(() => avisoCon('Bruto guardado'), 'bruto 112');
+            // Pesaje de la tara a medias (kg + foto) y cambio de pestana.
+            [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e112.fields.Title)).querySelector('button').click();
+            await esperar(() => visible('baPesar') && $('baTitulo').textContent.includes('Tara'), 'tara 112 abierta');
+            poner('baKg', '21000'); await foto();
+            document.querySelector('#pestanas button[data-p="hoy"]').click();
+            await esperar(() => $('dlg').open, 'confirm al salir de la bascula con pesaje a medias');
+            R.ok('C-27 / U-41: cambiar de pestaña con kg y foto capturados pregunta («Cancelar el pesaje») y se queda en Báscula', $('dlgTitulo').textContent.includes('Cancelar el pesaje') && visible('p-bascula') && !visible('p-hoy'), $('dlgTitulo').textContent);
+            clic('dlgCancelar'); await dormir(30);
+            R.ok('C-27 / U-41: al no descartar, el pesaje sigue abierto con su peso y su foto', visible('baPesar') && $('baKg').value === '21000' && visible('baFotoPrevia') && visible('p-bascula'), `kg ${$('baKg').value}`);
+            const revokeC27 = URL.revokeObjectURL; let revocadosC27 = 0; URL.revokeObjectURL = u => { revocadosC27++; return revokeC27.call(URL, u); };
+            document.querySelector('#pestanas button[data-p="hoy"]').click();
+            await esperar(() => $('dlg').open, 'confirm 2 al salir'); clic('dlgOk');
+            await esperar(() => visible('p-hoy'), 'Hoy tras descartar el pesaje');
+            URL.revokeObjectURL = revokeC27;
+            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            R.ok('C-27: al descartar se suelta la foto (blob URL revocado) y, de vuelta en Báscula, la tarjeta no reaparece; la góndola sigue esperando la tara', revocadosC27 >= 1 && !visible('baPesar') && $('baLista').textContent.includes(e112.fields.Title) && !e112.fields.TaraKg, `revocados ${revocadosC27}`);
+            // Sin nada capturado, cambiar de pestana no pregunta (como Cancelar vacio).
+            [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e112.fields.Title)).querySelector('button').click();
+            await esperar(() => visible('baPesar'), 'tara 112 abierta otra vez');
+            document.querySelector('#pestanas button[data-p="hoy"]').click();
+            R.ok('C-27: con el pesaje vacío cambiar de pestaña no pregunta y sale directo', !$('dlg').open && visible('p-hoy'));
+            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            // C-23: Anular desde Bascula con el confirm abierto; Actualizar en medio no debe recargar ni cerrar el dialogo.
+            const r112 = [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e112.fields.Title));
+            const btnAn112 = r112 && r112.querySelector('button[data-accion="anular"]');
+            R.ok('C-23: la góndola en planta con folio ofrece Anular', !!btnAn112);
+            if (btnAn112) {
+                btnAn112.click(); await esperar(() => $('dlg').open, 'confirm de Anular');
+                const llamadasAntes = DB.llamadas.length;
+                clic('btnActualizar'); await dormir(120);
+                R.ok('C-23: con el confirm de Anular abierto, Actualizar NO recarga las listas (0 llamadas a Graph, sin «Datos actualizados») y el diálogo sigue abierto', DB.llamadas.length === llamadasAntes && !avisoCon('Datos actualizados') && $('dlg').open, `llamadas ${llamadasAntes}→${DB.llamadas.length}`);
+                R.ok('C-24: el botón Anular que disparó queda deshabilitado mientras dura (un segundo toque no abre otro confirm)', btnAn112.disabled);
+                poner('dlgMotivo', 'Se pesó la góndola equivocada'); clic('dlgOk');
+                await esperar(() => e112.fields.Etapa === 'anulado', 'anulado 112');
+                await esperar(() => avisoCon('anulado. Para repesar'), 'aviso de anulado');
+                const patches = DB.llamadas.filter(x => x === `PATCH /sites/sitio-falso/lists/lista-embarques/items/${e112.id}/fields`).length;
+                R.ok('C-23: al confirmar, el PATCH escribe UNA vez, la góndola sale de «En planta» y el aviso se ve', e112.fields.Etapa === 'anulado' && !$('baLista').textContent.includes(e112.fields.Title) && patches >= 1 && !btnAn112.disabled, `patches ${patches}`);
+            }
+            // C-24: doble toque en Guardar del padron -> un solo carrier.
+            document.querySelector('#pestanas button[data-p="padron"]').click();
+            clic('btnNuevoCarrier'); await esperar(() => $('pdFormaCarrier').open, 'forma de carrier (doble toque)');
+            poner('pcTitle', 'CARRIER DOBLE TOQUE');
+            clic('btnGuardarCarrier'); clic('btnGuardarCarrier');
+            R.ok('C-24: al primer toque «Guardar» queda deshabilitado', $('btnGuardarCarrier').disabled);
+            await esperar(() => !$('pdFormaCarrier').open, 'carrier del doble toque guardado');
+            await dormir(50);
+            R.ok('C-24: un doble toque en Guardar crea UN solo carrier y el botón vuelve a habilitarse', filas('carriers').filter(c => c.fields.Title === 'CARRIER DOBLE TOQUE').length === 1 && !$('btnGuardarCarrier').disabled, `${filas('carriers').filter(c => c.fields.Title === 'CARRIER DOBLE TOQUE').length} renglón(es)`);
         }
 
         // 14. Sesion caducada: acquireTokenSilent pide interaccion -> la app manda al login, no un error mudo.

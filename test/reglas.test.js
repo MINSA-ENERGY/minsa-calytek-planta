@@ -1,6 +1,6 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -136,3 +136,40 @@ assert.ok(PUEDE.corregir('trazabilidad') && PUEDE.corregir('gerencia') && !PUEDE
 }
 
 console.log('reglas: ok');
+
+// C-25 (v0.28.0): la frontera de fechas que teclea la caseta. Antes vivia en app.js y la E2E solo pegaba ISO.
+{
+    const dia = iso => iso.slice(0, 10);
+    // Ano de dos cifras = 20aa (fotos de Carlos, 2026-09-06): «16/03/26» es el 16 de marzo de 2026.
+    assert.equal(dia(new Date(aIsoDia('16/03/26')).toLocaleDateString('sv-SE')), '2026-03-16');
+    assert.equal(dia(new Date(aIsoDia('16/03/2026')).toLocaleDateString('sv-SE')), '2026-03-16');
+    assert.equal(dia(new Date(aIsoDia('16.03.2026')).toLocaleDateString('sv-SE')), '2026-03-16');
+    // Lo que teclea la gente («05092026») pasa por el autoformato y de ahi a aIsoDia.
+    assert.equal(autoformatoFecha('05092026'), '05/09/2026');
+    assert.equal(autoformatoFecha('0509'), '05/09');
+    assert.equal(autoformatoFecha('05'), '05');
+    assert.equal(autoformatoFecha('2026-09-05'), '05/09/2026');   // ISO pegado se muestra dd/mm/aaaa
+    assert.equal(dia(new Date(aIsoDia(autoformatoFecha('05092026'))).toLocaleDateString('sv-SE')), '2026-09-05');
+    // ISO pegado (pruebas y pegados) pasa igual.
+    assert.equal(dia(new Date(aIsoDia('2026-09-05')).toLocaleDateString('sv-SE')), '2026-09-05');
+    // Vacio = null; nunca una fecha adivinada.
+    assert.equal(aIsoDia(''), null); assert.equal(aIsoDia(null), null); assert.equal(aIsoDia('   '), null);
+    // Fecha que no existe: lanza con el mensaje que ve quien captura.
+    assert.throws(() => aIsoDia('31/04/2026'), /no existe/);
+    assert.throws(() => aIsoDia('29/02/2027'), /no existe/);
+    assert.throws(() => aIsoDia('00/01/2026'), /no existe/);
+    assert.equal(dia(new Date(aIsoDia('29/02/2028')).toLocaleDateString('sv-SE')), '2028-02-29');   // bisiesto si existe
+    // Cualquier otra cosa: «no valida», con la forma esperada.
+    assert.throws(() => aIsoDia('hoy'), /no v\u00e1lida.*dd\/mm\/aaaa/);
+    assert.throws(() => aIsoDia('2026/09/05'), /no v\u00e1lida/);
+    assert.throws(() => aIsoDia('5-9'), /no v\u00e1lida/);
+    // fechaCorta: ISO -> dd/mm/aaaa; vacio -> raya; lo que no es ISO sale tal cual.
+    assert.equal(fechaCorta('2026-09-05T18:00:00.000Z'), '05/09/2026');
+    assert.equal(fechaCorta(''), '\u2014'); assert.equal(fechaCorta(null), '\u2014');
+    assert.equal(fechaCorta('05/09/2026'), '05/09/2026');
+    // plural (U-36), limpiar (POST) y paraPatch (PATCH) — las tres puras que viajaban con app.js.
+    assert.equal(plural(1, 'g\u00f3ndola'), '1 g\u00f3ndola'); assert.equal(plural(3, 'g\u00f3ndola'), '3 g\u00f3ndolas');
+    assert.equal(plural(2, 'anulado o rechazado', 'anulados o rechazados'), '2 anulados o rechazados');
+    assert.deepEqual(limpiar({ a: 1, b: '', c: null, d: undefined, e: 0, f: false }), { a: 1, e: 0, f: false });
+    assert.deepEqual(paraPatch({ a: 1, b: '', c: null, d: undefined, e: 0 }), { a: 1, b: null, c: null, d: null, e: 0 });
+}

@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch } from './reglas.js';
 
-const VERSION = '0.27.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.28.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -81,8 +81,6 @@ function el(tag, clase, texto) {
     if (texto !== undefined) e.textContent = texto;
     return e;
 }
-/** «1 góndola» / «3 góndolas» (U-36, v0.26.0): sin «(s)». El plural se pasa solo cuando no es singular + «s». */
-const plural = (n, uno, varios = uno + 's') => `${n} ${n === 1 ? uno : varios}`;
 /**
  * Renglon de lista con un boton principal y, opcionalmente, acciones secundarias
  * ({texto, alClic, accion, clase}) apiladas a la derecha; `accion` sale como data-accion.
@@ -163,38 +161,12 @@ function opciones(sel, items, valor, textoDe, primera = '— elige —') {
         const op = el('option', '', textoDe(it)); op.value = String(valor(it)); sel.appendChild(op);
     }
 }
-// Fechas: el estándar de la casa es dd/mm/aaaa (Carlos, 2026-09-05), en pantalla, en el ticket y al capturar.
-// Lo guardado en SharePoint sigue siendo ISO; estas tres funciones son la frontera.
-function fechaCorta(iso) {
-    if (!iso) return '—';
-    const s = String(iso);
-    return /^\d{4}-\d{2}-\d{2}/.test(s) ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : s;
-}
+// Fechas: dd/mm/aaaa en pantalla, ISO en SharePoint. C-25 (v0.28.0): fechaCorta, aIsoDia y el autoformato viven en reglas.js
+// (puras, con casos en reglas.test.js); aqui solo queda el enganche al DOM.
 // C-10 (v0.22.0): las cuatro horas de la app salen de reglas.horaMexico (hourCycle h23); antes tres usaban hour12:false
 // (que en Chromium puede dar «24:05») y la fila del dia salia en 12 h con AM/PM: Hoy mezclaba los dos.
 const horaCorta = iso => horaMexico(iso, 'fecha');
-// Acepta dd/mm/aaaa (lo que teclea la gente) y aaaa-mm-dd (lo que traen las pruebas y los pegados). Vacío = null;
-// cualquier otra cosa es un error que se le muestra a quien captura, nunca una fecha adivinada.
-function aIsoDia(texto) {
-    const s = String(texto || '').trim();
-    if (!s) return null;
-    let m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2}|\d{4})$/);
-    let y, mo, d;
-    // Ano de dos cifras = 20aa: en la puerta se teclea «16/03/26» (fotos de Carlos, 2026-09-06) y ninguna vigencia es del siglo pasado.
-    if (m) { d = +m[1]; mo = +m[2]; y = m[3].length === 2 ? 2000 + +m[3] : +m[3]; }
-    else if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
-    else throw new Error(`Fecha «${s}» no válida: escríbela como dd/mm/aaaa`);
-    const f = new Date(y, mo - 1, d, 12);
-    if (f.getFullYear() !== y || f.getMonth() !== mo - 1 || f.getDate() !== d) throw new Error(`Fecha «${s}» no existe: escríbela como dd/mm/aaaa`);
-    return f.toISOString();
-}
-// Al teclear: solo dígitos y las barras se ponen solas (05092026 → 05/09/2026).
-for (const inp of document.querySelectorAll('input.fecha')) inp.addEventListener('input', () => {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(inp.value)) { inp.value = fechaCorta(inp.value); return; }   // pegado ISO → se muestra dd/mm/aaaa
-    const dig = inp.value.replace(/\D/g, '').slice(0, 8);
-    inp.value = dig.length > 4 ? `${dig.slice(0, 2)}/${dig.slice(2, 4)}/${dig.slice(4)}` : dig.length > 2 ? `${dig.slice(0, 2)}/${dig.slice(2)}` : dig;
-});
-function limpiar(obj) { const o = {}; for (const k in obj) if (obj[k] !== null && obj[k] !== undefined && obj[k] !== '') o[k] = obj[k]; return o; }
+for (const inp of document.querySelectorAll('input.fecha')) inp.addEventListener('input', () => { inp.value = autoformatoFecha(inp.value); });
 function porId(coleccion, id) { return coleccion.find(x => x.id === Number(id)) || null; }
 /**
  * C-12 (v0.25.0): el objeto VIVO de estado[clave] con el id de `x`, resuelto AL CLIC. Los handlers de renglon capturan el
@@ -203,6 +175,33 @@ function porId(coleccion, id) { return coleccion.find(x => x.id === Number(id)) 
  * y la operacion lo reporta (el bruto y la tara releen el renglon antes de escribir).
  */
 function vivo(clave, x) { return (x && porId(estado[clave], x.id)) || x; }
+/**
+ * C-23 (v0.28.0): un Object.assign DESPUES de un await cae sobre el objeto vivo por id, ademas del que el handler tenia en la
+ * mano (C-12 resolvia al clic; el motivo de la anulacion se teclea 10-30 s y el refresco podia sustituir la lista debajo).
+ * Devuelve el vivo.
+ */
+function aplicar(clave, obj, campos) { const v = vivo(clave, obj); Object.assign(obj, campos); if (v !== obj) Object.assign(v, campos); return v; }
+/** C-23 / C-26: `x` ocupa su lugar en estado[clave] por id (sin duplicar el renglon si un refresco ya lo trajo); si no estaba, entra. */
+function anclar(clave, x) { const i = estado[clave].findIndex(y => y.id === x.id); if (i >= 0) estado[clave][i] = x; else estado[clave].push(x); return x; }
+/**
+ * C-24 / C-23 (v0.28.0): toda escritura al tenant pasa por aqui. Deshabilita el boton que la disparo mientras dura (un segundo
+ * toque con guante y senal lenta creaba dos carriers, dos firmas) y cuenta las escrituras en vuelo, que recargar() respeta.
+ * `btn` es un id, un elemento o null (escrituras que no nacen de un boton fijo).
+ */
+let escrituras = 0;
+async function escribiendo(btn, fn) {
+    const b = typeof btn === 'string' ? $(btn) : btn;
+    if (b && b.disabled) return undefined;
+    if (b) b.disabled = true;
+    escrituras++;
+    try { return await fn(); }
+    finally { escrituras--; if (b) b.disabled = false; }
+}
+/** C-26: un solo formateador para llenar formas (null/undefined -> ''). */
+const textoDe = v => v === null || v === undefined ? '' : String(v);
+/** C-26: el filtro del buscador (padron y cerrados): sin texto pega todo. */
+const filtroTexto = q => (...campos) => !q || campos.some(v => normaliza(v).includes(q));
+const haySel = sel => sel !== null && sel !== undefined;
 function nombreDe(coleccion, id) { if (id === null || id === undefined || id === '') return '—'; const x = porId(coleccion, id); return x ? x.Title : `#${id}`; }
 
 // ---------------------------------------------------------------- sesion
@@ -342,13 +341,25 @@ async function cargarFirmas(c, s, avisar) {
  * columna faltante y sube tal cual: antes «invalid» casaba con InvalidAuthenticationToken y «no existe» con el 404 del sitio.
  */
 function esColumnaFaltante(e) { return !!e && e.status === 400; }
-function firmaDe(tipo, id) { return estado.firmas.find(f => f.Tipo === tipo && Number(f.ObjetoId) === Number(id)) || null; }
-function prealtaFirmada(p) { return p.Estado === 'firmada' && !!firmaDe('prealta', p.id); }
-function excepcionAutorizada(e) { return !!e.ExcepcionAutorizo && !!firmaDe('excepcion', e.id); }
-/** Sellos escritos sin su renglon de firma (de antes del corte, o por fuera de la app): la compuerta no los acepta. */
+/**
+ * S-11 (v0.28.0): un renglon de PLANTA_Firmas solo vale si su Firmante tiene HOY en PLANTA_Roles el rol que el Tipo exige
+ * (excepcion -> gerencia; prealta -> validador o gerencia) Y es la misma cuenta que el sello (ExcepcionAutorizo / FirmadaPor).
+ * Planta-Firmantes junta validador y gerencia con Colaborar: antes un validador podia crear por Graph una firma de excepcion
+ * y la app la aceptaba. PLANTA_Roles es de solo lectura para Miembros, asi que nadie se da el rol solo.
+ */
+const ROL_FIRMA = { excepcion: ['gerencia'], prealta: ['validador', 'gerencia'] };
+const mismaCuenta = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+function firmaDe(tipo, id, sello) {
+    return estado.firmas.find(f => f.Tipo === tipo && Number(f.ObjetoId) === Number(id)
+        && (ROL_FIRMA[tipo] || []).includes(rolDe(f.Firmante, estado.roles))
+        && (sello === undefined || mismaCuenta(f.Firmante, sello))) || null;
+}
+function prealtaFirmada(p) { return p.Estado === 'firmada' && !!firmaDe('prealta', p.id, p.FirmadaPor); }
+function excepcionAutorizada(e) { return !!e.ExcepcionAutorizo && !!firmaDe('excepcion', e.id, e.ExcepcionAutorizo); }
+/** Sellos sin firma que valga (de antes del corte, por fuera de la app, o firmada por quien no tiene el rol): la compuerta no los acepta. */
 function sellosSinFirma() {
-    return { prealtas: estado.prealtas.filter(p => p.Estado === 'firmada' && !firmaDe('prealta', p.id)),
-             embarques: estado.embarques.filter(e => e.Etapa === 'compuerta' && !!e.ExcepcionAutorizo && !firmaDe('excepcion', e.id)) };
+    return { prealtas: estado.prealtas.filter(p => p.Estado === 'firmada' && !firmaDe('prealta', p.id, p.FirmadaPor)),
+             embarques: estado.embarques.filter(e => e.Etapa === 'compuerta' && !!e.ExcepcionAutorizo && !firmaDe('excepcion', e.id, e.ExcepcionAutorizo)) };
 }
 const selloSinFirma = e => (e.ExcepcionAutorizo ? `sello de ${quien(e.ExcepcionAutorizo)} sin firma registrada · ` : '');   // U-28 / U-31 (v0.26.0)
 /** S-07: por que la app no puede firmar ni autorizar ahora mismo, o null. Va como `title` del boton deshabilitado. */
@@ -481,6 +492,10 @@ function capturaAMedias() {
 let recargando = false;
 async function recargar(silencioso = false) {
     if (recargando || !estado.siteId) return;
+    // C-23 (v0.28.0): con una escritura en vuelo o un confirm abierto NO se sustituyen las listas: el Object.assign que sigue
+    // al await caeria sobre un objeto huerfano (la gondola anulada seguia «En planta», gerencia autorizaba dos veces). Antes
+    // solo se frenaba el REPINTADO (capturaAMedias); cargarTodo() corria igual. El timer lo vuelve a intentar al minuto.
+    if (escrituras > 0 || $('dlg').open) { if (!silencioso && escrituras > 0) avisar('Espera a que termine de guardar y vuelve a actualizar.', 'ojo'); return; }
     recargando = true;
     for (const id of ['btnActualizar', 'btnActualizarMovil']) $(id).disabled = true;
     pintarSync(true);
@@ -509,6 +524,27 @@ async function recargar(silencioso = false) {
 const PINTORES = { hoy: () => pintarHoy(), puerta: () => pintarPuerta(), bascula: () => pintarBascula(), prealtas: () => pintarPrealtas(), padron: () => pintarPadron() };
 /** Repinta la pestana abierta SIN tocar avisos, veredicto ni scroll (refresco silencioso y cambios de pre-alta). */
 function repintar() { pintarInsignias(); PINTORES[estado.pestana](); }
+/**
+ * C-27 / U-41 (v0.28.0): salir de la bascula con un pesaje abierto pasa por la misma compuerta que «Cancelar» (U-24): con kg o
+ * foto pregunta, y al salir suelta estado.pesando, la foto y su blob URL. Antes irA() ocultaba la tarjeta sin preguntar y el
+ * basculista volvia a fotografiar el indicador; el JPEG comprimido quedaba vivo hasta el siguiente pesaje. Devuelve si se salio.
+ */
+const pesajeConAlgo = () => !$('baPesar').classList.contains('oculto') && !!($('baKg').value.trim() || estado.fotoBytes);
+function descartarPesaje() { estado.pesando = null; estado.fotoBytes = null; soltarFotoPrevia(); $('baPesar').classList.add('oculto'); }
+async function soltarPesaje() {
+    if (pesajeConAlgo()) {
+        const { ok } = await confirmar({ titulo: 'Cancelar el pesaje', peligro: true, ok: 'Descartar', texto: 'Se pierden el peso tecleado y la foto del indicador; habría que volver a tomarla.' });
+        if (!ok) return false;
+    }
+    descartarPesaje();
+    return true;
+}
+/** El clic en una pestana: sincrono salvo que haya que preguntar (la E2E y el usuario esperan la pestana pintada al soltar). */
+function irDesdePestana(p) {
+    if (p !== 'bascula' && pesajeConAlgo()) { soltarPesaje().then(ok => { if (ok) irA(p); }); return; }
+    if (p !== 'bascula' && !$('baPesar').classList.contains('oculto')) descartarPesaje();   // vacio: se suelta sin preguntar, como Cancelar
+    irA(p);
+}
 function irA(p) {
     estado.pestana = p;
     for (const b of $('pestanas').querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.p === p));
@@ -559,11 +595,15 @@ function pintarUnidadesPuerta() {
         if (v) b.appendChild(v);
         b.addEventListener('click', () => {
             $('puPlaca').value = u.Title; $('puPlacaPlana').value = u.PlacaPlana || '';
-            for (const x of cont.querySelectorAll('.u')) { x.classList.toggle('sel', x === b); x.setAttribute('aria-pressed', String(x === b)); }
+            marcarChip(cont, b.dataset.placa);   // C-28
             pintarPrevioPuerta();
         });
         cont.appendChild(b);
     }
+}
+/** C-28 (v0.28.0): el chip de unidad elegido, por clase Y aria-pressed, igual al clic que al teclear la placa (U-17 / U-33). */
+function marcarChip(cont, placa) {
+    for (const x of cont.querySelectorAll('.u')) { const on = !!placa && x.dataset.placa === placa; x.classList.toggle('sel', on); x.setAttribute('aria-pressed', String(on)); }
 }
 function pintarChoferesPuerta() {
     const pre = porId(estado.prealtas, $('puPrealta').value);
@@ -758,9 +798,8 @@ document.addEventListener('keydown', ev => {
 async function registrarPuerta() {
     const r = estado.ultimaCompuerta; if (!r) return;
     if (r.resultado === 'excepcion-comercial' && !$('puMotivo').value.trim()) { avisar('La excepción lleva motivo escrito, no una casilla.', 'error'); return; }
-    $('btnRegistrarPuerta').disabled = true;
     const textoBoton = $('btnRegistrarPuerta').textContent;
-    try {
+    await escribiendo('btnRegistrarPuerta', async () => { try {   // C-24
         await refrescarCliente();
         const ahora = new Date().toISOString();
         const esRechazo = r.resultado === 'rechazo-legal';
@@ -784,7 +823,7 @@ async function registrarPuerta() {
         });
         const nuevo = await estado.cliente.crearRenglon(estado.siteId, L.embarques, campos, av);
         if (esRechazo) await asegurarFolioUnico(nuevo, 'R', av);
-        estado.embarques.push(nuevo);
+        anclar('embarques', nuevo);   // C-23: sin duplicar el id si el refresco ya lo trajo
         avisar(esRechazo ? `Rechazo registrado con folio ${nuevo.Title}. La góndola no entra.` :
             r.resultado === 'pasa' ? 'Registrado. Ya aparece en Báscula › En planta.' :
             'Registrado. Gerencia lo ve en Báscula › Excepciones por autorizar.', 'bien');
@@ -800,7 +839,7 @@ async function registrarPuerta() {
         pintarUnidadesPuerta(); pintarPrevioPuerta();
     } catch (e) {
         avisar('No se pudo registrar: ' + (e && e.message ? e.message : e), 'error');
-    } finally { $('btnRegistrarPuerta').disabled = false; $('btnRegistrarPuerta').textContent = textoBoton; }
+    } finally { $('btnRegistrarPuerta').textContent = textoBoton; } });
 }
 
 /**
@@ -860,7 +899,7 @@ function pintarBascula() {
 function pintarCerrados() {
     const caja = $('baCerrados'); caja.textContent = '';
     const q = normaliza($('baBusca').value.trim());
-    const pega = (...campos) => !q || campos.some(v => normaliza(v).includes(q));
+    const pega = filtroTexto(q);   // C-26
     const momento = e => e.TaraHora || e.AnuladoEl || e.Arribo || '';
     const todos = estado.embarques.filter(e => e.Title && !enPlanta(e)).sort((a, b) => momento(b).localeCompare(momento(a)));
     const cerrados = todos.filter(e => e.Etapa === 'cerrado');
@@ -888,8 +927,8 @@ function pintarCerrados() {
 function botonCorreccion(e) {
     if (!PUEDE.corregir(estado.rol)) return [];
     const a = accionCorreccion(e);
-    if (a === 'eliminar') return [{ texto: 'Eliminar', accion: 'eliminar', clase: 'peligro', alClic: () => eliminarEmbarque(vivo('embarques', e)) }];
-    if (a === 'anular') return [{ texto: 'Anular', accion: 'anular', clase: 'peligro', alClic: () => anularEmbarque(vivo('embarques', e)) }];
+    if (a === 'eliminar') return [{ texto: 'Eliminar', accion: 'eliminar', clase: 'peligro', alClic: ev => eliminarEmbarque(vivo('embarques', e), ev.currentTarget) }];
+    if (a === 'anular') return [{ texto: 'Anular', accion: 'anular', clase: 'peligro', alClic: ev => anularEmbarque(vivo('embarques', e), ev.currentTarget) }];   // C-24: el boton se deshabilita mientras dura
     return [];
 }
 
@@ -900,8 +939,9 @@ function botonCorreccion(e) {
  *     y las fotos ya subidas se quedan en el buzon con su _lote.json apuntando al folio anulado.
  * Despues se vuelve a correr la puerta y sale un folio nuevo.
  */
-async function eliminarEmbarque(e) {
+async function eliminarEmbarque(e, btn) {
     if (accionCorreccion(e) !== 'eliminar') { avisar('Este embarque ya tiene folio: se anula, no se elimina.', 'error'); return; }
+    await escribiendo(btn, async () => {   // C-24
     const { ok, motivo } = await confirmar({
         titulo: 'Eliminar la captura', peligro: true, ok: 'Eliminar',
         texto: `${e.PlacaTractor}${e.Manifiesto ? ' · ' + e.Manifiesto : ''}, registrada ${horaCorta(e.Arribo)}. Todavía no tiene folio: el renglón se borra y no queda rastro en la app (SharePoint conserva la papelera).`,
@@ -915,9 +955,11 @@ async function eliminarEmbarque(e) {
         avisar(`Captura eliminada${motivo ? ' (' + motivo + ')' : ''}. Si la góndola sigue en la puerta, vuelve a correr la compuerta.`, 'bien');
         repintar();   // C-14 (v0.25.0): como trasCambioPrealta. Antes iba a irA, que borraba el aviso «bien» y saltaba al tope
     } catch (err) { avisar('No se pudo eliminar: ' + (err && err.message ? err.message : err), 'error'); }
+    });
 }
-async function anularEmbarque(e) {
+async function anularEmbarque(e, btn) {
     if (accionCorreccion(e) !== 'anular') return;
+    await escribiendo(btn, async () => {   // C-24 / C-23: boton deshabilitado y sin refresco mientras el confirm esta abierto
     const { ok, motivo } = await confirmar({
         titulo: `Anular ${e.Title}`, peligro: true, ok: 'Anular con este motivo', motivo: true,
         texto: `${e.PlacaTractor} · etapa ${e.Etapa}${e.NetoKg ? ` · neto ${e.NetoKg} kg` : e.BrutoKg ? ` · bruto ${e.BrutoKg} kg` : ''}. El folio ${e.Title} queda anulado y NO se vuelve a usar; el siguiente pesaje nace con folio nuevo. Las fotos ya subidas se conservan.`,
@@ -938,27 +980,32 @@ async function anularEmbarque(e) {
                 throw new Error('la app no puede anular todavía: avisa a gerencia' + (estado.rol === 'gerencia' ? ' (la lista PLANTA_Embarques no tiene la etapa «anulado» ni las columnas de anulación: herramientas-dev/provisionar.html, setup tarea 5). Detalle: ' + err.message : '.'));   // U-31
             throw err;
         }
-        Object.assign(e, campos);
+        aplicar('embarques', e, campos);   // C-23
         avisar(`${e.Title} anulado. Para repesar la góndola, vuelve a correr la compuerta: saldrá un folio nuevo.`, 'bien');
         repintar();   // C-14 (v0.25.0): como trasCambioPrealta. Antes iba a irA, que borraba el aviso «bien» y saltaba al tope
     } catch (err) { avisar('No se pudo anular: ' + (err && err.message ? err.message : err), 'error'); }
+    });
 }
 
-async function autorizarExcepcion(e) {
+async function autorizarExcepcion(e, btn) {
     if (!PUEDE.autorizarExcepcion(estado.rol)) return;
+    await escribiendo(btn, async () => {   // C-24 / C-23
     const { ok } = await confirmar({ titulo: 'Autorizar la excepción', ok: 'Autorizar',
         texto: `${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}. Motivo que dio la caseta: «${e.ExcepcionMotivo || 'sin motivo'}». Queda colgada de este embarque, no del carrier.` });
     if (!ok) return;
     try {
         await refrescarCliente();
-        await firmar('excepcion', e, e.ExcepcionMotivo);   // S-01: primero la firma (403 si no eres gerencia), luego el sello
+        // S-01: primero la firma (403 si la cuenta no esta en Planta-Firmantes, que junta validador y gerencia), luego el sello.
+        // El ROL lo exige firmaDe() al leer (S-11): una firma de excepcion de un validador no vale aunque el POST pase.
+        await firmar('excepcion', e, e.ExcepcionMotivo);
         const campos = { ExcepcionAutorizo: estado.cuenta.username, ExcepcionEl: new Date().toISOString() };
         await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, campos);
-        Object.assign(e, campos);
+        aplicar('embarques', e, campos);   // C-23
         avisar('Excepción autorizada. Queda colgada de este embarque, no del carrier.', 'bien');
         pintarInsignias();
         pintarHoy();
     } catch (err) { avisar('No se pudo autorizar: ' + err.message, 'error'); }
+    });
 }
 
 function abrirPesaje(e, fase) {
@@ -1029,68 +1076,15 @@ async function guardarPeso() {
     if (!estado.fotoBytes) { avisar('Falta la foto del indicador: es lo que hace comprobable un peso tecleado.', 'error'); return; }
     const aviso = revisarNeto();
     if (aviso && !$('baMotivoNeto').value.trim()) { avisar('El neto se sale de la banda: re-captura, o di por qué se cierra igual.', 'error'); return; }
-    $('btnGuardarPeso').disabled = true;
+    await escribiendo('btnGuardarPeso', async () => {   // C-24 / C-23: boton deshabilitado y sin refresco mientras sube
     $('avance').classList.remove('oculto');
     const paso = t => { $('textoAvance').textContent = t; };
     try {
         await refrescarCliente();
         const e = p.embarque;
         const ahora = new Date().toISOString();
-        // Si el PATCH falla despues de subir la foto, el lote se retira del buzon: antes quedaba una
-        // carpeta huerfana con _lote.json de un embarque que nunca avanzo (auditoria 2026-09-05).
-        const guardarConLote = async (lote, campos) => {
-            try { await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, campos, paso); }
-            catch (err) { try { await estado.cliente.borrarItemDrive(estado.siteId, lote.carpetaId); } catch (_) { /* se reporta el error original */ } throw err; }
-        };
-        if (p.fase === 'bruto') {
-            // Aqui nace el folio E-: el ticket se imprime con su numero desde la puerta. Se relee la
-            // lista antes de escoger el numero (otro celular pudo tomar uno hace un segundo).
-            paso('Asignando folio…');
-            const delAno = await embarquesDelAno(paso);
-            // `e` sigue siendo EL objeto del embarque: se le vuelcan los campos frescos y ocupa su
-            // lugar en la lista de la ventana (si no, tendria una copia vieja en 'compuerta').
-            const fresco = delAno.find(x => x.id === e.id);
-            if (fresco) Object.assign(e, fresco);
-            fundirEnVentana(delAno);
-            const idx = estado.embarques.findIndex(x => x.id === e.id);
-            if (idx >= 0) estado.embarques[idx] = e; else estado.embarques.push(e);
-            if (e.Etapa !== 'compuerta') throw new Error(`este embarque ya está en ${e.Etapa} (lo movió otra sesión). Actualiza la lista.`);
-            // C-03 (v0.23.0): el folio se RESERVA (PATCH Title) y se confirma unico ANTES de subir la foto, para que la
-            // carpeta, la foto y el _lote.json nazcan con el definitivo. Antes, si asegurarFolioUnico renumeraba, el lote ya
-            // subido y BrutoFoto se quedaban con el folio viejo, que ahora era de otra gondola. Si la subida o el PATCH
-            // final fallan, el renglon queda en compuerta CON folio y el reintento lo reusa (no nace otro numero).
-            const folio = /^E-/.test(e.Title || '') ? e.Title : siguienteFolio('E', delAno.map(x => x.Title));
-            await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, { Title: folio }, paso);
-            e.Title = folio;
-            await asegurarFolioUnico(e, 'E', paso);
-            paso('Subiendo la foto…');
-            const lote = await subirEvidencia(e.Title, 'bruto', kg, paso);
-            paso('Guardando…');
-            const campos = { Etapa: 'bruto', BrutoKg: kg, BrutoHora: ahora, BrutoFoto: lote.ref };
-            await guardarConLote(lote, campos);
-            Object.assign(e, campos);
-            avisar(`Bruto guardado. Folio ${e.Title}. La góndola puede descargar en la fosa.`, 'bien');
-        } else {
-            // C-13 (v0.25.0): la tara relee SU renglon antes de subir la foto, como el bruto relee el anio. Gerencia pudo
-            // anular la gondola desde Hoy mientras el basculista tecleaba: el PATCH de cierre pisaba «anulado» con «cerrado»
-            // (renglon con AnuladoPor Y Etapa cerrado, contado en KPI y CSV). Y se re-ancla por id (C-12), como el bruto.
-            paso('Revisando el embarque…');
-            const vigente = await estado.cliente.renglon(estado.siteId, L.embarques, e.id, paso);
-            Object.assign(e, vigente);
-            const idx = estado.embarques.findIndex(x => x.id === e.id);
-            if (idx >= 0) estado.embarques[idx] = e; else estado.embarques.push(e);
-            if (e.Etapa !== 'bruto') throw new Error(`este embarque ya está en ${e.Etapa} (lo movió otra sesión). Actualiza la lista.`);
-            paso('Subiendo la foto…');
-            const lote = await subirEvidencia(e.Title, 'tara', kg, paso);
-            paso('Cerrando el embarque…');
-            const neto = Number(e.BrutoKg) - kg;
-            const campos = limpiar({ Etapa: 'cerrado', TaraKg: kg, TaraHora: ahora, TaraFoto: lote.ref, NetoKg: neto,
-                InicioAlmacen: e.BrutoHora || ahora,
-                Notas: aviso ? `Neto fuera de banda (${aviso}). Motivo: ${$('baMotivoNeto').value.trim()}` : null });
-            await guardarConLote(lote, campos);
-            Object.assign(e, campos);
-            avisar(`Embarque ${e.Title} cerrado: neto ${neto} kg.`, 'bien');
-        }
+        if (p.fase === 'bruto') await guardarBruto(e, kg, ahora, paso);
+        else await guardarTara(e, kg, ahora, aviso, paso);
         $('baPesar').classList.add('oculto'); soltarFotoPrevia();
         pintarTicket(e);
         pintarBascula();
@@ -1099,9 +1093,64 @@ async function guardarPeso() {
     } catch (err) {
         avisar('No se pudo guardar: ' + (err && err.message ? err.message : err), 'error');
     } finally {
-        $('btnGuardarPeso').disabled = false;
         $('avance').classList.add('oculto');
     }
+    });
+}
+// Si el PATCH falla despues de subir la foto, el lote se retira del buzon: antes quedaba una
+// carpeta huerfana con _lote.json de un embarque que nunca avanzo (auditoria 2026-09-05).
+async function guardarConLote(e, lote, campos, paso) {
+    try { await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, campos, paso); }
+    catch (err) { try { await estado.cliente.borrarItemDrive(estado.siteId, lote.carpetaId); } catch (_) { /* se reporta el error original */ } throw err; }
+}
+// C-26 (v0.28.0): las dos ramas de guardarPeso, cada una con su relectura; el re-anclaje en la ventana es anclar().
+async function guardarBruto(e, kg, ahora, paso) {
+    // Aqui nace el folio E-: el ticket se imprime con su numero desde la puerta. Se relee la
+    // lista antes de escoger el numero (otro celular pudo tomar uno hace un segundo).
+    paso('Asignando folio…');
+    const delAno = await embarquesDelAno(paso);
+    // `e` sigue siendo EL objeto del embarque: se le vuelcan los campos frescos y ocupa su
+    // lugar en la lista de la ventana (si no, tendria una copia vieja en 'compuerta').
+    const fresco = delAno.find(x => x.id === e.id);
+    if (fresco) Object.assign(e, fresco);
+    fundirEnVentana(delAno);
+    anclar('embarques', e);
+    if (e.Etapa !== 'compuerta') throw new Error(`este embarque ya está en ${e.Etapa} (lo movió otra sesión). Actualiza la lista.`);
+    // C-03 (v0.23.0): el folio se RESERVA (PATCH Title) y se confirma unico ANTES de subir la foto, para que la
+    // carpeta, la foto y el _lote.json nazcan con el definitivo. Antes, si asegurarFolioUnico renumeraba, el lote ya
+    // subido y BrutoFoto se quedaban con el folio viejo, que ahora era de otra gondola. Si la subida o el PATCH
+    // final fallan, el renglon queda en compuerta CON folio y el reintento lo reusa (no nace otro numero).
+    const folio = /^E-/.test(e.Title || '') ? e.Title : siguienteFolio('E', delAno.map(x => x.Title));
+    await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, { Title: folio }, paso);
+    e.Title = folio;
+    await asegurarFolioUnico(e, 'E', paso);
+    paso('Subiendo la foto…');
+    const lote = await subirEvidencia(e.Title, 'bruto', kg, paso);
+    paso('Guardando…');
+    const campos = { Etapa: 'bruto', BrutoKg: kg, BrutoHora: ahora, BrutoFoto: lote.ref };
+    await guardarConLote(e, lote, campos, paso);
+    aplicar('embarques', e, campos);
+    avisar(`Bruto guardado. Folio ${e.Title}. La góndola puede descargar en la fosa.`, 'bien');
+}
+async function guardarTara(e, kg, ahora, aviso, paso) {
+    // C-13 (v0.25.0): la tara relee SU renglon antes de subir la foto, como el bruto relee el anio. Gerencia pudo
+    // anular la gondola desde Hoy mientras el basculista tecleaba: el PATCH de cierre pisaba «anulado» con «cerrado»
+    // (renglon con AnuladoPor Y Etapa cerrado, contado en KPI y CSV). Y se re-ancla por id (C-12), como el bruto.
+    paso('Revisando el embarque…');
+    const vigente = await estado.cliente.renglon(estado.siteId, L.embarques, e.id, paso);
+    Object.assign(e, vigente);
+    anclar('embarques', e);
+    if (e.Etapa !== 'bruto') throw new Error(`este embarque ya está en ${e.Etapa} (lo movió otra sesión). Actualiza la lista.`);
+    paso('Subiendo la foto…');
+    const lote = await subirEvidencia(e.Title, 'tara', kg, paso);
+    paso('Cerrando el embarque…');
+    const neto = Number(e.BrutoKg) - kg;
+    const campos = limpiar({ Etapa: 'cerrado', TaraKg: kg, TaraHora: ahora, TaraFoto: lote.ref, NetoKg: neto,
+        InicioAlmacen: e.BrutoHora || ahora,
+        Notas: aviso ? `Neto fuera de banda (${aviso}). Motivo: ${$('baMotivoNeto').value.trim()}` : null });
+    await guardarConLote(e, lote, campos, paso);
+    aplicar('embarques', e, campos);
+    avisar(`Embarque ${e.Title} cerrado: neto ${neto} kg.`, 'bien');
 }
 
 /**
@@ -1275,7 +1324,7 @@ function editarPrealta() {
     estado.prealtaEdit = p;
     $('paFormaTitulo').textContent = `Editar pre-alta: ${p.Title}`; $('btnGuardarPrealta').textContent = 'Guardar cambios';
     opciones($('paCarrier'), estado.carriers.filter(c => c.Activo !== false || Number(c.id) === Number(p.CarrierId)), c => c.id, c => c.Title);
-    const f = v => v === null || v === undefined ? '' : String(v);
+    const f = textoDe;   // C-26
     partirTituloPrealta(f(p.Title)); $('paCorriente').value = f(p.Corriente); $('paGenerador').value = f(p.Generador);
     $('paGeneradorRegistro').value = f(p.GeneradorRegistro); $('paPozo').value = f(p.Pozo); $('paCarrier').value = f(p.CarrierId);
     $('paFecha').value = p.FechaEstimada ? fechaCorta(p.FechaEstimada) : ''; $('paGondolas').value = f(p.GondolasEsperadas);
@@ -1345,9 +1394,8 @@ $('paForma').addEventListener('change', pintarEstadoPrealta);
 async function guardarPrealta() {
     if (!PUEDE.capturarPrealta(estado.rol)) { avisar('Tu rol no captura pre-altas.', 'error'); return; }
     if (!$('paTitulo').value.trim() || !$('paCorriente').value || !$('paCarrier').value) { avisar('Faltan cliente, pozo o año del programa, la corriente o el carrier.', 'error'); return; }
-    $('btnGuardarPrealta').disabled = true;
     const edit = estado.prealtaEdit && estado.prealtaEdit.Estado === 'borrador' ? estado.prealtaEdit : null;
-    try {
+    await escribiendo('btnGuardarPrealta', async () => { try {   // C-24
         await refrescarCliente();
         if (edit) {
             const cambios = paraPatch({
@@ -1358,7 +1406,7 @@ async function guardarPrealta() {
                 CorreoFecha: aIsoDia($('paCorreoFecha').value), CorreoRemitente: $('paCorreoRemitente').value.trim(), Notas: $('paNotas').value.trim()
             });
             await estado.cliente.actualizarRenglon(estado.siteId, L.prealtas, edit.id, cambios);
-            Object.assign(edit, cambios);
+            aplicar('prealtas', edit, cambios);   // C-23
             estado.prealtaEdit = null;
             cerrarForma('paForma');
             if (estado.pestana === 'prealtas') pintarPrealtas(); else pintarInsignias();
@@ -1382,12 +1430,11 @@ async function guardarPrealta() {
         });
         const nuevo = await estado.cliente.crearRenglon(estado.siteId, L.prealtas, campos);
         await asegurarFolioUnico(nuevo, 'L');
-        estado.prealtas.push(nuevo);
+        anclar('prealtas', nuevo);   // C-23
         cerrarForma('paForma');
         avisar('Pre-alta guardada como borrador. Falta la firma del validador.', 'bien');
         pintarPrealtas();
-    } catch (e) { avisar('No se pudo guardar: ' + e.message, 'error'); }
-    finally { $('btnGuardarPrealta').disabled = false; }
+    } catch (e) { avisar('No se pudo guardar: ' + e.message, 'error'); } });
 }
 
 // Tras firmar / cerrar / eliminar: se cierra el pop-up y se repinta la pestana que esta abierta (Hoy o Pre-altas) sin
@@ -1427,9 +1474,9 @@ function verPrealta(p) {
     const hayLegal = hallazgos.some(h => h.clase === 'legal');
     const porFirmar = p.Estado === 'borrador' || (p.Estado === 'firmada' && !prealtaFirmada(p));   // S-01: el sello sin firma se firma aqui mismo
     $('btnFirmar').classList.toggle('oculto', !(porFirmar && PUEDE.firmarPrealta(estado.rol)));
-    $('btnFirmar').disabled = !!estado.firmasError; $('btnFirmar').title = motivoSinFirmas() || '';   // S-07
+    $('btnFirmar').title = motivoSinFirmas() || '';   // S-07
     $('btnEditarPrealta').classList.toggle('oculto', !(p.Estado === 'borrador' && PUEDE.capturarPrealta(estado.rol)));
-    $('btnFirmar').disabled = hayLegal || !!estado.firmasError;   // v0.26.0: antes esta línea pisaba el disabled de S-07 (dos renglones arriba)
+    $('btnFirmar').disabled = hayLegal || !!estado.firmasError;   // S-07 + hallazgo legal (C-26: antes se asignaba dos veces)
     if (hayLegal && porFirmar) avisar('No se puede firmar con un hallazgo legal abierto: corrige el padrón (con el oficio a la vista) o cambia el carrier.', 'ojo');
     else if (porFirmar && p.Estado === 'firmada') avisar('Falta la firma del validador: trae el sello pero no la firma registrada (se escribió por fuera de la app o antes del corte). La puerta no la ve hasta que un validador o gerencia la firme.', 'ojo');   // U-31
     $('btnCerrarPrealta').classList.toggle('oculto', !(p.Estado === 'firmada' && PUEDE.capturarPrealta(estado.rol)));
@@ -1461,6 +1508,7 @@ async function eliminarPrealta() {
 
 async function firmarPrealta() {
     const p = estado.prealtaAbierta; if (!p) return;
+    await escribiendo('btnFirmar', async () => {   // C-24 / C-23
     const reFirma = p.Estado === 'firmada';   // S-01: trae el sello pero no su renglon en PLANTA_Firmas; solo falta la firma
     const { ok } = await confirmar({ titulo: 'Firmar la pre-alta', ok: 'Firmar',
         texto: reFirma ? `«${p.Title}» trae el sello de ${quien(p.FirmadaPor)} pero no su firma registrada, así que la puerta no la ve. Con tu firma queda completa; queda registrado quién y cuándo.`
@@ -1471,12 +1519,14 @@ async function firmarPrealta() {
         await firmar('prealta', p);   // S-01: primero la firma (403 si no eres validador/gerencia), luego el sello
         const campos = { Estado: 'firmada', FirmadaPor: estado.cuenta.username, FirmadaEl: new Date().toISOString() };
         await estado.cliente.actualizarRenglon(estado.siteId, L.prealtas, p.id, campos);
-        Object.assign(p, campos);
+        aplicar('prealtas', p, campos);   // C-23
         avisar('Pre-alta firmada.', 'bien'); trasCambioPrealta();
     } catch (e) { avisar('No se pudo firmar: ' + e.message, 'error'); }
+    });
 }
 async function cerrarPrealta() {
     const p = estado.prealtaAbierta; if (!p) return;
+    await escribiendo('btnCerrarPrealta', async () => {   // C-24 / C-23
     const { ok } = await confirmar({ titulo: 'Cerrar el programa', ok: 'Cerrar',
         texto: `«${p.Title}». La puerta dejará de aceptar góndolas contra él. No se borra: queda como historial.` });
     if (!ok) return;
@@ -1491,8 +1541,9 @@ async function cerrarPrealta() {
             delete campos.CerradaPor; delete campos.CerradaEl;
             avisar('Programa cerrado, pero sin registrar quién lo cerró' + (estado.rol === 'gerencia' ? ': la lista PLANTA_Prealtas no tiene todavía CerradaPor / CerradaEl (setup, tarea 10).' : '. Avisa a gerencia.'), 'ojo');   // U-31
         }
-        Object.assign(p, campos); trasCambioPrealta();
+        aplicar('prealtas', p, campos); trasCambioPrealta();   // C-23
     } catch (e) { avisar('No se pudo cerrar: ' + e.message, 'error'); }
+    });
 }
 
 // ================================================================ PADRON
@@ -1617,13 +1668,13 @@ function pintarPadron() {
     abrirGruposPadronEscritorio();
     const sel = estado.padronCarrier;
     const q = normaliza($('pdBusca').value.trim());
-    const pega = (...campos) => !q || campos.some(v => normaliza(v).includes(q));
+    const pega = filtroTexto(q);   // C-26
     $('pdResCarriers').textContent = ''; $('pdResCarriers').appendChild(resumenPadron('carriers', estado.carriers, 'activo'));
     $('pdResUnidades').textContent = ''; $('pdResUnidades').appendChild(resumenPadron('unidades', estado.unidades, 'amparada'));
     $('pdResChoferes').textContent = ''; $('pdResChoferes').appendChild(resumenPadron('choferes', estado.choferes, ['con licencia', 'con licencia']));
     let encontrados = 0;
     // C-18 (v0.25.0): un solo bucle sobre GRUPOS_PADRON en vez de tres gemelos; lo que cambia por grupo vive en la tabla.
-    const filtraCarrier = x => sel === null || sel === undefined || Number(x.CarrierId) === Number(sel);
+    const filtraCarrier = x => !haySel(sel) || Number(x.CarrierId) === Number(sel);   // C-26
     const contenedores = {};
     for (const [clave, g] of Object.entries(GRUPOS_PADRON)) {
         const cont = $(g.contenedor); cont.textContent = ''; contenedores[clave] = cont;
@@ -1638,11 +1689,11 @@ function pintarPadron() {
         }
     }
     const c1 = contenedores.carriers, c2 = contenedores.unidades, c3 = contenedores.choferes;
-    if (sel !== null && sel !== undefined) c1.appendChild(el('p', 'filtro', `Mostrando solo lo de ${nombreDe(estado.carriers, sel)} · toca el carrier otra vez para ver todo`));
+    if (haySel(sel)) c1.appendChild(el('p', 'filtro', `Mostrando solo lo de ${nombreDe(estado.carriers, sel)} · toca el carrier otra vez para ver todo`));
     if (!estado.carriers.length) c1.appendChild(el('p', 'pista', 'Sin carriers. La primera pre-alta necesita uno con su oficio ASEA transcrito.'));
     // U-18 (v0.22.0): un grupo sin renglones lo dice, y distinto si el vacio es por el filtro de carrier. Antes solo
     // Carriers tenia estado vacio y «0 unidades» se leia igual que «este carrier no tiene».
-    const filtrado = sel !== null && sel !== undefined;
+    const filtrado = haySel(sel);
     if (!q && !c2.querySelector('.renglon')) c2.appendChild(el('p', 'pista', filtrado ? `${nombreDe(estado.carriers, sel)} no tiene unidades en el padrón.` : 'Sin unidades. Se transcriben del oficio del carrier con «+ Alta».'));
     if (!q && !c3.querySelector('.renglon')) c3.appendChild(el('p', 'pista', filtrado ? `${nombreDe(estado.carriers, sel)} no tiene choferes en el padrón.` : 'Sin choferes. Se dan de alta con su licencia con «+ Alta».'));
     // Con texto en el buscador: los grupos con resultado se abren, los vacios lo dicen, y la cuenta va junto al campo.
@@ -1741,7 +1792,7 @@ async function activarPadron(clave, x, activo) {
             delete campos.Notas; sinNotas = true;
             await estado.cliente.actualizarRenglon(estado.siteId, L[clave], x.id, campos);
         }
-        Object.assign(x, campos);
+        aplicar(clave, x, campos);   // C-23
         const pendiente = clave === 'carriers' ? await segundoPaso(async () => { for (const v of vigenciasDelCarrier(x)) { await estado.cliente.actualizarRenglon(estado.siteId, L.vigencias, v.id, { Activo: activo }); v.Activo = activo; } }) : null;
         if (pendiente) avisar(`${NOMBRE_PADRON[clave]} ${activo ? 'reactivado' : 'dado de baja'}, pero su vigencia ASEA del tablero no cambió (${pendiente}). Edítalo y guarda para sincronizarla.`, 'ojo');
         else if (activo) avisar(`${NOMBRE_PADRON[clave]} reactivado.`, 'bien');
@@ -1786,7 +1837,7 @@ function validarFormaPadron(clave) {
     return null;
 }
 function llenarFormaPadron(clave, x) {
-    const f = v => v === null || v === undefined ? '' : String(v);
+    const f = textoDe;   // C-26
     const fecha = v => v ? fechaCorta(v) : '';
     if (clave === 'carriers') {
         $('pcTitle').value = f(x.Title); $('pcAut').value = f(x.AutorizacionASEA); $('pcVig').value = fecha(x.VigenciaASEA); $('pcFolio').value = f(x.FolioOficio);
@@ -1819,16 +1870,15 @@ function cerrarFormaPadron(clave) {
     estado.padronEdit = null; tituloFormaPadron(clave);
     cerrarForma(FORMA_PADRON[clave].forma);
 }
-// Para el PATCH: lo vacío va como null para que SharePoint lo borre; `limpiar()` lo omitiría y el dato viejo sobreviviría.
-function paraPatch(campos) { const o = {}; for (const k in campos) o[k] = campos[k] === '' || campos[k] === undefined ? null : campos[k]; return o; }
 const AVISO_ALTA = { carriers: 'Carrier dado de alta. Ahora sus unidades, transcritas del oficio.', unidades: 'Unidad transcrita.', choferes: 'Chofer dado de alta.' };
+const BOTON_GUARDAR_PADRON = { carriers: 'btnGuardarCarrier', unidades: 'btnGuardarUnidad', choferes: 'btnGuardarChofer' };
 async function guardarPadron(clave) {
     if (!PUEDE.capturarPrealta(estado.rol)) { avisar('Tu rol no edita el padrón.', 'error'); return; }
     const falta = validarFormaPadron(clave); if (falta) { avisar(falta, 'error'); return; }
     const edit = estado.padronEdit && estado.padronEdit.clave === clave ? estado.padronEdit.x : null;
     let campos;
     try { campos = leerFormaPadron(clave); } catch (e) { avisar(e.message, 'error'); return; }
-    try {
+    await escribiendo(BOTON_GUARDAR_PADRON[clave], async () => { try {   // C-24: un doble toque creaba dos carriers / unidades / choferes
         await refrescarCliente();
         if (edit) {
             delete campos.Activo;   // editar no reactiva ni da de baja
@@ -1845,7 +1895,7 @@ async function guardarPadron(clave) {
             const vsAntes = clave === 'carriers' ? vigenciasDelCarrier(edit) : [];
             try { await estado.cliente.actualizarRenglon(estado.siteId, L[clave], edit.id, paraPatch(campos)); }
             catch (e) { if (campos.Notas && esColumnaFaltante(e)) throw new Error('la vigencia no se puede cambiar todavía' + (estado.rol === 'gerencia' ? ': la lista no tiene la columna Notas (tarea 9 de setup-carlos.md)' : '; avisa a gerencia')); throw e; }   // U-31
-            Object.assign(edit, campos);
+            aplicar(clave, edit, campos);   // C-23
             // La vigencia ASEA del tablero se llama por el carrier y guarda su fecha: se corrige junto con él. Es el segundo
             // paso (C-05): si falla, el carrier ya quedo y el aviso lo dice; guardar de nuevo la sincroniza (Activo incluido).
             const pendiente = clave === 'carriers' ? await segundoPaso(async () => {
@@ -1858,7 +1908,7 @@ async function guardarPadron(clave) {
             pintarPadron();
         } else {
             const nuevo = await estado.cliente.crearRenglon(estado.siteId, L[clave], limpiar(campos));
-            estado[clave].push(nuevo);
+            anclar(clave, nuevo);   // C-23
             const pendiente = clave === 'carriers' && nuevo.VigenciaASEA ? await segundoPaso(() => altaVigencia(`Autorización ASEA transporte · ${nuevo.Title}`, 'tercero', 'carrier', 'legal', nuevo.VigenciaASEA, nuevo.FolioOficio)) : null;
             vaciarFormaPadron(clave); cerrarFormaPadron(clave);
             if (pendiente) avisar(`${NOMBRE_PADRON[clave]} dado de alta, pero su vigencia ASEA NO quedó en el tablero (${pendiente}). Edítalo y guarda para crearla.`, 'ojo');
@@ -1867,7 +1917,7 @@ async function guardarPadron(clave) {
             if (clave === 'carriers' && $('paForma').open) elegirCarrierEnPrealta(nuevo);
             pintarPadron();
         }
-    } catch (e) { avisar('No se pudo guardar: ' + e.message, 'error'); }
+    } catch (e) { avisar('No se pudo guardar: ' + e.message, 'error'); } });
 }
 async function altaVigencia(titulo, titular, rol, fuente, vence, folio) {
     const v = await estado.cliente.crearRenglon(estado.siteId, L.vigencias, limpiar({ Title: titulo, Titular: titular, Rol: rol, Fuente: fuente, Vence: vence, Folio: folio, AvisoDias: CONFIG.avisoVigenciaDias, Activo: true }));
@@ -2069,7 +2119,7 @@ function pintarHoy() {
     // revisar», que era la unica entrada de esa tarjeta sin accion; la excepcion se cuenta una sola vez (en la tarjeta).
     const botonesExcepcion = e => {
         const bs = [];
-        if (PUEDE.autorizarExcepcion(estado.rol)) bs.push({ texto: 'Autorizar', accion: 'autorizar', clase: 'si', alClic: () => autorizarExcepcion(vivo('embarques', e)), deshabilitado: motivoSinFirmas() });
+        if (PUEDE.autorizarExcepcion(estado.rol)) bs.push({ texto: 'Autorizar', accion: 'autorizar', clase: 'si', alClic: ev => autorizarExcepcion(vivo('embarques', e), ev.currentTarget), deshabilitado: motivoSinFirmas() });
         for (const b of botonCorreccion(e)) bs.push({ ...b, clase: 'no' });
         return bs;
     };
@@ -2155,11 +2205,11 @@ document.addEventListener('visibilitychange', () => {
 if (CONFIG.refrescoMs > 0) setInterval(() => {
     if (document.visibilityState === 'visible' && estado.siteId && Date.now() - estado.cargadoEl > CONFIG.refrescoMs - 5000) recargar(true);
 }, CONFIG.refrescoMs);
-for (const b of $('pestanas').querySelectorAll('button')) b.addEventListener('click', () => irA(b.dataset.p));
+for (const b of $('pestanas').querySelectorAll('button')) b.addEventListener('click', () => irDesdePestana(b.dataset.p));   // C-27 / U-41
 $('puPrealta').addEventListener('change', () => { pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta(); });
 // U-17 (v0.22.0): se compara con data-placa; el textContent del chip trae pegado el <small> («55XY9Kgóndola · 20,000 kg»)
 // y una unidad sin placa plana nunca se marcaba al teclear.
-$('puPlaca').addEventListener('input', () => { const a = placaNormal($('puPlaca').value); for (const x of $('puUnidades').querySelectorAll('.u')) x.classList.toggle('sel', !!a && x.dataset.placa === a); });
+$('puPlaca').addEventListener('input', () => marcarChip($('puUnidades'), placaNormal($('puPlaca').value)));   // C-28: clase y aria-pressed
 $('puChofer').addEventListener('change', () => {
     // El nombre se rellena con el del padrón y se REEMPLAZA al cambiar de chofer, salvo que alguien lo haya editado a mano
     // (se distingue porque el valor ya no es el que puso la app). Antes solo se llenaba si estaba vacío y se quedaba el anterior.
@@ -2186,11 +2236,8 @@ $('btnGuardarPeso').addEventListener('click', guardarPeso);
 $('btnCancelarPeso').addEventListener('click', async () => {
     // U-24 (v0.26.0): con kg o foto ya capturados pregunta, como las formas (U-09); vacío cierra directo. En el celular
     // Cancelar queda justo bajo el Guardar pegado y un toque con guante tiraba la foto del indicador sin avisar.
-    if ($('baKg').value.trim() || estado.fotoBytes) {
-        const { ok } = await confirmar({ titulo: 'Cancelar el pesaje', peligro: true, ok: 'Descartar', texto: 'Se pierden el peso tecleado y la foto del indicador; habría que volver a tomarla.' });
-        if (!ok) return;
-    }
-    estado.pesando = null; estado.fotoBytes = null; soltarFotoPrevia(); $('baPesar').classList.add('oculto'); repintar();   // C-12: la lista se repinta (un refresco con el pesaje abierto la dejaba vieja)
+    // C-27 (v0.28.0): la compuerta es soltarPesaje(), la misma que al cambiar de pestaña.
+    if (await soltarPesaje()) repintar();   // C-12: la lista se repinta (un refresco con el pesaje abierto la dejaba vieja)
 });
 $('btnImprimir').addEventListener('click', () => window.print());
 // El boton vive dentro del <summary>: sin preventDefault el clic pliega el grupo (igual que en el padron).

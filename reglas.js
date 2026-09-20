@@ -42,8 +42,8 @@ export function evaluarVigencia(que, fechaIso, clase, avisoDias, hoy = new Date(
     const d = diasPara(fechaIso, hoy);
     if (d === null) return { clase, regla: que, ok: false, detalle: 'sin fecha de vigencia capturada' };
     const ddmm = `${fechaIso.slice(8, 10)}/${fechaIso.slice(5, 7)}/${fechaIso.slice(0, 4)}`;   // dd/mm/aaaa, el estándar de la casa
-    if (d < 0) return { clase, regla: que, ok: false, detalle: `vencida hace ${-d} dia(s) (${ddmm})` };
-    if (d <= avisoDias) return { clase: CLASE.AVISO, regla: que, ok: true, detalle: `vence en ${d} dia(s) (${ddmm})` };
+    if (d < 0) return { clase, regla: que, ok: false, detalle: `vencida hace ${plural(-d, 'día')} (${ddmm})` };
+    if (d <= avisoDias) return { clase: CLASE.AVISO, regla: que, ok: true, detalle: `vence en ${plural(d, 'día')} (${ddmm})` };
     return null;
 }
 
@@ -260,3 +260,39 @@ export function accionCorreccion(embarque) {
     if (!embarque || embarque.Etapa === 'anulado') return null;
     return embarque.Etapa === 'compuerta' && !embarque.Title ? 'eliminar' : 'anular';
 }
+
+// ---------------------------------------------------------------- C-25 (v0.28.0): la frontera de fechas y utilerias puras
+// Vivian en app.js, que no se importa desde node: la E2E solo pegaba ISO y nadie probaba «16/03/26», «31/04/2026» ni el
+// mensaje de error. Fechas: el estandar de la casa es dd/mm/aaaa (Carlos, 2026-09-05), en pantalla, en el ticket y al
+// capturar; lo guardado en SharePoint sigue siendo ISO.
+export function fechaCorta(iso) {
+    if (!iso) return '—';
+    const s = String(iso);
+    return /^\d{4}-\d{2}-\d{2}/.test(s) ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : s;
+}
+/** Acepta dd/mm/aaaa (lo que teclea la gente) y aaaa-mm-dd (pegados y pruebas). Vacio = null; cualquier otra cosa lanza. */
+export function aIsoDia(texto) {
+    const s = String(texto || '').trim();
+    if (!s) return null;
+    let m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2}|\d{4})$/);
+    let y, mo, d;
+    // Ano de dos cifras = 20aa: en la puerta se teclea «16/03/26» (fotos de Carlos, 2026-09-06) y ninguna vigencia es del siglo pasado.
+    if (m) { d = +m[1]; mo = +m[2]; y = m[3].length === 2 ? 2000 + +m[3] : +m[3]; }
+    else if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else throw new Error(`Fecha «${s}» no válida: escríbela como dd/mm/aaaa`);
+    const f = new Date(y, mo - 1, d, 12);
+    if (f.getFullYear() !== y || f.getMonth() !== mo - 1 || f.getDate() !== d) throw new Error(`Fecha «${s}» no existe: escríbela como dd/mm/aaaa`);
+    return f.toISOString();
+}
+/** Al teclear una fecha: solo digitos y las barras se ponen solas (05092026 -> 05/09/2026); un ISO pegado se muestra dd/mm/aaaa. */
+export function autoformatoFecha(valor) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) return fechaCorta(valor);
+    const dig = valor.replace(/\D/g, '').slice(0, 8);
+    return dig.length > 4 ? `${dig.slice(0, 2)}/${dig.slice(2, 4)}/${dig.slice(4)}` : dig.length > 2 ? `${dig.slice(0, 2)}/${dig.slice(2)}` : dig;
+}
+/** «1 gondola» / «3 gondolas» (U-36): sin «(s)». El plural se pasa solo cuando no es singular + «s». */
+export const plural = (n, uno, varios = uno + 's') => `${n} ${n === 1 ? uno : varios}`;
+/** Para el POST: lo vacio no viaja. */
+export function limpiar(obj) { const o = {}; for (const k in obj) if (obj[k] !== null && obj[k] !== undefined && obj[k] !== '') o[k] = obj[k]; return o; }
+/** Para el PATCH: lo vacio va como null para que SharePoint lo borre; `limpiar()` lo omitiria y el dato viejo sobreviviria. */
+export function paraPatch(campos) { const o = {}; for (const k in campos) o[k] = campos[k] === '' || campos[k] === undefined ? null : campos[k]; return o; }
