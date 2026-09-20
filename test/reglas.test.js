@@ -1,6 +1,6 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -183,4 +183,19 @@ console.log('reglas: ok');
     assert.equal(tipoDeArchivo('2026-09-01_CALYTEK_Recibo_telmex.pdf'), 'otro');
     assert.equal(tipoDeArchivo('foto-del-indicador.PNG'), 'foto');
     assert.equal(tipoDeArchivo(''), 'otro'); assert.equal(tipoDeArchivo(null), 'otro');
+    // C-32 (v0.34.0): el ORDEN de los patrones decide el filtro «Tipo» cuando un nombre casa dos: ticket > manifiesto > csf > oficio > foto.
+    assert.equal(tipoDeArchivo('2026-09-20_CALYTEK_Ticket_E-26-00012_con-Manifiesto.pdf'), 'ticket');
+    assert.equal(tipoDeArchivo('2026-01-09_ASEA_Oficio_anexo-CSF_Transportes-Demo.pdf'), 'csf');
+    assert.equal(tipoDeArchivo('2025-03-14_ASEA_Oficio-UGI-0212-2025_escaneado.jpg'), 'oficio');
+    // C-30 (v0.34.0): un solo «lunes» (sobre la fecha ya cortada en hora de México; aritmética UTC, sin zona del dispositivo).
+    assert.equal(lunesDe('2026-09-20'), '2026-09-14');   // domingo → el lunes anterior
+    assert.equal(lunesDe('2026-09-14'), '2026-09-14');   // lunes → él mismo
+    assert.equal(lunesDe('2026-09-15'), '2026-09-14');
+    assert.equal(lunesDe('2026-01-01'), '2025-12-29');   // cruza el año
+    assert.equal(sumarDias('2026-09-14', 6), '2026-09-20'); assert.equal(sumarDias('2026-03-01', -1), '2026-02-28');
+    // S-15 (v0.34.0): en el buzón solo se listan los lotes de la app (AAAA-MM-DD_<etiqueta>_…), no lo que Carlos deposita.
+    assert.equal(esLoteDeLaApp('2026-09-20_Embarque_bruto-e-26-00012-44600-kg', 'Embarque'), true);
+    assert.equal(esLoteDeLaApp('2026-09-20_Embarque_bruto-e-26-00012-44600-kg 2', 'Embarque'), true);   // el «2» que Graph agrega al chocar
+    assert.equal(esLoteDeLaApp('2026-09-18_MINSA_Contrato_Transportes-Demo.pdf', 'Embarque'), false);
+    assert.equal(esLoteDeLaApp('Embarque_sin-fecha', 'Embarque'), false); assert.equal(esLoteDeLaApp('', 'Embarque'), false);
 }

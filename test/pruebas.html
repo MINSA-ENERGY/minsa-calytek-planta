@@ -222,6 +222,9 @@
         archivo('04_SGI/02_Ambiental/Permisos-y-Autorizaciones/2025-03-14_ASEA_Oficio-UGI-DEMO-0000-2025_Transportes-Demo.pdf', 2400000, '2025-03-14T12:00:00Z');
         archivo('04_SGI/02_Ambiental/Permisos-y-Autorizaciones/2026-01-09_SAT_CSF_Transportes-Demo.pdf', 310000, '2026-01-09T12:00:00Z');
         carpeta('99_Pendiente-Archivar', '2026-09-01T12:00:00Z');
+        // S-15 (v0.34.0): el buzon trae ademas lo que Carlos deposita para /archivar-calytek; la app NO lo lista.
+        carpeta('99_Pendiente-Archivar/2026-09-18_Fianza-ASEA_borrador', '2026-09-18T12:00:00Z');
+        archivo('99_Pendiente-Archivar/2026-09-18_MINSA_Contrato_Transportes-Demo.pdf', 420000, '2026-09-18T12:00:00Z');
     };
 })();
 
@@ -316,6 +319,19 @@ async function probarArchivos(emb1) {
     const raizBuzon = arbol().querySelectorAll(':scope > details')[2];
     R.ok('v0.33.0: sin coincidencias en lo leído se esconden las ramas leídas; la que no se ha abierto no se juzga (y no hay #arVacio)', oculto(raizEv) && oculto(raizPadron) && !oculto(raizBuzon) && !visible('arVacio'));
     await abrir('details[data-ruta="99_Pendiente-Archivar"]', 'buzón');
+    {
+        const hijosBuzon = [...raizBuzon.querySelectorAll(':scope > .hijos > details, :scope > .hijos > .arch')];
+        R.ok('S-15: la rama del buzón lista SOLO los lotes de la app (carpetas AAAA-MM-DD_Embarque_…): la fianza y el contrato depositados no se pintan',
+            hijosBuzon.every(x => x.tagName === 'DETAILS' && /_embarque_/.test(x.dataset.nombre)) && !raizBuzon.textContent.includes('Fianza') && !raizBuzon.textContent.includes('Contrato') && (hijosBuzon.length > 0 || raizBuzon.textContent.includes('Sin lotes de la app')),
+            `hijos ${hijosBuzon.map(x => x.dataset.nombre || x.textContent).join(' | ').slice(0, 120)}`);
+        // U-63 (v0.34.0): el punto de estado de lectura vive en el renglón de sesión del rail, con el texto en title
+        R.ok('U-63: #syncPunto (rail) existe, es .sync y lleva «Al día · leído» en title', !!$('syncPunto') && $('syncPunto').classList.contains('sync') && /Al día · leído/.test($('syncPunto').title), $('syncPunto') ? $('syncPunto').title : 'sin nodo');
+        // U-59 (v0.34.0): sin ratón (< 900 px) el botón chico mide 36 px; la corrida va a menos de 900
+        const chicos = [...document.querySelectorAll('.alta, .renglon button, .arbol summary, .mn-btn.is-sm')].filter(b => b.offsetParent && b.getClientRects().length);
+        const bajo = chicos.filter(b => b.getBoundingClientRect().height < 36);
+        R.ok('U-59: --control-h-sm = 36px sin ratón y ningún botón chico visible mide menos de 36 px', window.matchMedia('(min-width: 900px)').matches || (getComputedStyle(document.documentElement).getPropertyValue('--control-h-sm').trim() === '36px' && chicos.length > 0 && bajo.length === 0),
+            `${window.innerWidth}px · token ${getComputedStyle(document.documentElement).getPropertyValue('--control-h-sm').trim()} · ${chicos.length} medidos · ${bajo.length} < 36: ${bajo.slice(0, 3).map(b => `${b.className || b.tagName} ${Math.round(b.getBoundingClientRect().height)}`).join(', ')}`);
+    }
     // los lotes que esta corrida dejo en el buzon son carpetas sin leer: se abren para que el filtro las juzgue
     for (const d of raizBuzon.querySelectorAll(':scope > .hijos > details')) await abrir(`details[data-ruta="${d.dataset.ruta}"]`, d.dataset.ruta);
     R.ok('v0.33.0: leídas las tres ramas (y los lotes del buzón) sin coincidencia, lo dice (#arVacio)', visible('arVacio') && oculto(raizBuzon), `buzón leído ${raizBuzon.dataset.leida} · lotes ${raizBuzon.querySelectorAll(':scope > .hijos > details').length}`);
@@ -894,7 +910,27 @@ try {
         document.querySelector('#pestanasExtra button[data-p="reportes"]').click();
         const kp = $('tbKpis').textContent;
         R.ok('v0.32.0: Reportes pinta avance por programa, por carrier y las 8 semanas', $('repProgramas').children.length > 0 && $('repCarriers').children.length > 0 && $('repSemanas').children.length === 8, `programas ${$('repProgramas').children.length} · carriers ${$('repCarriers').children.length} · semanas ${$('repSemanas').children.length}`);
+        // C-33 (v0.34.0): rechazos, netos fuera de banda, impresión y rail plegable, que la suite no miraba.
+        {
+            const rechazosDb = filas('embarques').filter(e => e.fields.Etapa !== 'anulado' && (e.fields.Etapa === 'rechazado' || e.fields.Compuerta === 'excepcion-comercial'));
+            const rjR = [...$('repRechazos').querySelectorAll('.renglon')];
+            R.ok('C-33: Reportes lista los rechazos y excepciones de lo cargado, cada uno con su etiqueta de compuerta (C-29: el mismo renglón que Hoy)', rjR.length === rechazosDb.length && rjR.every(r => r.querySelector('.etiqueta')), `reportes ${rjR.length} · db ${rechazosDb.length}`);
+            const fueraDb = filas('embarques').filter(e => e.fields.Etapa === 'cerrado' && /Neto fuera de banda/.test(e.fields.Notas || '')).length;
+            R.ok('C-33: netos fuera de banda: un renglón por cerrada con esa nota, o «Ninguno: N cerradas»', fueraDb ? $('repNetos').querySelectorAll('.renglon').length === fueraDb : /^Ninguno: \d+ cerradas/.test($('repNetos').textContent), `db ${fueraDb} · ${$('repNetos').textContent.slice(0, 60)}`);
+            const printReal = window.print; let imprimio = false; window.print = () => { imprimio = true; };
+            clic('btnImprimirReportes'); const conClase = document.body.classList.contains('imprimiendo-reportes');
+            window.dispatchEvent(new Event('afterprint')); window.print = printReal;
+            R.ok('C-33: «Imprimir» pone body.imprimiendo-reportes, llama a print() y afterprint la quita', imprimio && conClase && !document.body.classList.contains('imprimiendo-reportes'), `print ${imprimio} · con clase ${conClase}`);
+            clic('btnMarca');
+            const plegado = $('app').classList.contains('rail-plegado') && $('btnMarca').getAttribute('aria-expanded') === 'false' && $('btnPlegar').getAttribute('aria-expanded') === 'false' && localStorage.getItem('calytek-planta-rail') === 'plegado';
+            clic('btnPlegar');
+            R.ok('C-33: la marca pliega el rail (clase, aria-expanded=false en los dos botones, localStorage) y «‹» lo vuelve a abrir', plegado && !$('app').classList.contains('rail-plegado') && $('btnMarca').getAttribute('aria-expanded') === 'true' && localStorage.getItem('calytek-planta-rail') === 'abierto', `plegado ${plegado}`);
+            // U-61 (v0.34.0): la cifra de cada semana con toneladas va a la vista, no solo en title
+            const conKg = [...$('repSemanas').children].filter(d => d.querySelector('i').title !== '0.0 t');
+            R.ok('U-61: cada semana con toneladas trae su cifra visible (.cifra) igual al title de la barra', conKg.length > 0 && conKg.every(d => d.querySelector('.cifra') && d.querySelector('i').title === d.querySelector('.cifra').textContent + ' t'), `${conKg.length} semanas con kg`);
+        }
         document.querySelector('#pestanas button[data-p="hoy"]').click();
+        R.ok('C-29: Hoy pinta los mismos rechazos que Reportes (hasta 10), con la misma etiqueta de compuerta', $('tbRechazos').querySelectorAll('.renglon').length === Math.min(10, $('repRechazos').querySelectorAll('.renglon').length) && [...$('tbRechazos').querySelectorAll('.renglon')].every(r => r.querySelector('.etiqueta')), `hoy ${$('tbRechazos').querySelectorAll('.renglon').length} · reportes ${$('repRechazos').querySelectorAll('.renglon').length}`);
         R.ok('KPI góndolas cerradas hoy = 2', /Góndolascerradashoy2/.test(kp.replace(/\s+/g, '')), kp.slice(0, 80));
         R.ok('KPI toneladas hoy = 25.8 t (21,220 + 4,600)', kp.includes('25.8'), kp.match(/[\d.]+t/g)?.join(' '));
         R.ok('rechazos de la semana = 1', /Rechazosestasemana1/.test(kp.replace(/\s+/g, '')));
@@ -979,6 +1015,17 @@ try {
             await esperar(() => visible('baPesar'), 'pesaje 110'); poner('baKg', '41000'); await foto(); clic('btnGuardarPeso');
             await esperar(() => avisoCon('Bruto guardado'), 'bruto 110');
             const e110 = filas('embarques').find(e => e.fields.Manifiesto === 'MINSA/RME/110/2025');
+            // C-31 (v0.34.0): el buzón del árbol ya se había leído en 11b; el lote recién subido tiene que verse SIN Actualizar.
+            {
+                const gets = DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length;
+                document.querySelector('#pestanasExtra button[data-p="archivos"]').click();
+                const buzonC31 = $('arArbol').querySelectorAll(':scope > details')[2];
+                if (!buzonC31.open) buzonC31.open = true;
+                const folio110 = String(e110.fields.Title).toLowerCase();
+                const lote110 = await esperar(() => [...buzonC31.querySelectorAll(':scope > .hijos > details')].find(d => d.dataset.nombre.includes(folio110)), 'lote 110 en el buzón sin Actualizar').catch(() => null);
+                R.ok('C-31: el lote que se acaba de subir aparece en «Pendiente de archivar» sin tocar Actualizar (la rama se releyó sola)', !!lote110 && DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length >= gets && !avisoCon('Datos actualizados'), `lote ${!!lote110} · gets +${DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length - gets}`);
+                document.querySelector('#pestanas button[data-p="bascula"]').click();
+            }
             R.ok('el folio del anulado NO se reutiliza', e110.fields.Title === `E-${aa}-00004`, e110.fields.Title);
             // C-12 (v0.25.0): con el pesaje de A abierto, un refresco (captura a medias: NO repinta) sustituye estado.embarques;
             // el boton «Pesar tara» de B sigue en el DOM viejo con un objeto huerfano. El handler resuelve el objeto VIVO al

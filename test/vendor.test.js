@@ -38,4 +38,14 @@ assert.equal(typeof exportsMsal.InteractionRequiredAuthError, 'function', 'el bu
 assert.equal(exportsMsal.CacheLookupPolicy && exportsMsal.CacheLookupPolicy.AccessTokenAndRefreshToken, 2, 'CacheLookupPolicy.AccessTokenAndRefreshToken ≠ 2 (token() lo usa para no caer al iframe)');
 const version = (bytes.toString('utf8', 0, 80).match(/@azure\/msal-browser v(\d+\.\d+\.\d+)/) || [])[1];
 assert.ok(version && integridad.includes(`@azure/msal-browser ${version} |`), `la cabecera del bundle dice v${version} y INTEGRIDAD.md no tiene fila con esa version`);
-console.log(`vendor: ok (msal-browser ${version}, sha256 ${sha256.slice(0, 12)}…, integrity cotejado, API de app.js presente)`);
+// S-17 (v0.34.0): las 8 fuentes vendorizadas tienen fila con sha256 en INTEGRIDAD.md (origen Google Fonts) y el archivo del
+// repo ES ese hash; y toda fuente que estilo.css declare en @font-face tiene fila. `@font-face` no admite integrity=.
+const filasFuentes = new Map([...integridad.matchAll(/^\| `fuentes\/([^`]+)` \|[^\n]*`([0-9a-f]{64})`/gm)].map(m => [m[1], m[2]]));
+const enCss = [...readFileSync(join(raiz, 'estilo.css'), 'utf8').matchAll(/url\("\.\/vendor\/fuentes\/([^"]+)"\)/g)].map(m => m[1]);
+assert.ok(enCss.length >= 8, `estilo.css declara ${enCss.length} fuentes; se esperaban las 8 vendorizadas`);
+for (const f of enCss) {
+    assert.ok(filasFuentes.has(f), `vendor/fuentes/${f} (en estilo.css) no tiene fila en INTEGRIDAD.md`);
+    const h = createHash('sha256').update(readFileSync(join(raiz, 'vendor', 'fuentes', f))).digest('hex');
+    assert.equal(h, filasFuentes.get(f), `vendor/fuentes/${f}: sha256 del archivo ≠ INTEGRIDAD.md (¿se sustituyó la fuente sin anotarlo?)`);
+}
+console.log(`vendor: ok (msal-browser ${version}, sha256 ${sha256.slice(0, 12)}…, integrity cotejado, API de app.js presente; ${enCss.length} fuentes con hash cotejado)`);

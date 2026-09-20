@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp } from './reglas.js';
 
-const VERSION = '0.33.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.34.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -45,9 +45,9 @@ const pca = new msal.PublicClientApplication({
         authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
         redirectUri: new URL('./', window.location.href).href
     },
-    // storeAuthStateInCookie ya no existe en msal-browser 5.x (se quito de CacheOptions); se deja escrito porque el bundle lo ignora
-    // y documenta la decision de S-04 (nada de cookies). sessionStorage sigue siendo decision cerrada.
-    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false }
+    // S-04: nada de cookies (storeAuthStateInCookie ya no existe en msal-browser 5.x; S-16 quito la opcion muerta).
+    // sessionStorage sigue siendo decision cerrada.
+    cache: { cacheLocation: 'sessionStorage' }
 });
 
 // ---------------------------------------------------------------- avisos y utilerias de DOM
@@ -304,14 +304,20 @@ function ponerQuien(correo, rol = '') {
     $('correoMovil').textContent = nombre === correo ? '' : correo;
 }
 // I5 (7-sep): cuando se leyeron las listas por ultima vez, en la barra movil y en el rail. Ambar pasados 5 minutos.
+let avisoReintento = false;
 function pintarSync(leyendo = false, texto = 'Leyendo las listas…') {
     const t = Date.now() - estado.cargadoEl;
     const hace = !estado.cargadoEl ? '' : t < 60000 ? `hace ${Math.max(1, Math.round(t / 1000))} s` : t < 3600000 ? `hace ${Math.round(t / 60000)} min` : `hace ${Math.round(t / 3600000)} h`;
+    const dice = leyendo ? texto : estado.cargadoEl ? `Al día · leído ${hace}` : '';
     for (const x of document.querySelectorAll('.sync')) {
-        x.textContent = leyendo ? texto : estado.cargadoEl ? `Al día · leído ${hace}` : '';
+        // U-63 (v0.34.0): el punto del renglón de sesión del rail no lleva texto (la hora sigue dentro del «···», decisión cerrada)
+        if (x.classList.contains('sync-punto')) { x.title = dice; x.setAttribute('aria-label', dice); } else x.textContent = dice;
         x.classList.toggle('viejo', !leyendo && t > 300000);
         x.classList.toggle('leyendo', leyendo);
     }
+    // U-63: en escritorio el reintento de C-17 quedaba detrás del «···»; se dice también en #avisos y se limpia al terminar de leer
+    if (leyendo && texto !== 'Leyendo las listas…') { avisar(texto, 'ojo'); avisoReintento = true; }
+    else if (!leyendo && avisoReintento) { avisoReintento = false; limpiarAvisos(); }
 }
 setInterval(() => { if (estado.siteId) pintarSync(recargando); }, 15000);
 
@@ -524,12 +530,14 @@ async function recargar(silencioso = false) {
     // solo se frenaba el REPINTADO (capturaAMedias); cargarTodo() corria igual. El timer lo vuelve a intentar al minuto.
     if (escrituras > 0 || $('dlg').open) { if (!silencioso && escrituras > 0) avisar('Espera a que termine de guardar y vuelve a actualizar.', 'ojo'); return; }
     recargando = true;
-    if (!silencioso) estado.archivos = null;   // v0.33.0: el Actualizar a mano relee el arbol; el refresco de 2 min no lo tira (se pierden las carpetas abiertas)
     for (const id of ['btnActualizar', 'btnActualizarMovil']) $(id).disabled = true;
     pintarSync(true);
     try {
         await refrescarCliente();
         await cargarTodo();
+        // v0.33.0: el Actualizar a mano relee el arbol; el refresco de 2 min no lo tira (se pierden las carpetas abiertas).
+        // C-34 (v0.34.0): se tira aqui, ya leido todo, y no antes del await: en medio un toggle del arbol caia sobre null.
+        if (!silencioso) estado.archivos = null;
         estado.rol = rolDe(estado.cuenta.username, estado.roles);
         ponerQuien(estado.cuenta.username, estado.rol);
         // No pisar una captura a medias. El refresco SILENCIOSO repinta en su lugar (U-04, v0.21.0): irA()
@@ -1145,7 +1153,7 @@ async function guardarPeso() {
 // carpeta huerfana con _lote.json de un embarque que nunca avanzo (auditoria 2026-09-05).
 async function guardarConLote(e, lote, campos, paso) {
     try { await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, campos, paso); }
-    catch (err) { try { await estado.cliente.borrarItemDrive(estado.siteId, lote.carpetaId); } catch (_) { /* se reporta el error original */ } throw err; }
+    catch (err) { try { await estado.cliente.borrarItemDrive(estado.siteId, lote.carpetaId); invalidarRama(CONFIG.buzon); } catch (_) { /* se reporta el error original */ } throw err; }
 }
 // C-26 (v0.28.0): las dos ramas de guardarPeso, cada una con su relectura; el re-anclaje en la ventana es anclar().
 async function guardarBruto(e, kg, ahora, paso) {
@@ -1223,6 +1231,7 @@ async function subirEvidencia(folio, fase, kg, avisar) {
     };
     await estado.cliente.subirPieza(estado.siteId, ruta, '_lote.json',
         new TextEncoder().encode(JSON.stringify(manifiesto, null, 2) + '\n'), 'application/json', avisar);
+    invalidarRama(CONFIG.buzon);   // C-31 (v0.34.0): Archivos ya no muestra el buzón de antes de este lote
     return { ref: `${fecha}|${concepto}`, carpetaId };
 }
 
@@ -2034,7 +2043,7 @@ function pintarFranjaHoy(pendientes, botonesExcepcion) {
 }
 
 // KPI: numero, tendencia y techo.
-function pintarKpisHoy({ cerradosHoy, cerradosAyer, cerradosSemana, activos, rechazosSemana, borradores }) {
+function pintarKpisReportes({ cerradosHoy, cerradosAyer, cerradosSemana, activos, rechazosSemana, borradores }) {
     const kg = xs => xs.reduce((a, e) => a + (Number(e.NetoKg) || 0), 0);
     const k = $('tbKpis'); k.textContent = '';
     const kpi = (l, n, unidad, t, clase) => {
@@ -2066,7 +2075,7 @@ function pintarReportes() {
     const kg = xs => xs.reduce((a, e) => a + (Number(e.NetoKg) || 0), 0);
     const t = x => (x / 1000).toFixed(1);
     $('repSub').textContent = `Lo que entró, lo que pesó y lo que no pasó, sobre lo cargado (${CONFIG.ventanaDias} días más lo abierto · ${estado.embarques.length} góndolas).`;
-    pintarKpisHoy({ cerradosHoy: cerrados(d => d === hoy), cerradosAyer: cerrados(d => d === ayer), cerradosSemana: cerrados(d => d >= lunes),
+    pintarKpisReportes({ cerradosHoy: cerrados(d => d === hoy), cerradosAyer: cerrados(d => d === ayer), cerradosSemana: cerrados(d => d >= lunes),
         activos, borradores, rechazosSemana: estado.embarques.filter(e => e.Etapa === 'rechazado' && dia(e) >= lunes) });
 
     // barras: nombre · barra proporcional · cifra en mono
@@ -2091,13 +2100,15 @@ function pintarReportes() {
 
     // toneladas netas por semana (lunes a domingo), las últimas 8; la semana en curso en el color de marca
     const sem = $('repSemanas'); sem.textContent = '';
-    const lunesDe = f => { const d = new Date(f + 'T12:00:00'); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d; };
-    const semanas = []; const l0 = lunesDe(hoy);
-    for (let i = 7; i >= 0; i--) { const d = new Date(l0); d.setDate(d.getDate() - 7 * i); const desde = fechaMexico(d); const h = new Date(d); h.setDate(h.getDate() + 6); semanas.push({ desde, hasta: fechaMexico(h), kg: 0 }); }
+    // C-30 (v0.34.0): el mismo «lunes» que cortesDia() (reglas.lunesDe sobre la fecha de México); antes se calculaba aquí con la zona del dispositivo
+    const semanas = []; const l0 = lunes;
+    for (let i = 7; i >= 0; i--) { const desde = sumarDias(l0, -7 * i); semanas.push({ desde, hasta: sumarDias(desde, 6), kg: 0 }); }
     for (const e of estado.embarques.filter(e => e.Etapa === 'cerrado')) { const f = diaCierre(e); const s = semanas.find(s => f >= s.desde && f <= s.hasta); if (s) s.kg += Number(e.NetoKg) || 0; }
     const topeSem = Math.max(1, ...semanas.map(s => s.kg));
     for (const s of semanas) {
-        const d = el('div', s.desde === fechaMexico(l0) ? 'hoy' : ''); const i = el('i'); i.style.height = Math.max(1, Math.round((s.kg / topeSem) * 100)) + '%'; i.title = `${t(s.kg)} t`; d.appendChild(i);
+        const d = el('div', s.desde === l0 ? 'hoy' : '');
+        d.appendChild(el('span', 'cifra', s.kg ? t(s.kg) : ''));   // U-61 (v0.34.0): la cifra a la vista; el title era solo hover
+        const i = el('i'); i.style.height = Math.max(1, Math.round((s.kg / topeSem) * 100)) + '%'; i.title = `${t(s.kg)} t`; d.appendChild(i);
         d.appendChild(document.createTextNode(new Date(s.desde + 'T12:00:00').toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: 'numeric', month: 'short' }).replace('.', ''))); sem.appendChild(d);
     }
     const enCurso = semanas[semanas.length - 1];
@@ -2105,15 +2116,9 @@ function pintarReportes() {
 
     // rechazos y excepciones (misma definición que la tarjeta de Hoy, sin el tope de 10) y netos fuera de banda
     const rj = $('repRechazos'); rj.textContent = '';
-    const rech = estado.embarques.filter(e => e.Etapa !== 'anulado' && (e.Etapa === 'rechazado' || e.Compuerta === 'excepcion-comercial')).sort((a, b) => b.id - a.id);
+    const rech = rechazosYExcepciones();
     if (!rech.length) rj.appendChild(el('p', 'vacio', 'Ninguno en lo cargado.'));
-    for (const e of rech) {
-        let causa = '';
-        try { causa = JSON.parse(e.CompuertaDetalle || '[]').filter(h => h.clase === 'legal' || h.clase === 'comercial').map(h => h.regla).join(', '); } catch (_) { /* detalle ilegible */ }
-        const r = renglon(`${e.Title || '(excepción)'} · ${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + quien(e.ExcepcionAutorizo) : ''}`);
-        r.firstChild.firstChild.appendChild(etiquetaCompuertaDe(e));
-        rj.appendChild(r);
-    }
+    for (const e of rech) rj.appendChild(renglonRechazo(e));
     const nt = $('repNetos'); nt.textContent = '';
     const fuera = estado.embarques.filter(e => e.Etapa === 'cerrado' && /Neto fuera de banda/.test(e.Notas || '')).sort((a, b) => b.id - a.id);
     if (!fuera.length) nt.appendChild(el('p', 'vacio', `Ninguno: las ${cerrados(() => true).length} cerradas quedaron dentro de la banda.`));
@@ -2129,10 +2134,10 @@ function pintarReportes() {
 const RAMAS_ARCHIVOS = () => [
     { ruta: CONFIG.evidencia.destinoBase, titulo: 'Evidencia de báscula', nota: 'por mes · un lote por pesaje' },
     { ruta: CONFIG.archivos.padron, titulo: 'Oficios ASEA y CSF de los carriers', nota: '' },
-    { ruta: CONFIG.buzon, titulo: 'Pendiente de archivar', nota: 'lo que la app acaba de subir' }
+    { ruta: CONFIG.buzon, titulo: 'Pendiente de archivar', nota: 'lo que la app acaba de subir', soloLotes: true }   // S-15: solo los lotes de la app, no el buzón entero
 ];
 const ICONO_CARPETA = 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z';
-const TIPOS_ARCHIVO = { ticket: 'ticket', foto: 'foto del indicador', manifiesto: 'manifiesto', oficio: 'oficio ASEA', csf: 'CSF', lote: 'lote de la app', otro: 'otro' };
+const TIPOS_ARCHIVO = { ticket: 'ticket', foto: 'foto del indicador', manifiesto: 'manifiesto', oficio: 'oficio ASEA', csf: 'CSF', lote: 'registro que deja la app al pesar', otro: 'otro' };
 function svgIcono(d, clase) {
     const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true'); if (clase) s.setAttribute('class', clase);
     const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); s.appendChild(p);
@@ -2141,13 +2146,19 @@ function svgIcono(d, clase) {
 const tamano = n => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n || 0} B`;
 async function hijosDe(ruta) {
     const a = estado.archivos;
+    if (!a) throw new Error('la biblioteca se está releyendo; abre la carpeta de nuevo');   // C-34 (v0.34.0)
     if (!a.ramas.has(ruta)) a.ramas.set(ruta, await estado.cliente.hijos(estado.siteId, ruta, m => avisar(m, 'ojo')));
     return a.ramas.get(ruta);
+}
+/** C-31 (v0.34.0): olvida lo leído de una rama y, si su carpeta está abierta en el árbol, la relee ya. La llama subirEvidencia. */
+function invalidarRama(ruta) {
+    if (estado.archivos) estado.archivos.ramas.delete(ruta);
+    for (const d of document.querySelectorAll('#arArbol details')) if (d.dataset.ruta === ruta) { delete d.dataset.leida; if (d.open && d.leer) d.leer(); }
 }
 function pintarArchivos() {
     // el filtro de programa sale de las pre-altas cargadas (todas: una cerrada sigue teniendo sus lotes en la biblioteca)
     opciones($('arPrograma'), [...estado.prealtas].sort((x, y) => y.id - x.id), p => p.id, p => `${p.Title}${p.Estado === 'cerrada' ? ' · cerrada' : ''}`, 'Todos los programas');
-    if (!estado.archivos) { estado.archivos = { biblioteca: null, ramas: new Map() }; construirArbol(); }
+    if (!estado.archivos) { estado.archivos = { biblioteca: null, ramas: new Map() }; construirArbol().catch(err => avisar('No se pudo armar el árbol: ' + err.message, 'error')); }   // C-34: sin catch, un throw dejaba «Abriendo…» para siempre
     else filtrarArbol();
 }
 async function construirArbol() {
@@ -2158,11 +2169,12 @@ async function construirArbol() {
     catch (err) { avisar('No se pudo abrir la biblioteca: ' + err.message, 'error'); }
     if (a !== estado.archivos) return;   // hubo un Actualizar en medio: lo pinta la lectura nueva
     caja.textContent = '';
-    for (const r of RAMAS_ARCHIVOS()) caja.appendChild(nodoCarpeta({ name: r.ruta }, r.ruta, r.titulo, r.nota));
+    for (const r of RAMAS_ARCHIVOS()) caja.appendChild(nodoCarpeta({ name: r.ruta }, r.ruta, r.titulo, r.nota, r.soloLotes));
     caja.firstChild.open = true;   // la evidencia abierta de entrada, como en el artifact
 }
-/** Una carpeta del árbol: <details> que lee sus hijos por Graph la primera vez que se abre. `titulo` solo en las tres raíces. */
-function nodoCarpeta(item, ruta, titulo, nota) {
+/** Una carpeta del árbol: <details> que lee sus hijos por Graph la primera vez que se abre. `titulo` solo en las tres raíces;
+ *  `soloLotes` (S-15) deja ver únicamente las carpetas de lote de la app. `d.leer` la relee (C-31, invalidarRama). */
+function nodoCarpeta(item, ruta, titulo, nota, soloLotes = false) {
     const d = el('details'); d.dataset.ruta = ruta; d.dataset.nombre = normaliza(titulo ? `${titulo} ${item.name}` : item.name);
     const s = el('summary'); s.appendChild(svgIcono('M9 6l6 6-6 6', 'flecha')); s.appendChild(svgIcono(ICONO_CARPETA));
     s.appendChild(el('span', '', titulo || item.name));
@@ -2171,24 +2183,27 @@ function nodoCarpeta(item, ruta, titulo, nota) {
     const n = el('span', 'n', item.folder && item.folder.childCount !== undefined ? String(item.folder.childCount) : ''); s.appendChild(n);
     d.appendChild(s);
     const hijos = el('div', 'hijos'); d.appendChild(hijos);
-    let leida = false;
-    d.addEventListener('toggle', async () => {
-        if (!d.open || leida) return;
-        leida = true;
+    let leyendo = false;
+    d.leer = async () => {
+        if (leyendo || d.dataset.leida === '1') return;
+        leyendo = true;
         hijos.textContent = ''; hijos.appendChild(el('p', 'vacio', 'Leyendo…'));
         let items;
         try { items = await hijosDe(ruta); }
-        catch (err) { hijos.textContent = ''; hijos.appendChild(el('p', 'vacio', 'No se pudo leer: ' + err.message)); leida = false; return; }
+        catch (err) { hijos.textContent = ''; hijos.appendChild(el('p', 'vacio', 'No se pudo leer: ' + err.message)); leyendo = false; return; }
+        leyendo = false;
         hijos.textContent = ''; d.dataset.leida = '1';   // desde aquí el filtro sí la juzga
         if (items === null) { hijos.appendChild(el('p', 'vacio', 'Esta carpeta aún no existe en la biblioteca.')); n.textContent = '—'; return; }
-        if (!items.length) hijos.appendChild(el('p', 'vacio', 'Vacía.'));
+        if (soloLotes) items = items.filter(it => it.folder && esLoteDeLaApp(it.name, CONFIG.evidencia.etiqueta));   // S-15
+        if (!items.length) hijos.appendChild(el('p', 'vacio', soloLotes ? 'Sin lotes de la app.' : 'Vacía.'));
         // carpetas primero y lo más reciente arriba: los nombres de la casa empiezan por la fecha
         const orden = items.slice().sort((x, y) => ((y.folder ? 1 : 0) - (x.folder ? 1 : 0)) || y.name.localeCompare(x.name, 'es'));
         for (const it of orden) hijos.appendChild(it.folder ? nodoCarpeta(it, `${ruta}/${it.name}`) : nodoArchivo(it));
         const nc = orden.filter(x => x.folder).length, na = orden.length - nc;
-        n.textContent = [nc ? plural(nc, 'carpeta') : '', na ? plural(na, 'archivo') : ''].filter(Boolean).join(' · ') || '0';
+        n.textContent = [nc ? plural(nc, soloLotes ? 'lote' : 'carpeta') : '', na ? plural(na, 'archivo') : ''].filter(Boolean).join(' · ') || '0';
         filtrarArbol();
-    });
+    };
+    d.addEventListener('toggle', () => { if (d.open) d.leer(); });
     return d;
 }
 /** Un archivo del árbol: enlace a SharePoint (abre en otra pestaña), extensión, nombre y «fecha · tamaño» en mono. */
@@ -2199,7 +2214,7 @@ function nodoArchivo(it) {
     a.appendChild(el('span', 'ext', ext.toUpperCase()));
     a.appendChild(el('span', '', it.name));
     a.title = `${it.name} · ${TIPOS_ARCHIVO[tipo]}`;
-    a.appendChild(el('span', 'd', `${fechaCorta(it.lastModifiedDateTime)} · ${tamano(Number(it.size) || 0)}`));
+    const dd = el('span', 'd', fechaCorta(it.lastModifiedDateTime)); dd.appendChild(el('span', 'tam', ` · ${tamano(Number(it.size) || 0)}`)); a.appendChild(dd);   // U-67: en celular la fecha baja de renglón y el tamaño se oculta
     return a;
 }
 /** Aplica los tres filtros sobre lo ya leído: un archivo pega por nombre y tipo; una carpeta leída se esconde si no le queda nada visible. */
@@ -2291,17 +2306,22 @@ function pintarPendientesHoy(borradores, pendientes, botonesExcepcion) {
     for (const e of pendientes) pf.appendChild(renglon(`Excepción · ${e.PlacaTractor}`, `${selloSinFirma(e)}autorización de gerencia · «${e.ExcepcionMotivo || 'sin motivo'}» · ${horaCorta(e.Arribo)}`, null, null, botonesExcepcion(e).map(b => ({ ...b, clase: b.accion === 'autorizar' ? '' : 'peligro' }))));
 }
 
+// C-29 (v0.34.0): UNA definición de «rechazo o excepción» y UN renglón para Hoy (los 10 últimos) y Reportes (todos). Antes el
+// filtro y la lectura de CompuertaDetalle vivían copiados en los dos y la etiqueta difería (Hoy decía legal/comercial).
+const esRechazo = e => e.Etapa !== 'anulado' && (e.Etapa === 'rechazado' || e.Compuerta === 'excepcion-comercial');
+const rechazosYExcepciones = () => estado.embarques.filter(esRechazo).sort((a, b) => b.id - a.id);
+function renglonRechazo(e) {
+    let causa = '';
+    try { causa = JSON.parse(e.CompuertaDetalle || '[]').filter(h => h.clase === 'legal' || h.clase === 'comercial').map(h => h.regla).join(', '); } catch (_) { /* detalle ilegible */ }
+    const r = renglon(`${e.Title || '(excepción)'} · ${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + quien(e.ExcepcionAutorizo) : ''}`);
+    r.firstChild.firstChild.appendChild(etiquetaCompuertaDe(e));
+    return r;
+}
 function pintarRechazosHoy() {
     const rj = $('tbRechazos'); rj.textContent = '';
-    const rech = estado.embarques.filter(e => e.Etapa !== 'anulado' && (e.Etapa === 'rechazado' || e.Compuerta === 'excepcion-comercial')).sort((a, b) => b.id - a.id).slice(0, 10);
+    const rech = rechazosYExcepciones().slice(0, 10);
     if (!rech.length) rj.appendChild(el('p', 'pista', 'Ninguno.'));
-    for (const e of rech) {
-        let causa = '';
-        try { causa = JSON.parse(e.CompuertaDetalle || '[]').filter(h => h.clase === 'legal' || h.clase === 'comercial').map(h => h.regla).join(', '); } catch (_) { /* detalle ilegible */ }
-        const r = renglon(`${e.Title || '(excepción)'} · ${e.PlacaTractor}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + quien(e.ExcepcionAutorizo) : ''}`);
-        r.firstChild.firstChild.appendChild(etiqueta(e.Compuerta === 'rechazo-legal' ? 'legal' : 'comercial', e.Compuerta === 'rechazo-legal' ? 'legal' : 'comercial'));
-        rj.appendChild(r);
-    }
+    for (const e of rech) rj.appendChild(renglonRechazo(e));
 }
 
 // Vigencias como tiempo restante: barra llena = hoy vence; roja = ya vencio.
@@ -2344,7 +2364,7 @@ function pintarVigenciasHoy() {
 function cortesDia() {
     const hoy = fechaMexico();
     const ayer = fechaMexico(new Date(Date.now() - 86400000));
-    const lunes = (() => { const d = new Date(); const dia = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dia); return fechaMexico(d); })();
+    const lunes = lunesDe(hoy);   // C-30 (v0.34.0): el mismo lunes que la barra de semanas de Reportes (antes: zona del dispositivo)
     const dia = e => e.Arribo ? fechaMexico(new Date(e.Arribo)) : '';
     const diaCierre = e => e.TaraHora ? fechaMexico(new Date(e.TaraHora)) : dia(e);
     const cerrados = f => estado.embarques.filter(e => e.Etapa === 'cerrado' && f(diaCierre(e)));
@@ -2444,7 +2464,6 @@ function plegarRail(p) {
 try { plegarRail(localStorage.getItem(RAIL_LLAVE) === 'plegado'); } catch (e) { /* sin almacenamiento */ }
 $('btnMarca').addEventListener('click', () => plegarRail(true));
 $('btnPlegar').addEventListener('click', () => plegarRail(false));
-document.addEventListener('click', ev => { const m = $('menuRail'); if (m.open && !m.contains(ev.target)) m.open = false; });
 // Imprimir los reportes: la hoja de impresión solo deja ver el ticket; con esta clase deja ver la sección (estilo.css @media print).
 $('btnImprimirReportes').addEventListener('click', () => { document.body.classList.add('imprimiendo-reportes'); window.print(); });
 // Archivos (v0.33.0): los filtros no releen nada, solo esconden y muestran lo ya leído.
@@ -2452,7 +2471,7 @@ $('arBusca').addEventListener('input', filtrarArbol);
 for (const id of ['arTipo', 'arPrograma']) $(id).addEventListener('change', filtrarArbol);
 window.addEventListener('afterprint', () => document.body.classList.remove('imprimiendo-reportes'));
 // El menu «···» se cierra al elegir algo o al tocar fuera.
-document.addEventListener('click', ev => { const m = $('menuMovil'); if (m.open && !m.contains(ev.target)) m.open = false; });
+document.addEventListener('click', ev => { for (const id of ['menuRail', 'menuMovil']) { const m = $(id); if (m.open && !m.contains(ev.target)) m.open = false; } });   // C-35: los dos menús en un listener
 $('btnActualizar').addEventListener('click', () => { $('menuRail').open = false; recargar(); });
 $('btnActualizarMovil').addEventListener('click', () => { $('menuMovil').open = false; recargar(); });
 // Al volver a la app (el celular estuvo en el bolsillo, la pestana en segundo plano) se relee si

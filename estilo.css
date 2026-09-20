@@ -173,7 +173,7 @@ h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-tra
 .tema button[aria-pressed="true"] { color: var(--acc); border-color: var(--acc); }
 .tema svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .rail .tema.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; margin: 0; padding: 2px; background: var(--surf2); border: 1px solid var(--line-soft); border-radius: var(--r-sm); }
-.rail .tema.seg .mn-btn { min-height: 26px; height: 26px; padding: 0 var(--sp-2); border: 0; border-radius: 4px; background: transparent; color: var(--mute); font-size: .76rem; gap: var(--sp-1); }
+.rail .tema.seg .mn-btn { min-height: var(--control-h-sm); padding: 0 var(--sp-2); border: 0; border-radius: 4px; background: transparent; color: var(--mute); font-size: .76rem; gap: var(--sp-1); }
 .rail .tema.seg .mn-btn svg { width: 14px; height: 14px; }
 .rail .tema.seg button[aria-pressed="true"] { background: var(--surf); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
 .rail .tema.seg .mn-btn:hover { background: var(--rail-hover); }
@@ -231,6 +231,9 @@ h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-tra
 .sync::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
 .sync.viejo::before { background: var(--warn); }
 .sync.leyendo::before { background: var(--acc); }
+/* U-63 (v0.34.0): en escritorio el estado de lectura vive detrás del «···»; este punto lo saca al renglón de sesión (el texto va en title). */
+.rail .sesion-fila .sync-punto { gap: 0; padding: 0 var(--sp-1); min-height: var(--control-h-sm); }
+.rail .sesion-fila .sync-punto::before { width: 8px; height: 8px; }
 #syncMovil { display: none; margin: 0 0 var(--sp-2); }
 @media (max-width: 720px) { #syncMovil:not(.oculto) { display: flex; } }
 
@@ -528,6 +531,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .tarjeta.pendiente .renglon .t { font-size: .92rem; }
 /* KPI (mn-kpi): el filete de 3 px carga el estado; la cifra en Saira sigue siendo lo primero que se lee */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--sp-2); margin-bottom: var(--sp-4); }
+@media (max-width: 720px) { .kpis .kpi:last-child:nth-child(odd) { grid-column: 1 / -1; } }   /* U-68: cinco KPI en dos columnas dejaban el quinto con un hueco al lado */
 .kpi { position: relative; overflow: hidden; background: var(--surf); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); display: flex; flex-direction: column; gap: .05rem; min-width: 0; }
 .kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--idle); }
 .kpi.is-ok::before { background: var(--ok); } .kpi.is-warn::before { background: var(--warn); } .kpi.is-danger::before { background: var(--bad); } .kpi.is-info::before { background: var(--info); }
@@ -596,23 +600,26 @@ button:not(:disabled):active { transform: scale(.98); }
 .rep-rejilla { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
 .rep-rejilla .ancha { grid-column: 1 / -1; }
 .rep-rejilla .tarjeta { margin: 0; }
-.barras { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px var(--sp-3); align-items: center; font-size: .86rem; }
+.barras { display: grid; grid-template-columns: minmax(0, 38%) minmax(0, 1fr) auto; gap: 6px var(--sp-3); align-items: center; font-size: .86rem; }   /* U-62: un track auto medía la razón social entera y dejaba la barra en cero */
 .barras .nom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .barras .n { font-family: var(--mono); font-size: .76rem; color: var(--mute); text-align: right; white-space: nowrap; }
 .barras .b { height: 10px; border-radius: 3px; background: var(--surf2); overflow: hidden; }
 .barras .b i { display: block; height: 100%; background: var(--ok); }
 .barras .b i.warn { background: var(--warn); }
-.semanas { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; height: 120px; padding-top: var(--sp-2); }
+.semanas { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; height: 136px; padding-top: var(--sp-2); }
 .semanas div { display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; height: 100%; text-align: center; font-family: var(--mono); font-size: .66rem; color: var(--mute); }
 .semanas i { display: block; flex: none; background: var(--ok); border-radius: 3px 3px 0 0; opacity: .85; min-height: 1px; }
 .semanas .hoy i { opacity: 1; background: var(--acc); }
+.semanas .cifra { font-size: .62rem; color: var(--ink); white-space: nowrap; line-height: 1; }   /* U-61: la cifra sobre la barra; el title era solo hover */
+.semanas .cifra:empty { display: none; }
 @media (max-width: 900px) { .rep-rejilla { grid-template-columns: 1fr; } }
 
 /* ---------------------------------------------------------------- ARCHIVOS (v0.33.0): el árbol de la biblioteca (details anidados) + filtros */
 
 .archivos-filtros { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; margin: 0 0 var(--sp-4); }
-.archivos-filtros select { flex: 1 1 12rem; min-height: var(--control-h-sm); padding: 0 var(--sp-3); }
-.archivos-filtros .buscador { flex: 2 1 14rem; min-height: var(--control-h-sm); -webkit-appearance: none; appearance: none; }
+/* U-64 (v0.34.0): los tres controles miden lo que todo campo de la app (--control-h: 44 en celular, 36 con ratón); antes iban al tamaño chico de botón */
+.archivos-filtros select { flex: 1 1 12rem; min-height: var(--control-h); padding: 0 var(--sp-3); }
+.archivos-filtros .buscador { flex: 2 1 14rem; min-height: var(--control-h); -webkit-appearance: none; appearance: none; }
 .arbol { display: grid; gap: 2px; font-size: .9rem; }
 .arbol details { min-width: 0; }
 .arbol summary { list-style: none; display: flex; align-items: center; gap: var(--sp-2); min-height: var(--control-h-sm); padding: 4px var(--sp-2); cursor: pointer; border-radius: var(--r-sm); color: var(--ink); min-width: 0; }
@@ -630,7 +637,13 @@ button:not(:disabled):active { transform: scale(.98); }
 .arbol .arch > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .arbol .arch .ext { font-family: var(--mono); font-size: .62rem; font-weight: 600; letter-spacing: .06em; color: var(--mute); width: 30px; flex: none; }
 .arbol .arch .d { margin-left: auto; font-family: var(--mono); font-size: .72rem; color: var(--mute); white-space: nowrap; flex: none; }
-@media (max-width: 720px) { .arbol .hijos { padding-left: 14px; } .arbol .arch .d, .arbol summary .sub { display: none; } }
+/* U-67 (v0.34.0): en celular la fecha baja a un segundo renglón bajo el nombre (antes se ocultaba con el tamaño; el tamaño sigue oculto) */
+@media (max-width: 720px) {
+    .arbol .hijos { padding-left: 14px; }
+    .arbol summary .sub, .arbol .arch .d .tam { display: none; }
+    .arbol .arch { flex-wrap: wrap; row-gap: 0; }
+    .arbol .arch .d { margin-left: 0; flex-basis: 100%; padding-left: calc(30px + var(--sp-2)); }
+}
 
 /* ---------------------------------------------------------------- VEREDICTO (semáforo) */
 
@@ -714,8 +727,12 @@ button:not(:disabled):active { transform: scale(.98); }
 
 /* ---------------------------------------------------------------- ESCRITORIO: anchos de contenido (el rail ya es columna desde 721 px) */
 
+/* U-59 (v0.34.0): el botón chico (renglón, «+ Alta», «···», ‹ ›, tema, Exportar) mide 36 px sin ratón — el piso con guante que U-05/U-06/U-25
+   habían fijado y que la piel (32 px) bajó en la v0.32.0 sin que nadie lo decidiera. Con ratón (≥ 900 px) siguen los 32 de la piel. */
+@media (max-width: 899px) { :root { --control-h-sm: 36px; } }
 @media (min-width: 900px) {
     :root { --control-h: 36px; }   /* U-26: con ratón basta 36 px; en celular quedan los 44 de la piel (guante) */
+    .rail .tema.seg .mn-btn { min-height: 26px; height: 26px; }   /* U-59: el segmento Claro | Oscuro compacto de Proyectos, solo con ratón */
     .flujo { max-width: 24rem; }
     /* Formularios y listas no se estiran a todo lo ancho: leen mejor en una columna acotada. */
     #p-puerta .tarjeta, #p-puerta .bloque, #p-bascula .tarjeta, #p-prealtas .tarjeta { max-width: 40rem; }

@@ -311,4 +311,26 @@ export function tipoDeArchivo(nombre) {
     return 'otro';
 }
 
+/**
+ * C-30 (v0.34.0): UNA definición de «lunes» para Hoy y Reportes. Trabaja sobre la fecha YYYY-MM-DD ya cortada en hora de
+ * México (fechaMexico) y aritmética en UTC a mediodía: no depende de la zona del dispositivo ni del horario de verano.
+ * Antes cortesDia() lo calculaba con `new Date()` local y Reportes con la fecha de México: dos semanas distintas.
+ */
+export function sumarDias(fecha, n) {
+    const d = new Date(fecha + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+}
+export function lunesDe(fecha) {
+    return sumarDias(fecha, -((new Date(fecha + 'T12:00:00Z').getUTCDay() + 6) % 7));
+}
+
+/**
+ * S-15 (v0.34.0): en la rama «Pendiente de archivar» de Archivos solo se listan las CARPETAS que la app dejó como lote
+ * (`AAAA-MM-DD_<etiqueta>_…`, subirEvidencia). Lo demás del buzón —lo que Carlos deposita para /archivar-calytek— no es de
+ * la caseta y no se pinta, aunque SharePoint se lo mostrara como Miembro: la app no le da un enlace a un toque.
+ */
+export function esLoteDeLaApp(nombre, etiqueta) {
+    return new RegExp(`^\\d{4}-\\d{2}-\\d{2}_${String(etiqueta).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_`).test(String(nombre || ''));
+}
+
 export function paraPatch(campos) { const o = {}; for (const k in campos) o[k] = campos[k] === '' || campos[k] === undefined ? null : campos[k]; return o; }
