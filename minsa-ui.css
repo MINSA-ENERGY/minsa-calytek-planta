@@ -1,0 +1,382 @@
+/* GENERADO — no editar a mano.
+   Origen: marca/minsa-design/ui/base.css + tokens/
+   Modo:   piel sin paleta (--sin-paleta)
+   Huella: 49dd086c288f
+   Regenerar:  python marca/minsa-design/ui/vendorizar.py <este archivo> --sin-paleta
+   Una edicion a mano aqui la caza `--verificar` en el `npm test` de la app. */
+/* === tokens/fonts.css (solo variables; los @font-face los pone la app) === */
+:root {
+  --font-display: "Saira", "Barlow", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* semantic aliases */
+  --font-heading: var(--font-display);
+  --font-ui: var(--font-body);
+  --font-data: var(--font-mono);
+}
+/* === ui/base.css === */
+/* =============================================================================
+   MINSA ENERGY — piel de aplicación (UI interactiva)
+   -----------------------------------------------------------------------------
+   Esto es la capa que le faltaba a `tokens/`: los tokens de color y tipografía ya
+   existían y estaban bien, pero solo servían a DOCUMENTOS. Una app necesita además
+   radio, sombra, altura de control, foco, duración y modo oscuro conmutable.
+
+   Qué manda:
+     tokens/colors.css   ← la paleta. NO se redefine aquí ningún hex de marca.
+     tokens/fonts.css    ← Saira (display) / Barlow (UI) / IBM Plex Mono (datos).
+     base.css (aquí)     ← lo que un documento no necesita y una app sí.
+
+   Uso en una app:
+     <link rel="stylesheet" href="ruta/a/marca/minsa-design/ui/base.css">
+   (los dos @import de abajo arrastran los tokens; no hace falta enlazarlos aparte)
+
+   Prefijo `mn-` en TODAS las clases, a propósito: permite adoptar la biblioteca
+   componente por componente en una app que ya tiene su CSS, sin colisiones.
+
+   Tema: por omisión sigue al sistema. `<html data-theme="dark">` o `="light"`
+   lo fuerza (persistir en localStorage es trabajo de la app).
+   ========================================================================== */
+
+
+/* -----------------------------------------------------------------------------
+   1. Tokens que la app necesita y el documento no
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* Radio — la escala, no un valor suelto. Las 3 apps tenían 3 radios distintos. */
+  --r-sm: 6px;      /* campos, chips */
+  --r-md: 10px;     /* tarjetas, diálogos */
+  --r-lg: 16px;     /* hero, hojas */
+  --r-pill: 999px;
+
+  /* Espacio — múltiplos de 4. */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+
+  /* Sombra. La tarjeta NO lleva sombra: se define por su filete. La sombra queda
+     reservada a lo que flota de verdad (diálogo, menú), para que signifique algo. */
+  --shadow-pop: 0 10px 34px rgba(11, 18, 32, .18), 0 2px 6px rgba(11, 18, 32, .10);
+  --shadow-raise: 0 1px 3px rgba(11, 18, 32, .08);
+
+  /* Controles: 44px es el mínimo táctil. La app de planta se usa con guante. */
+  --control-h: 44px;
+  --control-h-sm: 32px;
+
+  --dur-fast: .12s;
+  --dur: .2s;
+
+  --z-rail: 20;
+  --z-sticky: 30;
+  --z-pop: 100;
+
+  /* Tono ALTO de estado: para texto grande en blanco sobre sólido (el hero del
+     veredicto). Más oscuro que `--status-*-solid` justo para eso. Ver §5. */
+  --status-ok-loud: #2f9e44;
+  --status-warn-loud: #c8891a;
+  --status-danger-loud: #b3261e;
+  --status-loud-ink: #ffffff;
+}
+
+/* (paleta recortada por --sin-paleta; la provee la app) */
+
+
+/* -----------------------------------------------------------------------------
+   3. Base — lo único sin prefijo, porque son elementos, no clases
+   -------------------------------------------------------------------------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--surface-page);
+  color: var(--text-body);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Un solo anillo de foco para toda la casa. El tablero lo tenía, las otras dos no. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* -----------------------------------------------------------------------------
+   4. Utilidades
+   -------------------------------------------------------------------------- */
+
+.mn-hidden { display: none !important; }
+.mn-mono { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+/* La etiqueta pequeña en versalitas: el idioma de las cabeceras de campo, de
+   columna y de sección en toda la casa. Sale de la app de planta. */
+.mn-label {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .07em;
+  font-weight: 600; color: var(--text-muted);
+}
+.mn-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* -----------------------------------------------------------------------------
+   5. Estado — la regla que las 3 apps tenían implícita y ninguna escrita
+   `-fg` sobre `-bg`  → texto. Contraste verificado, úsalo para chips y renglones.
+   `-solid`           → MARCAS: filetes de 3px, puntos, barras de medidor.
+                        Nunca fondo de texto: no está calculado para eso.
+   `-loud` + ink      → SOLO texto grande y en negrita (≥24px/700) sobre sólido,
+                        que es el hero del veredicto. A tamaño normal reprueba.
+   -------------------------------------------------------------------------- */
+
+.mn-chip {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  padding: 2px 9px; border-radius: var(--r-pill);
+  font-size: .72rem; font-weight: 600; letter-spacing: .02em;
+  background: var(--status-idle-bg); color: var(--status-idle-fg);
+  white-space: nowrap;
+}
+.mn-chip.is-ok     { background: var(--status-ok-bg);     color: var(--status-ok-fg); }
+.mn-chip.is-warn   { background: var(--status-warn-bg);   color: var(--status-warn-fg); }
+.mn-chip.is-danger { background: var(--status-danger-bg); color: var(--status-danger-fg); }
+.mn-chip.is-info   { background: var(--status-info-bg);   color: var(--status-info-fg); }
+
+/* -----------------------------------------------------------------------------
+   6. Superficie: tarjeta y KPI
+   `.mn-card` unifica `.tarjeta` (planta) y `.card` (tablero) — eran lo mismo.
+   `.mn-kpi`  unifica `.kpi` (planta) y `.tile` (tablero) — también.
+   -------------------------------------------------------------------------- */
+
+.mn-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+}
+.mn-card > h2 {
+  margin: 0 0 var(--sp-3);
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .07em;
+  font-weight: 600; color: var(--text-muted);
+}
+
+.mn-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--sp-2); }
+
+.mn-kpi {
+  position: relative; overflow: hidden;
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+  min-width: 0;
+}
+/* El filete de 3px es el que carga el estado. Va aquí y no en un fondo de color
+   para que la cifra siga siendo lo primero que se lee. */
+.mn-kpi::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--status-idle-solid);
+}
+.mn-kpi.is-ok::before     { background: var(--status-ok-solid); }
+.mn-kpi.is-warn::before   { background: var(--status-warn-solid); }
+.mn-kpi.is-danger::before { background: var(--status-danger-solid); }
+.mn-kpi.is-info::before   { background: var(--status-info-solid); }
+
+.mn-kpi .mn-kpi-label {
+  font-size: .66rem; text-transform: uppercase; letter-spacing: .09em;
+  font-weight: 600; color: var(--text-faint);
+}
+.mn-kpi .mn-kpi-val {
+  display: block; margin-top: var(--sp-1);
+  font-family: var(--font-display); font-weight: 600; font-size: 1.9rem;
+  line-height: 1.1; letter-spacing: -.02em; color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.mn-kpi .mn-kpi-val small {
+  font-family: var(--font-ui); font-size: .95rem; font-weight: 500;
+  color: var(--text-muted); margin-left: 2px; letter-spacing: 0;
+}
+.mn-kpi .mn-kpi-foot { margin-top: var(--sp-1); font-size: .78rem; color: var(--text-muted); }
+.mn-kpi .mn-kpi-foot b { font-family: var(--font-data); font-weight: 500; }
+
+/* Clicable: el borde de marca al pasar, no un fondo. */
+.mn-kpi.is-clickable { cursor: pointer; transition: border-color var(--dur-fast), transform var(--dur-fast); }
+.mn-kpi.is-clickable:hover { border-color: var(--brand-primary); transform: translateY(-1px); }
+
+/* -----------------------------------------------------------------------------
+   7. Botones
+   -------------------------------------------------------------------------- */
+
+.mn-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  min-height: var(--control-h); padding: 0 var(--sp-4);
+  font: inherit; font-weight: 600; line-height: 1.2;
+  border: 1px solid var(--border-default); border-radius: var(--r-sm);
+  background: var(--surface-card); color: var(--text-body);
+  cursor: pointer;
+  transition: background var(--dur-fast), border-color var(--dur-fast);
+}
+.mn-btn:hover { background: var(--surface-hover); }
+.mn-btn:active { background: var(--surface-active); }
+.mn-btn:disabled { opacity: .45; cursor: default; }
+
+.mn-btn.is-primary {
+  background: var(--brand-primary); color: var(--text-on-brand); border-color: transparent;
+}
+.mn-btn.is-primary:hover { filter: brightness(1.08); background: var(--brand-primary); }
+
+.mn-btn.is-ghost { background: transparent; border-color: transparent; color: var(--text-link); }
+.mn-btn.is-ghost:hover { background: var(--surface-hover); }
+
+.mn-btn.is-danger { color: var(--status-danger-fg); border-color: var(--status-danger-fg); background: transparent; }
+
+.mn-btn.is-sm { min-height: var(--control-h-sm); padding: 0 var(--sp-3); font-size: .82rem; }
+.mn-btn.is-block { width: 100%; }
+
+/* El botón que DICE QUÉ FALTA en vez de deshabilitarse (patrón «Listo / Faltan N»,
+   cosechado de la app de planta). Se queda habilitado: al pulsarlo lleva el foco
+   al primer campo que falta. La segunda línea es la lista. */
+.mn-btn.is-incomplete {
+  flex-direction: column; gap: 1px; padding-top: var(--sp-2); padding-bottom: var(--sp-2);
+  background: var(--surface-sunken); color: var(--text-muted); border-color: var(--border-default);
+}
+.mn-btn.is-incomplete small {
+  font-weight: 500; font-size: .72rem; opacity: .9; text-transform: none; letter-spacing: 0;
+}
+
+/* -----------------------------------------------------------------------------
+   8. Campos
+   -------------------------------------------------------------------------- */
+
+.mn-field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.mn-field + .mn-field { margin-top: var(--sp-3); }
+.mn-field > label {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .07em;
+  font-weight: 600; color: var(--text-muted);
+}
+.mn-field input, .mn-field select, .mn-field textarea {
+  width: 100%; font: inherit; min-height: var(--control-h);
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--text-strong); background: var(--surface-sunken);
+  border: 1px solid var(--border-default); border-radius: var(--r-sm);
+}
+/* El placeholder tiene que distinguirse del dato ya capturado, o se lee como
+   pre-llenado. `opacity:1` porque los navegadores lo atenúan encima del color. */
+.mn-field ::placeholder {
+  color: var(--text-faint); opacity: 1; font-style: italic; font-weight: 400;
+  text-transform: none; letter-spacing: 0;
+}
+/* Rejilla de dos campos: el hermano de la derecha NO hereda el margen superior. */
+.mn-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.mn-row > .mn-field + .mn-field { margin-top: 0; }
+
+/* -----------------------------------------------------------------------------
+   9. Carril de pasos — proceso lineal con estado por etapa
+   -------------------------------------------------------------------------- */
+
+.mn-flow { display: flex; gap: 3px; }
+.mn-flow > * {
+  flex: 1; text-align: center; padding: var(--sp-1) 0;
+  border: 1px solid var(--border-hairline); border-radius: var(--r-sm);
+  background: var(--surface-card); color: var(--text-muted);
+  font-size: .62rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+}
+.mn-flow > * b {
+  display: block; font-family: var(--font-data); font-size: .9rem; font-weight: 600;
+  color: var(--text-strong); font-variant-numeric: tabular-nums;
+}
+.mn-flow > .is-on { border-color: var(--brand-primary); color: var(--brand-primary); }
+.mn-flow > .is-on b { color: var(--brand-primary); }
+.mn-flow > .is-done { color: var(--status-ok-fg); }
+
+/* -----------------------------------------------------------------------------
+   10. Hero de veredicto — el resultado, pegado arriba
+   -------------------------------------------------------------------------- */
+
+.mn-verdict {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  background: var(--status-idle-solid); color: var(--status-loud-ink);
+}
+.mn-verdict.is-ok     { background: var(--status-ok-loud); }
+.mn-verdict.is-warn   { background: var(--status-warn-loud); }
+.mn-verdict.is-danger { background: var(--status-danger-loud); }
+.mn-verdict .mn-verdict-k {
+  font-family: var(--font-data); font-size: .64rem; letter-spacing: .12em;
+  text-transform: uppercase; font-weight: 600; opacity: .85;
+}
+.mn-verdict .mn-verdict-w {
+  display: block; font-family: var(--font-display); font-weight: 700;
+  font-size: 3.2rem; line-height: .95; letter-spacing: -.04em;
+}
+.mn-verdict .mn-verdict-m { margin-top: var(--sp-1); font-size: .92rem; font-weight: 500; opacity: .95; max-width: 32ch; }
+
+/* -----------------------------------------------------------------------------
+   11. Rail — barra lateral en escritorio, pestañas abajo en celular
+   Un solo componente con dos caras: la app no cambia de markup.
+   -------------------------------------------------------------------------- */
+
+.mn-shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100dvh; }
+.mn-rail {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sp-4) var(--sp-2);
+  background: var(--surface-card); border-right: 1px solid var(--border-hairline);
+}
+.mn-rail a, .mn-rail button {
+  display: flex; align-items: center; gap: var(--sp-3);
+  min-height: var(--control-h); padding: 0 var(--sp-3);
+  border: 0; border-radius: var(--r-sm); background: none;
+  font: inherit; font-weight: 600; font-size: .88rem;
+  color: var(--text-muted); text-decoration: none; cursor: pointer;
+}
+.mn-rail a:hover, .mn-rail button:hover { background: var(--surface-hover); }
+.mn-rail [aria-current="page"], .mn-rail .is-on {
+  background: var(--surface-selected); color: var(--brand-primary);
+}
+/* El contador de lo urgente vive en el rail: es lo que hace que se mire. */
+.mn-rail .mn-rail-hot {
+  margin-left: auto; padding: 0 6px; border-radius: var(--r-pill);
+  background: var(--status-danger-bg); color: var(--status-danger-fg);
+  font-family: var(--font-data); font-size: .72rem; font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .mn-shell { grid-template-columns: 1fr; }
+  .mn-rail {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-rail);
+    flex-direction: row; padding: var(--sp-1) var(--sp-1) calc(var(--sp-2) + env(safe-area-inset-bottom));
+    border-right: 0; border-top: 1px solid var(--border-hairline);
+  }
+  .mn-rail a, .mn-rail button {
+    flex: 1; flex-direction: column; gap: 2px; justify-content: center;
+    font-size: .62rem; letter-spacing: .04em; text-transform: uppercase;
+  }
+  .mn-rail .mn-rail-hot { margin-left: 0; position: absolute; top: 2px; right: 25%; }
+}
+
+/* -----------------------------------------------------------------------------
+   12. Diálogo — el alta va en pop-up, no en otra pantalla
+   Usar el <dialog> nativo: trae foco atrapado, Esc y backdrop sin JS propio.
+   -------------------------------------------------------------------------- */
+
+.mn-dialog {
+  width: min(32rem, calc(100vw - var(--sp-5)));
+  padding: 0; border: 1px solid var(--border-hairline); border-radius: var(--r-md);
+  background: var(--surface-card); color: var(--text-body);
+  box-shadow: var(--shadow-pop);
+}
+.mn-dialog::backdrop { background: rgba(4, 18, 61, .45); }
+.mn-dialog-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  padding: var(--sp-4); border-bottom: 1px solid var(--border-hairline);
+}
+.mn-dialog-head h2 { margin: 0; font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; color: var(--text-strong); }
+.mn-dialog-body { padding: var(--sp-4); }
+.mn-dialog-foot {
+  display: flex; justify-content: flex-end; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--border-hairline);
+  background: var(--surface-sunken);
+}

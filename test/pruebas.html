@@ -270,7 +270,7 @@ try {
     for (const s of doc.querySelectorAll('script')) s.remove();
     const cont = $('app-real');
     for (const n of [...doc.body.childNodes]) cont.appendChild(document.adoptNode(n));
-    const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = './estilo.css'; document.head.appendChild(link);
+    for (const href of ['./minsa-ui.css', './estilo.css']) { const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = href; document.head.appendChild(link); }   // v0.32.0: la piel vendorizada va antes, como en index.html
     const esquema = await (await fetch('./esquema.json', { cache: 'reload' })).json();
     window.__sembrar(esquema, ROL);
     const captura = ['trazabilidad', 'gerencia'].includes(ROL);
@@ -803,9 +803,12 @@ try {
             }
         }
 
-        // 11. Hoy: KPI coherentes con lo que hay.
-        document.querySelector('#pestanas button[data-p="hoy"]').click();
+        // 11. Reportes: KPI coherentes con lo que hay. v0.32.0: los KPI salieron de Hoy y viven en Reportes (sección aparte
+        // del rail, #pestanasExtra); la aserción se movió con ellos (regla 3 del README: la prueba no dicta la interfaz).
+        document.querySelector('#pestanasExtra button[data-p="reportes"]').click();
         const kp = $('tbKpis').textContent;
+        R.ok('v0.32.0: Reportes pinta avance por programa, por carrier y las 8 semanas', $('repProgramas').children.length > 0 && $('repCarriers').children.length > 0 && $('repSemanas').children.length === 8, `programas ${$('repProgramas').children.length} · carriers ${$('repCarriers').children.length} · semanas ${$('repSemanas').children.length}`);
+        document.querySelector('#pestanas button[data-p="hoy"]').click();
         R.ok('KPI góndolas cerradas hoy = 2', /Góndolascerradashoy2/.test(kp.replace(/\s+/g, '')), kp.slice(0, 80));
         R.ok('KPI toneladas hoy = 25.8 t (21,220 + 4,600)', kp.includes('25.8'), kp.match(/[\d.]+t/g)?.join(' '));
         R.ok('rechazos de la semana = 1', /Rechazosestasemana1/.test(kp.replace(/\s+/g, '')));
@@ -873,6 +876,7 @@ try {
             R.ok('etapa anulado + motivo y quién en Notas', emb2.fields.Etapa === 'anulado' && String(emb2.fields.Notas).includes('ANULADO') && String(emb2.fields.Notas).includes(window.__CUENTA.username));
             R.ok('C-14: el aviso «anulado» sigue en pantalla tras el repintado', !!avisoCon('anulado. Para repesar'));
             R.ok('el folio anulado se conserva (no se borra el renglón)', filas('embarques').some(e => e.id === emb2.id && e.fields.Title === emb2.fields.Title));
+            document.querySelector('#pestanasExtra button[data-p="reportes"]').click();   // v0.32.0: los KPI viven en Reportes
             const kp2 = $('tbKpis').textContent.replace(/\s+/g, '');
             R.ok('KPI: el anulado ya no cuenta (cerradas hoy = 1, 21.2 t)', /Góndolascerradashoy1/.test(kp2) && kp2.includes('21.2'), kp2.slice(0, 60));
             // El siguiente folio E- salta el anulado.
@@ -1232,7 +1236,7 @@ try {
     await R.cerrar();
     // ?vista=padron oculta la bitacora y deja esa pestana abierta: para una captura de pantalla.
     // Los <dialog> que la corrida dejo abiertos (el detalle de la firmada del paso 12c) taparian la captura.
-    if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); document.querySelector(`#pestanas button[data-p="${params.get('vista')}"]`).click(); }
+    if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); document.querySelector(`#pestanas button[data-p="${params.get('vista')}"], #pestanasExtra button[data-p="${params.get('vista')}"]`).click(); }
 }
 </script>
 </body>

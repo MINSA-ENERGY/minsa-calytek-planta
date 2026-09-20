@@ -1,11 +1,11 @@
 {
   "name": "calytek-planta",
-  "version": "0.31.0",
+  "version": "0.32.0",
   "private": true,
   "type": "module",
   "description": "PWA de control de recepcion de la planta CALYTEK (MINSA ENERGY): pre-alta, compuerta documental y bascula",
   "scripts": {
-    "test": "python ../../.claude/skills/_compartido/scripts/selectores-duplicados.py estilo.css && python ../../.claude/skills/_compartido/scripts/comentario-a-media-linea.py . && node test/reglas.test.js && node test/sw.test.js && node test/version.test.js && node test/vendor.test.js && node test/datos.test.js",
+    "test": "python ../../marca/minsa-design/ui/vendorizar.py minsa-ui.css --sin-paleta --verificar && python ../../.claude/skills/_compartido/scripts/selectores-duplicados.py estilo.css && python ../../.claude/skills/_compartido/scripts/comentario-a-media-linea.py . && node test/reglas.test.js && node test/sw.test.js && node test/version.test.js && node test/vendor.test.js && node test/datos.test.js",
     "serve": "node servidor-local.js index.html",
     "serve:provisionar": "node servidor-local.js ../herramientas-dev/provisionar.html"
   }

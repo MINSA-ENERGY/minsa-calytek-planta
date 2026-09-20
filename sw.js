@@ -8,7 +8,7 @@
 // eso el service worker nuevo se llena con los archivos VIEJOS (medido en captura, 2026-08-17).
 
 // La cache lleva la MISMA cadena que VERSION (app.js) y package.json: test/version.test.js falla si difieren (C-09, v0.21.0).
-const CACHE = 'calytek-planta-v0.31.0';
+const CACHE = 'calytek-planta-v0.32.0';
 
 function traerDeLaRed(recurso) {
     return fetch(new Request(recurso, { cache: 'reload', credentials: 'same-origin' }));
@@ -17,6 +17,7 @@ function traerDeLaRed(recurso) {
 const ARMAZON = [
     './',
     './index.html',
+    './minsa-ui.css',
     './estilo.css',
     './app.js',
     './config.js',
@@ -26,9 +27,14 @@ const ARMAZON = [
     './esquema.json',
     './manifest.json',
     './vendor/msal-browser.min.js',
-    './vendor/fuentes/oswald.woff2',
-    './vendor/fuentes/manrope.woff2',
-    './vendor/fuentes/jetbrains-mono.woff2',
+    './vendor/fuentes/Saira-500.woff2',
+    './vendor/fuentes/Saira-600.woff2',
+    './vendor/fuentes/Barlow-400.woff2',
+    './vendor/fuentes/Barlow-500.woff2',
+    './vendor/fuentes/Barlow-600.woff2',
+    './vendor/fuentes/IBMPlexMono-400.woff2',
+    './vendor/fuentes/IBMPlexMono-500.woff2',
+    './vendor/fuentes/BaiJamjuree-700.woff2',
     './iconos/icono-192.png',
     './iconos/icono-512.png',
     './iconos/icono-512-recortable.png',

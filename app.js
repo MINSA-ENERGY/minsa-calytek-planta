@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch } from './reglas.js';
 
-const VERSION = '0.31.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.32.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -297,7 +297,7 @@ async function refrescarCliente() {
  */
 function ponerQuien(correo, rol = '') {
     const nombre = quien(correo);
-    for (const q of document.querySelectorAll('.quien')) { q.textContent = rol ? `${nombre} · ${rol}` : nombre; q.title = correo; }
+    for (const q of document.querySelectorAll('.quien')) { q.textContent = ''; q.appendChild(el('b', '', nombre)); if (rol) q.appendChild(el('span', 'rol', rol)); q.title = correo; }   // v0.32.0: dos renglones, como el rail de Proyectos
     $('rolMovil').textContent = rol;
     $('quienMovil').textContent = nombre; $('quienMovil').title = correo;
     $('correoMovil').textContent = nombre === correo ? '' : correo;
@@ -319,6 +319,7 @@ async function sesionIniciada() {
     await refrescarCliente();
     ponerQuien(estado.cuenta.username);
     $('btnSalir').classList.remove('oculto');
+    const lnk = $('lnkSharePoint'); lnk.href = `https://${CONFIG.sharepointHost}${CONFIG.sitio}`; lnk.classList.remove('oculto');   // v0.32.0
     pasoEntrada('Abriendo el sitio de CALYTEK…');
     estado.siteId = await estado.cliente.sitio(CONFIG.sharepointHost, CONFIG.sitio);
     pasoEntrada('Leyendo las listas…');
@@ -546,7 +547,10 @@ async function recargar(silencioso = false) {
 
 // ---------------------------------------------------------------- navegacion
 
-const PINTORES = { hoy: () => pintarHoy(), puerta: () => pintarPuerta(), bascula: () => pintarBascula(), prealtas: () => pintarPrealtas(), padron: () => pintarPadron() };
+const PINTORES = { hoy: () => pintarHoy(), puerta: () => pintarPuerta(), bascula: () => pintarBascula(), prealtas: () => pintarPrealtas(), padron: () => pintarPadron(), reportes: () => pintarReportes() };
+const SECCIONES = Object.keys(PINTORES);
+/** Los botones del rail: las pestañas de siempre más la sección aparte (Reportes, v0.32.0). */
+const botonesRail = () => [...$('pestanas').querySelectorAll('button'), ...$('pestanasExtra').querySelectorAll('button')];
 /** Repinta la pestana abierta SIN tocar avisos, veredicto ni scroll (refresco silencioso y cambios de pre-alta). */
 function repintar() { pintarInsignias(); PINTORES[estado.pestana](); }
 /**
@@ -572,8 +576,8 @@ function irDesdePestana(p) {
 }
 function irA(p) {
     estado.pestana = p;
-    for (const b of $('pestanas').querySelectorAll('button')) { if (b.dataset.p === p) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }   // U-57 (v0.29.0): <nav> con aria-current, como .mn-rail de la piel; el role=tablist prometía flechas y tabpanel que no había
-    for (const s of ['hoy', 'puerta', 'bascula', 'prealtas', 'padron']) $('p-' + s).classList.toggle('oculto', s !== p);
+    for (const b of botonesRail()) { if (b.dataset.p === p) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }   // U-57 (v0.29.0): <nav> con aria-current, como .mn-rail de la piel; el role=tablist prometía flechas y tabpanel que no había
+    for (const s of SECCIONES) $('p-' + s).classList.toggle('oculto', s !== p);
     limpiarAvisos();
     cerrarVeredicto();
     repintar();
@@ -2032,8 +2036,8 @@ function pintarKpisHoy({ cerradosHoy, cerradosAyer, cerradosSemana, activos, rec
     const kg = xs => xs.reduce((a, e) => a + (Number(e.NetoKg) || 0), 0);
     const k = $('tbKpis'); k.textContent = '';
     const kpi = (l, n, unidad, t, clase) => {
-        const d = el('div', 'kpi'); d.appendChild(el('div', 'l', l));
-        const num = el('div', 'n' + (clase ? ' ' + clase : ''), String(n)); if (unidad) num.appendChild(el('small', '', unidad)); d.appendChild(num);
+        const d = el('div', 'kpi ' + ({ mal: 'is-danger', ojo: 'is-warn', ok: 'is-ok', info: 'is-info' }[clase] || '')); d.appendChild(el('div', 'l', l));
+        const num = el('div', 'n' + (clase === 'mal' || clase === 'ojo' ? ' ' + clase : ''), String(n)); if (unidad) num.appendChild(el('small', '', unidad)); d.appendChild(num);
         if (t) d.appendChild(t); k.appendChild(d); return d;
     };
     const tend = (h, a, texto) => {
@@ -2041,13 +2045,77 @@ function pintarKpisHoy({ cerradosHoy, cerradosAyer, cerradosSemana, activos, rec
         if (dif !== 0) t.appendChild(el('span', dif > 0 ? 'sube' : 'baja', (dif > 0 ? '▲ ' : '▼ ') + Math.abs(dif) + ' '));
         t.appendChild(document.createTextNode(texto)); return t;
     };
-    kpi('Góndolas cerradas hoy', cerradosHoy.length, null, tend(cerradosHoy.length, cerradosAyer.length, 'vs ayer'));
-    kpi('Toneladas netas hoy', (kg(cerradosHoy) / 1000).toFixed(1), 't', el('div', 't', cerradosHoy.length ? `${(kg(cerradosHoy) / 1000 / cerradosHoy.length).toFixed(1)} t por góndola · semana ${(kg(cerradosSemana) / 1000).toFixed(1)} t` : `semana ${(kg(cerradosSemana) / 1000).toFixed(1)} t`));
-    const enP = kpi('En planta ahora', activos.length, null, el('div', 't', `${activos.filter(e => e.Etapa === 'bruto').length} por tara · ${activos.filter(e => e.Etapa === 'compuerta').length} por bruto`));
+    kpi('Góndolas cerradas hoy', cerradosHoy.length, null, tend(cerradosHoy.length, cerradosAyer.length, 'vs ayer'), 'ok');
+    kpi('Toneladas netas hoy', (kg(cerradosHoy) / 1000).toFixed(1), 't', el('div', 't', cerradosHoy.length ? `${(kg(cerradosHoy) / 1000 / cerradosHoy.length).toFixed(1)} t por góndola · semana ${(kg(cerradosSemana) / 1000).toFixed(1)} t` : `semana ${(kg(cerradosSemana) / 1000).toFixed(1)} t`), 'ok');
+    const enP = kpi('En planta ahora', activos.length, null, el('div', 't', `${activos.filter(e => e.Etapa === 'bruto').length} por tara · ${activos.filter(e => e.Etapa === 'compuerta').length} por bruto`), 'info');
     const med = el('div', 'medidor'); const mi = el('i'); mi.style.width = Math.min(100, Math.round(((cerradosHoy.length + activos.length) / CONFIG.techoGondolasDia) * 100)) + '%'; med.appendChild(mi); enP.appendChild(med);
     enP.appendChild(el('div', 't', `techo ${CONFIG.techoGondolasDia} al día`));
     kpi('Rechazos esta semana', rechazosSemana.length, null, el('div', 't', rechazosSemana.length ? 'legal · el residuo no entró' : 'ninguno'), rechazosSemana.length ? 'mal' : '');
     kpi('Pre-altas por firmar', borradores.length, null, el('div', 't', borradores.length ? 'esperan al validador' : 'todas firmadas'), borradores.length ? 'ojo' : '');
+}
+
+// ================================================================ REPORTES (v0.32.0, sección aparte; artifact 1GvBJaYooYvjZT4rMRtL9Q)
+// Los cinco KPI que vivían en Hoy, más lo que se lee de lo cargado: avance por programa, por carrier, toneladas por semana,
+// rechazos/excepciones y netos fuera de banda. Todo sale de estado.embarques (CONFIG.ventanaDias más lo abierto): no lee nada más.
+function pintarReportes() {
+    const { hoy, ayer, lunes, dia, diaCierre, cerrados } = cortesDia();
+    const activos = estado.embarques.filter(enPlanta);
+    const borradores = estado.prealtas.filter(p => p.Estado === 'borrador');
+    const kg = xs => xs.reduce((a, e) => a + (Number(e.NetoKg) || 0), 0);
+    const t = x => (x / 1000).toFixed(1);
+    $('repSub').textContent = `Lo que entró, lo que pesó y lo que no pasó, sobre lo cargado (${CONFIG.ventanaDias} días más lo abierto · ${estado.embarques.length} góndolas).`;
+    pintarKpisHoy({ cerradosHoy: cerrados(d => d === hoy), cerradosAyer: cerrados(d => d === ayer), cerradosSemana: cerrados(d => d >= lunes),
+        activos, borradores, rechazosSemana: estado.embarques.filter(e => e.Etapa === 'rechazado' && dia(e) >= lunes) });
+
+    // barras: nombre · barra proporcional · cifra en mono
+    const barras = (caja, filas, vacio) => {
+        caja.textContent = '';
+        if (!filas.length) { caja.appendChild(el('p', 'vacio', vacio)); return; }
+        const tope = Math.max(1, ...filas.map(f => f.tope ?? f.valor));
+        for (const f of filas) {
+            caja.appendChild(el('span', 'nom', f.nombre));
+            const b = el('div', 'b'); const i = el('i', f.clase || ''); i.style.width = Math.min(100, Math.round((f.valor / (f.tope || tope)) * 100)) + '%'; b.appendChild(i); caja.appendChild(b);
+            caja.appendChild(el('span', 'n', f.cifra));
+        }
+    };
+    const abiertas = estado.prealtas.filter(p => p.Estado !== 'cerrada' && p.Estado !== 'cerrado');
+    barras($('repProgramas'), abiertas.map(p => {
+        const g = gondolasDe(p); const neto = kg(estado.embarques.filter(e => Number(e.PreAltaId) === p.id && e.Etapa === 'cerrado'));
+        return { nombre: p.Title, valor: g.rec, tope: Math.max(g.esp, g.rec, 1), clase: p.Estado === 'borrador' ? 'warn' : '', cifra: g.esp ? `${g.rec} / ${g.esp} · ${t(neto)} t` : `${g.rec} · ${t(neto)} t` };
+    }), 'Sin programas abiertos.');
+    const porCarrier = new Map();
+    for (const e of estado.embarques.filter(e => e.Etapa !== 'anulado')) { const k = e.CarrierId ?? '?'; const c = porCarrier.get(k) || { n: 0, kg: 0 }; c.n++; if (e.Etapa === 'cerrado') c.kg += Number(e.NetoKg) || 0; porCarrier.set(k, c); }
+    barras($('repCarriers'), [...porCarrier].sort((a, b) => b[1].n - a[1].n).map(([id, c]) => ({ nombre: id === '?' ? 'Sin carrier' : nombreDe(estado.carriers, id), valor: c.n, cifra: `${c.n} gónd. · ${t(c.kg)} t` })), 'Sin góndolas cargadas.');
+
+    // toneladas netas por semana (lunes a domingo), las últimas 8; la semana en curso en el color de marca
+    const sem = $('repSemanas'); sem.textContent = '';
+    const lunesDe = f => { const d = new Date(f + 'T12:00:00'); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d; };
+    const semanas = []; const l0 = lunesDe(hoy);
+    for (let i = 7; i >= 0; i--) { const d = new Date(l0); d.setDate(d.getDate() - 7 * i); const desde = fechaMexico(d); const h = new Date(d); h.setDate(h.getDate() + 6); semanas.push({ desde, hasta: fechaMexico(h), kg: 0 }); }
+    for (const e of estado.embarques.filter(e => e.Etapa === 'cerrado')) { const f = diaCierre(e); const s = semanas.find(s => f >= s.desde && f <= s.hasta); if (s) s.kg += Number(e.NetoKg) || 0; }
+    const topeSem = Math.max(1, ...semanas.map(s => s.kg));
+    for (const s of semanas) {
+        const d = el('div', s.desde === fechaMexico(l0) ? 'hoy' : ''); const i = el('i'); i.style.height = Math.max(1, Math.round((s.kg / topeSem) * 100)) + '%'; i.title = `${t(s.kg)} t`; d.appendChild(i);
+        d.appendChild(document.createTextNode(new Date(s.desde + 'T12:00:00').toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: 'numeric', month: 'short' }).replace('.', ''))); sem.appendChild(d);
+    }
+    const enCurso = semanas[semanas.length - 1];
+    $('repSemanasSub').textContent = `Semana en curso en azul: ${t(enCurso.kg)} t al ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long' })}. Tope de la escala: ${t(topeSem)} t. Solo cuentan las cerradas dentro de lo cargado.`;
+
+    // rechazos y excepciones (misma definición que la tarjeta de Hoy, sin el tope de 10) y netos fuera de banda
+    const rj = $('repRechazos'); rj.textContent = '';
+    const rech = estado.embarques.filter(e => e.Etapa !== 'anulado' && (e.Etapa === 'rechazado' || e.Compuerta === 'excepcion-comercial')).sort((a, b) => b.id - a.id);
+    if (!rech.length) rj.appendChild(el('p', 'vacio', 'Ninguno en lo cargado.'));
+    for (const e of rech) {
+        let causa = '';
+        try { causa = JSON.parse(e.CompuertaDetalle || '[]').filter(h => h.clase === 'legal' || h.clase === 'comercial').map(h => h.regla).join(', '); } catch (_) { /* detalle ilegible */ }
+        const r = renglon(`${e.Title || '(excepción)'} · ${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + quien(e.ExcepcionAutorizo) : ''}`);
+        r.firstChild.firstChild.appendChild(etiquetaCompuertaDe(e));
+        rj.appendChild(r);
+    }
+    const nt = $('repNetos'); nt.textContent = '';
+    const fuera = estado.embarques.filter(e => e.Etapa === 'cerrado' && /Neto fuera de banda/.test(e.Notas || '')).sort((a, b) => b.id - a.id);
+    if (!fuera.length) nt.appendChild(el('p', 'vacio', `Ninguno: las ${cerrados(() => true).length} cerradas quedaron dentro de la banda.`));
+    for (const e of fuera) nt.appendChild(renglon(`${e.Title} · ${e.PlacaTractor}`, `${fechaCorta(e.TaraHora || e.Arribo)} · neto ${Number(e.NetoKg).toLocaleString('es-MX')} kg · ${(e.Notas || '').replace(/\n.*$/s, '')}`));
 }
 
 // Fila del dia: los embarques de hoy; si no hay, los ultimos 5. Tarjetas (celular) y tabla (escritorio) de la MISMA lista
@@ -2168,21 +2236,26 @@ function pintarVigenciasHoy() {
     }
 }
 
-function pintarHoy() {
+/** Los cortes de fecha que comparten Hoy y Reportes. Una gondola CERRADA cuenta el dia en que se cerro (hora de la tara),
+ *  no el de arribo: la que llega 23:50 y cierra 00:10 es del dia siguiente, que es el que reporta la bascula (F1, 5-sep). */
+function cortesDia() {
     const hoy = fechaMexico();
     const ayer = fechaMexico(new Date(Date.now() - 86400000));
     const lunes = (() => { const d = new Date(); const dia = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dia); return fechaMexico(d); })();
     const dia = e => e.Arribo ? fechaMexico(new Date(e.Arribo)) : '';
-    // Una gondola CERRADA cuenta el dia en que se cerro (hora de la tara), no el de arribo: la que llega
-    // 23:50 y cierra 00:10 es del dia siguiente, que es el que reporta la bascula (hallazgo abierto del 5-sep, F1).
     const diaCierre = e => e.TaraHora ? fechaMexico(new Date(e.TaraHora)) : dia(e);
     const cerrados = f => estado.embarques.filter(e => e.Etapa === 'cerrado' && f(diaCierre(e)));
+    return { hoy, ayer, lunes, dia, diaCierre, cerrados };
+}
+function pintarHoy() {
+    const { hoy, dia } = cortesDia();
     const activos = estado.embarques.filter(enPlanta);
     const pendientes = excepcionesPendientes();
     const borradores = estado.prealtas.filter(p => p.Estado === 'borrador');
 
-    $('hoyTitulo').textContent = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long', day: 'numeric', month: 'long' });
-    $('hoyKicker').textContent = `Hoy · ${estado.rol}`;
+    // v0.32.0: la fecha es el subtítulo y el rol el kicker (la cabecera de Proyectos); los KPI viven en Reportes.
+    $('hoyTitulo').textContent = `${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long', day: 'numeric', month: 'long' })} · ${activos.length === 1 ? '1 góndola en planta' : `${activos.length} góndolas en planta`}${borradores.length ? ` · ${borradores.length === 1 ? '1 pre-alta por firmar' : `${borradores.length} pre-altas por firmar`}` : ''}`;
+    $('hoyKicker').textContent = estado.rol;
 
     // U-12 (v0.22.0): los mismos botones (Autorizar · Anular/Eliminar) salen en la franja y en su renglon de «Pendiente
     // revisar», que era la unica entrada de esa tarjeta sin accion; la excepcion se cuenta una sola vez (en la tarjeta).
@@ -2193,8 +2266,6 @@ function pintarHoy() {
         return bs;
     };
     pintarFranjaHoy(pendientes, botonesExcepcion);
-    pintarKpisHoy({ cerradosHoy: cerrados(d => d === hoy), cerradosAyer: cerrados(d => d === ayer), cerradosSemana: cerrados(d => d >= lunes),
-        activos, borradores, rechazosSemana: estado.embarques.filter(e => e.Etapa === 'rechazado' && dia(e) >= lunes) });
     pintarFilaDia(hoy, dia);
     // Exportar lo cargado a CSV (F4): para el reporte al cliente y la bitacora, sin copiar cifras de la pantalla.
     $('btnExportar').classList.toggle('oculto', !estado.embarques.length);
@@ -2258,11 +2329,25 @@ for (const b of document.querySelectorAll('.tema button')) b.addEventListener('c
     aplicarTema(nuevo);
     try { localStorage.setItem(TEMA_LLAVE, nuevo); } catch (e) { /* sin almacenamiento */ }
 });
-$('btnSalir').addEventListener('click', salir);
+$('btnSalir').addEventListener('click', () => { $('menuRail').open = false; salir(); });
 $('btnSalirMovil').addEventListener('click', () => { $('menuMovil').open = false; salir(); });
+// v0.32.0: el rail se PLIEGA a 64 px con la marca y se despliega con el chevron (Proyectos v0.28.1); se recuerda por dispositivo.
+const RAIL_LLAVE = 'calytek-planta-rail';
+function plegarRail(p) {
+    $('app').classList.toggle('rail-plegado', p);
+    $('btnMarca').setAttribute('aria-expanded', String(!p)); $('btnPlegar').setAttribute('aria-expanded', String(!p));
+    try { localStorage.setItem(RAIL_LLAVE, p ? 'plegado' : 'abierto'); } catch (e) { /* sin almacenamiento */ }
+}
+try { plegarRail(localStorage.getItem(RAIL_LLAVE) === 'plegado'); } catch (e) { /* sin almacenamiento */ }
+$('btnMarca').addEventListener('click', () => plegarRail(true));
+$('btnPlegar').addEventListener('click', () => plegarRail(false));
+document.addEventListener('click', ev => { const m = $('menuRail'); if (m.open && !m.contains(ev.target)) m.open = false; });
+// Imprimir los reportes: la hoja de impresión solo deja ver el ticket; con esta clase deja ver la sección (estilo.css @media print).
+$('btnImprimirReportes').addEventListener('click', () => { document.body.classList.add('imprimiendo-reportes'); window.print(); });
+window.addEventListener('afterprint', () => document.body.classList.remove('imprimiendo-reportes'));
 // El menu «···» se cierra al elegir algo o al tocar fuera.
 document.addEventListener('click', ev => { const m = $('menuMovil'); if (m.open && !m.contains(ev.target)) m.open = false; });
-$('btnActualizar').addEventListener('click', () => recargar());
+$('btnActualizar').addEventListener('click', () => { $('menuRail').open = false; recargar(); });
 $('btnActualizarMovil').addEventListener('click', () => { $('menuMovil').open = false; recargar(); });
 // Al volver a la app (el celular estuvo en el bolsillo, la pestana en segundo plano) se relee si
 // el estado tiene mas de un minuto. Sin aviso: solo cambia lo que se ve.
@@ -2274,7 +2359,7 @@ document.addEventListener('visibilitychange', () => {
 if (CONFIG.refrescoMs > 0) setInterval(() => {
     if (document.visibilityState === 'visible' && estado.siteId && Date.now() - estado.cargadoEl > CONFIG.refrescoMs - 5000) recargar(true);
 }, CONFIG.refrescoMs);
-for (const b of $('pestanas').querySelectorAll('button')) b.addEventListener('click', () => irDesdePestana(b.dataset.p));   // C-27 / U-41
+for (const b of botonesRail()) b.addEventListener('click', () => irDesdePestana(b.dataset.p));   // C-27 / U-41
 $('puPrealta').addEventListener('change', () => { pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta(); });
 // U-17 (v0.22.0): se compara con data-placa; el textContent del chip trae pegado el <small> («55XY9Kgóndola · 20,000 kg»)
 // y una unidad sin placa plana nunca se marcaba al teclear.
