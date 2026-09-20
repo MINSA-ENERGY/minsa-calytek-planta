@@ -928,6 +928,10 @@ try {
             // U-61 (v0.34.0): la cifra de cada semana con toneladas va a la vista, no solo en title
             const conKg = [...$('repSemanas').children].filter(d => d.querySelector('i').title !== '0.0 t');
             R.ok('U-61: cada semana con toneladas trae su cifra visible (.cifra) igual al title de la barra', conKg.length > 0 && conKg.every(d => d.querySelector('.cifra') && d.querySelector('i').title === d.querySelector('.cifra').textContent + ' t'), `${conKg.length} semanas con kg`);
+            // U-60 (v0.34.1): la etiqueta es día + mes en spans; en celular (<= 720) el mes se oculta y el pie dice el rango una vez
+            const etis = [...$('repSemanas').querySelectorAll('.eti')];
+            const mesOculto = window.matchMedia('(max-width: 720px)').matches ? etis.every(e => getComputedStyle(e.querySelector('.mes')).display === 'none') : etis.every(e => getComputedStyle(e.querySelector('.mes')).display !== 'none');
+            R.ok('U-60: 8 etiquetas día+mes, el mes oculto solo en celular, y el pie abre con «Semanas del D mes al D mes»', etis.length === 8 && etis.every(e => /^\d{1,2}$/.test(e.firstChild.textContent) && /^ [a-z]{3}$/.test(e.querySelector('.mes').textContent)) && mesOculto && /^Semanas del \d{1,2} [a-z]{3} al \d{1,2} [a-z]{3}\./.test($('repSemanasSub').textContent), `${window.innerWidth}px · ${etis.map(e => e.textContent).join('|')} · ${$('repSemanasSub').textContent.slice(0, 40)}`);
         }
         document.querySelector('#pestanas button[data-p="hoy"]').click();
         R.ok('C-29: Hoy pinta los mismos rechazos que Reportes (hasta 10), con la misma etiqueta de compuerta', $('tbRechazos').querySelectorAll('.renglon').length === Math.min(10, $('repRechazos').querySelectorAll('.renglon').length) && [...$('tbRechazos').querySelectorAll('.renglon')].every(r => r.querySelector('.etiqueta')), `hoy ${$('tbRechazos').querySelectorAll('.renglon').length} · reportes ${$('repRechazos').querySelectorAll('.renglon').length}`);

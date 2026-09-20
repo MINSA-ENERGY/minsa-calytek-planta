@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp } from './reglas.js';
 
-const VERSION = '0.34.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.34.1';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -2068,6 +2068,7 @@ function pintarKpisReportes({ cerradosHoy, cerradosAyer, cerradosSemana, activos
 // ================================================================ REPORTES (v0.32.0, sección aparte; artifact 1GvBJaYooYvjZT4rMRtL9Q)
 // Los cinco KPI que vivían en Hoy, más lo que se lee de lo cargado: avance por programa, por carrier, toneladas por semana,
 // rechazos/excepciones y netos fuera de banda. Todo sale de estado.embarques (CONFIG.ventanaDias más lo abierto): no lee nada más.
+const mesCorto = f => new Date(f + 'T12:00:00Z').toLocaleDateString('es-MX', { timeZone: 'UTC', month: 'short' }).replace('.', '');
 function pintarReportes() {
     const { hoy, ayer, lunes, dia, diaCierre, cerrados } = cortesDia();
     const activos = estado.embarques.filter(enPlanta);
@@ -2109,10 +2110,11 @@ function pintarReportes() {
         const d = el('div', s.desde === l0 ? 'hoy' : '');
         d.appendChild(el('span', 'cifra', s.kg ? t(s.kg) : ''));   // U-61 (v0.34.0): la cifra a la vista; el title era solo hover
         const i = el('i'); i.style.height = Math.max(1, Math.round((s.kg / topeSem) * 100)) + '%'; i.title = `${t(s.kg)} t`; d.appendChild(i);
-        d.appendChild(document.createTextNode(new Date(s.desde + 'T12:00:00').toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: 'numeric', month: 'short' }).replace('.', ''))); sem.appendChild(d);
+        // U-60 (v0.34.1): día y mes en spans; en celular solo se ve el día y el mes va una vez en el pie
+        const eti = el('span', 'eti', String(Number(s.desde.slice(8, 10)))); eti.appendChild(el('span', 'mes', ' ' + mesCorto(s.desde))); d.appendChild(eti); sem.appendChild(d);
     }
     const enCurso = semanas[semanas.length - 1];
-    $('repSemanasSub').textContent = `Semana en curso en azul: ${t(enCurso.kg)} t al ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long' })}. Tope de la escala: ${t(topeSem)} t. Solo cuentan las cerradas dentro de lo cargado.`;
+    $('repSemanasSub').textContent = `Semanas del ${Number(semanas[0].desde.slice(8, 10))} ${mesCorto(semanas[0].desde)} al ${Number(enCurso.hasta.slice(8, 10))} ${mesCorto(enCurso.hasta)}. Semana en curso en azul: ${t(enCurso.kg)} t al ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long' })}. Tope de la escala: ${t(topeSem)} t. Solo cuentan las cerradas dentro de lo cargado.`;
 
     // rechazos y excepciones (misma definición que la tarjeta de Hoy, sin el tope de 10) y netos fuera de banda
     const rj = $('repRechazos'); rj.textContent = '';

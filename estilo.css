@@ -612,6 +612,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .semanas .hoy i { opacity: 1; background: var(--acc); }
 .semanas .cifra { font-size: .62rem; color: var(--ink); white-space: nowrap; line-height: 1; }   /* U-61: la cifra sobre la barra; el title era solo hover */
 .semanas .cifra:empty { display: none; }
+@media (max-width: 720px) { .semanas .eti .mes { display: none; } }   /* U-60: a 390 px caben ~36 px por semana; el mes va una vez en el pie */
 @media (max-width: 900px) { .rep-rejilla { grid-template-columns: 1fr; } }
 
 /* ---------------------------------------------------------------- ARCHIVOS (v0.33.0): el árbol de la biblioteca (details anidados) + filtros */
