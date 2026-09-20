@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch } from './reglas.js';
 
-const VERSION = '0.29.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.30.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -44,6 +44,8 @@ const pca = new msal.PublicClientApplication({
         authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
         redirectUri: new URL('./', window.location.href).href
     },
+    // storeAuthStateInCookie ya no existe en msal-browser 5.x (se quito de CacheOptions); se deja escrito porque el bundle lo ignora
+    // y documenta la decision de S-04 (nada de cookies). sessionStorage sigue siendo decision cerrada.
     cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false }
 });
 
@@ -219,7 +221,12 @@ function nombreDe(coleccion, id) { if (id === null || id === undefined || id ===
 
 async function token() {
     const cuentas = pca.getAllAccounts();
-    const r = await pca.acquireTokenSilent({ scopes: CONFIG.scopes, account: cuentas[0] });
+    // S-13 (v0.30.0, msal-browser 5.x): sin caer al iframe oculto. En 5.x el iframe/popup exige una pagina «redirect bridge»
+    // que esta app no tiene (su redirectUri es index.html, que procesa la respuesta con handleRedirectPromise como en 4.x);
+    // sin bridge, la renovacion por iframe muere en `redirect_bridge_timeout` (BrowserAuthError, no InteractionRequired) y el
+    // catch de refrescarCliente() no la mandaria al login. Con AccessTokenAndRefreshToken MSAL usa cache y refresh token y,
+    // si no alcanzan, lanza InteractionRequiredAuthError (no_tokens_found / refresh_token_expired) -> acquireTokenRedirect.
+    const r = await pca.acquireTokenSilent({ scopes: CONFIG.scopes, account: cuentas[0], cacheLookupPolicy: msal.CacheLookupPolicy.AccessTokenAndRefreshToken });
     return r.accessToken;
 }
 let msalListo = false;

@@ -43,7 +43,9 @@
         async logoutRedirect() { window.__PRUEBAS.log('nota', 'logoutRedirect llamado'); }
     }
     class InteractionRequiredAuthError extends Error { constructor(m) { super(m); this.errorCode = 'interaction_required'; } }
-    window.msal = { PublicClientApplication, InteractionRequiredAuthError };
+    // S-13: el bundle real exporta CacheLookupPolicy y app.js lo usa en acquireTokenSilent; el falso lo expone con los mismos valores.
+    const CacheLookupPolicy = { Default: 0, AccessToken: 1, AccessTokenAndRefreshToken: 2, RefreshToken: 3, RefreshTokenAndNetwork: 4, Skip: 5 };
+    window.msal = { PublicClientApplication, InteractionRequiredAuthError, CacheLookupPolicy };
     window.__CUENTA = cuenta;
     // Sin service worker en las pruebas: un controllerchange recargaria la pagina a media corrida.
     Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: {
