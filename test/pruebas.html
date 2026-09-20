@@ -229,9 +229,12 @@ async function foto() {
     await esperar(() => visible('baFotoPrevia'), 'foto previa');
 }
 // Si la version bajo prueba trae el dialogo propio (<dialog id="dlg">), lo contesta; si no, confirm() ya dijo si.
+// Espera hasta 8 s VIRTUALES a que abra (v0.24.0; antes 2 s): bajo --virtual-time-budget el reloj de la pagina corre mientras
+// la app espera algo atado al reloj REAL, y un dialogo que abria «tarde» dejaba sin contestar ese confirm y todos los que
+// seguian (fallas erraticas «tiempo agotado esperando: chofer eliminado / dialogo de cambio de vigencia / unidad editada»).
 async function confirmar(motivo) {
     const d = $('dlg'); if (!d) return;
-    await esperar(() => d.open, 'diálogo abierto', 2000).catch(() => {});
+    await esperar(() => d.open, 'diálogo abierto', 8000).catch(() => {});
     if (!d.open) return;
     if (motivo !== undefined && $('dlgMotivo')) poner('dlgMotivo', motivo);
     clic('dlgOk');
@@ -440,12 +443,50 @@ try {
         document.querySelector('#paBorradores .renglon button').click();
         await esperar(() => visible('paDetalle'), 'detalle de pre-alta');
         R.ok('detalle: vigencias todo vigente y botón Firmar habilitado', $('paDetalleVigencias').textContent.includes('todo vigente') && !$('btnFirmar').disabled && visible('btnFirmar'));
+        const nLl0 = DB.llamadas.length;
         clic('btnFirmar'); await confirmar();
         await esperar(() => avisoCon('Pre-alta firmada'), 'firma');
         R.ok('pre-alta firmada con quién y cuándo', filas('prealtas')[0].fields.Estado === 'firmada' && filas('prealtas')[0].fields.FirmadaPor === window.__CUENTA.username);
+        // S-01 (v0.24.0): la firma deja su renglon en PLANTA_Firmas y se escribe ANTES del sello (para quien no es firmante es un 403).
+        {
+            const pid = filas('prealtas')[0].id;
+            const f = filas('firmas').find(x => x.fields.Tipo === 'prealta' && Number(x.fields.ObjetoId) === pid);
+            const ll = DB.llamadas.slice(nLl0);
+            const iF = ll.findIndex(x => x.startsWith('POST') && x.includes('lista-firmas'));
+            const iS = ll.findIndex(x => x.startsWith('PATCH') && x.includes(`lista-prealtas/items/${pid}/`));
+            R.ok('S-01: la firma deja renglón en PLANTA_Firmas (Tipo prealta, ObjetoId, Firmante) ANTES del sello en PreAltas', !!f && f.fields.Firmante === window.__CUENTA.username && iF >= 0 && iS > iF, `firma #${iF} · sello #${iS}`);
+        }
+        // S-01: una pre-alta con SELLO (Estado firmada, FirmadaPor) pero sin renglon en PLANTA_Firmas —escrita por fuera de la app o
+        // de antes del corte— no sale en la puerta, Hoy la lista como pendiente, Pre-altas la etiqueta, y el validador la firma
+        // desde su detalle (la compuerta MANDA; decision de Carlos 2026-09-19).
+        {
+            const sinFirma = { id: DB.siguienteId++, fields: { Title: 'SELLO SIN FIRMA-POZO 9-2026', Estado: 'firmada', FirmadaPor: 'intruso@example.invalid', FirmadaEl: new Date().toISOString(), Corriente: 'base-aceite', CarrierId: carrierId, Campana: 'L-99-999', FechaEstimada: '2026-12-01T12:00:00Z' } };
+            filas('prealtas').push(sinFirma);
+            clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con sello sin firma');
+            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            R.ok('S-01: la compuerta MANDA — con sello y sin firma NO sale en la puerta y cuenta como por firmar', ![...$('puPrealta').options].some(o => o.textContent.includes('SELLO SIN FIRMA')) && visible('puPendientes') && $('puPendientes').textContent.includes('SELLO SIN FIRMA'), $('puPendientes').textContent.slice(0, 90));
+            document.querySelector('#pestanas button[data-p="hoy"]').click();
+            R.ok('S-01: Hoy la lista en Pendiente revisar como «Firma ·» con el sello sin firma', [...document.querySelectorAll('#tbPendientes .renglon')].some(r => r.textContent.includes('Firma · SELLO SIN FIRMA') && r.textContent.includes('SIN firma en PLANTA_Firmas')));
+            document.querySelector('#pestanas button[data-p="prealtas"]').click();
+            const rSF = [...document.querySelectorAll('#paFirmadas .renglon')].find(r => r.textContent.includes('SELLO SIN FIRMA'));
+            R.ok('S-01: en Pre-altas lleva la etiqueta «sin firma»', !!rSF && rSF.textContent.includes('sin firma'));
+            rSF.querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle del sello sin firma');
+            R.ok('S-01: el detalle dice SIN FIRMA y ofrece Firmar aunque el Estado ya sea firmada', visible('btnFirmar') && !$('btnFirmar').disabled && $('paDetalleLista').textContent.includes('SIN FIRMA en PLANTA_Firmas') && !!avisoCon('no firma en PLANTA_Firmas'));
+            clic('btnFirmar'); await confirmar(); await esperar(() => avisoCon('Pre-alta firmada'), 'firma del sello');
+            R.ok('S-01: firmar crea el renglón y el sello pasa a quien firmó', !!filas('firmas').find(x => x.fields.Tipo === 'prealta' && Number(x.fields.ObjetoId) === sinFirma.id) && sinFirma.fields.FirmadaPor === window.__CUENTA.username);
+            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            R.ok('S-01: ya firmada, sale en el selector de la puerta', [...$('puPrealta').options].some(o => o.textContent.includes('SELLO SIN FIRMA')));
+            // Se retira para no alterar el resto de la corrida.
+            filas('prealtas').splice(filas('prealtas').indexOf(sinFirma), 1);
+            const fr = filas('firmas').find(x => Number(x.fields.ObjetoId) === sinFirma.id); filas('firmas').splice(filas('firmas').indexOf(fr), 1);
+            clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras retirar el sello');
+            document.querySelector('#pestanas button[data-p="prealtas"]').click();
+        }
     } else {
         Object.assign(filas('prealtas')[0].fields, { Estado: 'firmada', FirmadaPor: 'validador@example.invalid', FirmadaEl: new Date().toISOString() });
-        R.log('nota', 'rol sin firma: pre-alta firmada directo en la lista');
+        // S-01: con la compuerta de firmas activa, el sello solo vale con su renglon en PLANTA_Firmas.
+        filas('firmas').push({ id: DB.siguienteId++, fields: { Title: 'prealta · CLIENTE DEMO-POZO 1-2026', Tipo: 'prealta', ObjetoId: filas('prealtas')[0].id, Firmante: 'validador@example.invalid', FirmadoEl: new Date().toISOString() } });
+        R.log('nota', 'rol sin firma: pre-alta firmada directo en la lista, con su renglón en PLANTA_Firmas');
     }
 
     if (['trazabilidad', 'gerencia'].includes(ROL)) {
@@ -612,10 +653,28 @@ try {
                     !!rExc && document.querySelectorAll('#tbPendientes .renglon').length === [...document.querySelectorAll('#tbPendientes .renglon')].filter(r => !r.textContent.includes('Excepción')).length + 1
                     && (ROL === 'gerencia' ? !!btnAut : !!rExc.querySelector('button')), rExc ? rExc.textContent.slice(0, 80) : 'sin renglón');
             }
+            if (ROL === 'trazabilidad') {
+                // S-01: alguien escribe el sello por Graph (sin renglon en PLANTA_Firmas): la compuerta manda, sigue fuera de bascula y Hoy lo dice.
+                exc.fields.ExcepcionAutorizo = 'intruso@example.invalid'; exc.fields.ExcepcionEl = new Date().toISOString();
+                clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con sello sin firma');
+                document.querySelector('#pestanas button[data-p="bascula"]').click();
+                const fueraBascula = !$('baLista').textContent.includes(exc.fields.Manifiesto);
+                document.querySelector('#pestanas button[data-p="hoy"]').click();
+                R.ok('S-01: un sello ExcepcionAutorizo sin firma en PLANTA_Firmas NO mete la góndola a báscula y Hoy lo señala', fueraBascula && visible('hoyFranja') && $('hoyFranja').textContent.includes('SIN firma en PLANTA_Firmas'), $('hoyFranja').textContent.slice(0, 120));
+                delete exc.fields.ExcepcionAutorizo; delete exc.fields.ExcepcionEl;
+                clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras retirar el sello');
+                document.querySelector('#pestanas button[data-p="hoy"]').click();
+            }
             if (ROL === 'gerencia') {
+                // S-01: sin permiso en PLANTA_Firmas (403) la autorizacion NO procede: ni sello, ni renglon, sigue pendiente.
+                DB.fallas.push({ metodo: 'POST', incluye: 'lista-firmas', status: 403, veces: 1 });
+                $('hoyFranja').querySelector('button.si').click(); await confirmar();
+                await esperar(() => avisoCon('No se pudo autorizar'), 'autorización negada por 403');
+                R.ok('S-01: con 403 en PLANTA_Firmas la autorización no procede (sin sello, sin renglón, sigue en la franja)', !exc.fields.ExcepcionAutorizo && !filas('firmas').some(x => x.fields.Tipo === 'excepcion') && visible('hoyFranja'), avisoCon('No se pudo autorizar') && avisoCon('No se pudo autorizar').textContent);
                 $('hoyFranja').querySelector('button.si').click(); await confirmar();
                 await esperar(() => avisoCon('Excepción autorizada'), 'autorización');
                 R.ok('excepción autorizada queda en el embarque con quién y cuándo', exc.fields.ExcepcionAutorizo === window.__CUENTA.username && !!exc.fields.ExcepcionEl);
+                R.ok('S-01: la autorización deja su renglón en PLANTA_Firmas (Tipo excepcion, ObjetoId, motivo de la caseta)', filas('firmas').some(x => x.fields.Tipo === 'excepcion' && Number(x.fields.ObjetoId) === exc.id && x.fields.Firmante === window.__CUENTA.username && String(x.fields.Motivo).includes('Póliza renovada')));
                 document.querySelector('#pestanas button[data-p="bascula"]').click();
                 R.ok('ya autorizada, la góndola aparece en planta', $('baLista').textContent.includes('55XY9K'));
             }
@@ -682,7 +741,14 @@ try {
         const btnAnular = filaEmb2 && filaEmb2.querySelector('button[data-accion="anular"]');
         R.ok('embarque cerrado con folio ofrece Anular (no eliminar)', !!btnAnular && !(filaEmb2 && filaEmb2.querySelector('button[data-accion="eliminar"]')));
         if (btnAnular) {
-            btnAnular.click(); await confirmar('');
+            // v0.24.0: si el clic cayo en un nodo suelto (la tabla se repinto entre la captura y el clic), se vuelve a tomar
+            // el boton de la tabla viva y se reintenta; asi la prueba mide la app y no la carrera del arnes.
+            for (let intento = 0; intento < 3 && !$('dlg').open; intento++) {
+                const fila = [...document.querySelectorAll('#tbFila tr')].find(tr => tr.textContent.includes(emb2.fields.Title));
+                const b = fila && fila.querySelector('button[data-accion="anular"]'); if (b) b.click();
+                await esperar(() => $('dlg').open, 'diálogo de anular', 600).catch(() => {});
+            }
+            await confirmar('');
             await dormir(80);
             R.ok('anular sin motivo no procede (el diálogo sigue abierto)', emb2.fields.Etapa === 'cerrado' && $('dlg').open, `etapa ${emb2.fields.Etapa} · abierto ${$('dlg').open} · motivo "${$('dlgMotivo').value}"`);
             if ($('dlg').open) clic('dlgCancelar');
@@ -726,6 +792,8 @@ try {
         document.querySelector('#pestanas button[data-p="padron"]').click();
         clic('btnNuevoChofer'); poner('pchCarrier', String(carrierId)); poner('pchNombre', 'CHOFER DE PRUEBA'); clic('btnGuardarChofer');
         await esperar(() => filas('choferes').length === 2, 'chofer 2');
+        // Al repintado, no al dato (v0.24.0): con el renglon capturado un tick antes, el clic en Eliminar caia en un nodo suelto.
+        await esperar(() => [...document.querySelectorAll('#pdChoferes .renglon')].some(r => r.textContent.includes('CHOFER DE PRUEBA')), 'renglón del chofer repintado');
         const rCh = [...document.querySelectorAll('#pdChoferes .renglon')].find(r => r.textContent.includes('CHOFER DE PRUEBA'));
         const rUn = document.querySelector('#pdUnidades .renglon');
         // v0.15.1 revirtió la autorización de gerencia: trazabilidad y gerencia eliminan / dan de baja directo.
@@ -754,12 +822,18 @@ try {
         }
         // C-08 (v0.23.0): editar una unidad cambiando la vigencia de la poliza pide motivo y lo deja en Notas.
         {
+            // Se espera al REPINTADO (el boton Editar existe solo con la unidad activa), no al dato de la reactivacion:
+            // el renglon capturado antes del repintado era un nodo suelto y el clic no abria nada (misma carrera que 12a).
+            await esperar(() => document.querySelector('#pdUnidades .renglon button[data-accion="editar"]'), 'renglón repintado con Editar').catch(() => {});
             const rEd = document.querySelector('#pdUnidades .renglon');
             const btnEd = rEd && rEd.querySelector('button[data-accion="editar"]');
             if (btnEd) {
                 btnEd.click(); await esperar(() => $('pdFormaUnidad').open, 'edición de unidad');
-                poner('puuPolizaVig', '2027-09-30'); clic('btnGuardarUnidad');
-                await esperar(() => $('dlg').open && $('dlgTitulo').textContent.includes('Cambio de vigencia'), 'diálogo de cambio de vigencia');
+                poner('puuPolizaVig', '2027-09-30');
+                const antesGuardar = `carrier "${$('puuCarrier').value}" · placa "${$('puuPlaca').value}" · póliza "${$('puuPolizaVig').value}"`;
+                clic('btnGuardarUnidad');
+                try { await esperar(() => $('dlg').open && $('dlgTitulo').textContent.includes('Cambio de vigencia'), 'diálogo de cambio de vigencia'); }
+                catch (e) { throw new Error(`${e.message} — antes: ${antesGuardar} — avisos: "${$('avisos').textContent}" · forma: "${$('pdFormaUnidad').querySelector('.dlg-avisos').textContent}" · dlg abierto ${$('dlg').open} «${$('dlgTitulo').textContent}» · forma abierta ${$('pdFormaUnidad').open}`); }
                 await confirmar('Póliza renovada, endoso 2');
                 await esperar(() => avisoCon('unidad actualizado'), 'unidad editada');
                 const u = filas('unidades')[0].fields;

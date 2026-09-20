@@ -12,7 +12,9 @@ $fallas = 0
 try {
     foreach ($rol in $Roles) {
         $out = Join-Path $env:TEMP "planta-e2e-$rol.html"
-        & $edge --headless=new --disable-gpu --virtual-time-budget=30000 --dump-dom "http://localhost:8080/?rol=$rol" 2>$null | Out-File -Encoding utf8 $out
+        # Presupuesto de tiempo VIRTUAL de 120 s (antes 30): la corrida crece con cada version y al agotarse Edge vuelca el DOM a
+        # medias (sin RESUMEN). Solo cuesta tiempo real si algo espera de verdad.
+        & $edge --headless=new --disable-gpu --virtual-time-budget=120000 --dump-dom "http://localhost:8080/?rol=$rol" 2>$null | Out-File -Encoding utf8 $out
         Start-Sleep -Seconds 1
         $s = Get-Content $out -Raw -Encoding UTF8
         Write-Host "=== $rol"

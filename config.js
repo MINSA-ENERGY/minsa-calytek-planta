@@ -45,7 +45,8 @@ export const CONFIG = {
         prealtas: 'PLANTA_PreAltas',
         embarques: 'PLANTA_Embarques',
         vigencias: 'PLANTA_Vigencias',
-        roles: 'PLANTA_Roles'
+        roles: 'PLANTA_Roles',
+        firmas: 'PLANTA_Firmas'   // S-01 (v0.24.0): sin herencia, solo validador + gerencia escriben; la compuerta manda
     },
 
     // Tolerancia del neto contra la capacidad de la unidad (decision 6): fuera de la banda se

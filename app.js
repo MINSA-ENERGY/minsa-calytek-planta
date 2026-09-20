@@ -13,13 +13,14 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento } from './reglas.js';
 
-const VERSION = '0.23.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.24.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
 const estado = {
     cuenta: null, token: null, cliente: null, siteId: null, rol: 'lectura',
     carriers: [], unidades: [], choferes: [], prealtas: [], embarques: [], vigencias: [], roles: [],
+    firmas: [], compuertaFirmas: false,   // S-01 (v0.24.0): PLANTA_Firmas y si existe (si no, manda el sello como antes)
     ultimaCompuerta: null,   // {resultado, hallazgos, campos}
     pesando: null,           // {embarque, fase: 'bruto'|'tara'}
     fotoBytes: null,
@@ -123,7 +124,10 @@ function confirmar({ titulo, texto, ok = 'Confirmar', motivo = false, etiquetaMo
             cerrar(true);
         };
         $('dlgCancelar').onclick = () => cerrar(false);
-        d.onclose = () => cerrar(false);   // Escape
+        // Escape. Solo si el dialogo YA esta cerrado: el evento close del confirm ANTERIOR llega ENCOLADO (un tick despues
+        // de su close()) y, si este confirm abrio en ese hueco, caia en este handler y lo cerraba sin respuesta — 2 de 8
+        // corridas E2E de gerencia en rojo en pasos distintos, medido 2026-09-19 (v0.24.0) instrumentando close/showModal.
+        d.onclose = () => { if (!d.open) cerrar(false); };
         $('dlgMotivo').oninput = () => $('dlgError').classList.add('oculto');
         d.showModal();
         if (motivo) $('dlgMotivo').focus();
@@ -290,11 +294,42 @@ async function sesionIniciada() {
 /** Un embarque esta "en planta" si paso la compuerta (o le autorizaron la excepcion) y no ha cerrado.
  *  Es LA definicion: la usan Bascula, Hoy y las insignias, para que los tres numeros coincidan. */
 function enPlanta(e) {
-    return (e.Etapa === 'compuerta' && (e.Compuerta === 'pasa' || !!e.ExcepcionAutorizo))
+    return (e.Etapa === 'compuerta' && (e.Compuerta === 'pasa' || excepcionAutorizada(e)))
         || e.Etapa === 'bruto';
 }
 function excepcionesPendientes() {
-    return estado.embarques.filter(e => e.Etapa === 'compuerta' && e.Compuerta === 'excepcion-comercial' && !e.ExcepcionAutorizo);
+    return estado.embarques.filter(e => e.Etapa === 'compuerta' && e.Compuerta === 'excepcion-comercial' && !excepcionAutorizada(e));
+}
+
+/**
+ * S-01, mitad del tenant (v0.24.0): la firma de la pre-alta y la autorizacion de la excepcion viven en PLANTA_Firmas,
+ * una lista SIN herencia donde solo validador + gerencia escriben (setup-carlos.md, tarea 11). La COMPUERTA MANDA
+ * (decision de Carlos, 2026-09-19): sin renglon ahi, la pre-alta no sale en la puerta y la excepcion no pasa a bascula,
+ * aunque el sello (FirmadaPor / ExcepcionAutorizo) este escrito. Mientras la lista no exista, la compuerta queda
+ * INACTIVA y manda el sello como antes: «Hoy» lo dice en Pendiente revisar y el exportador lo advierte.
+ */
+async function cargarFirmas(c, s) {
+    try { const f = await c.renglones(s, L.firmas); estado.compuertaFirmas = true; return f; }
+    catch (e) { if (!/no existe la lista/.test(String(e && e.message))) throw e; estado.compuertaFirmas = false; return []; }
+}
+function firmaDe(tipo, id) { return estado.firmas.find(f => f.Tipo === tipo && Number(f.ObjetoId) === Number(id)) || null; }
+function prealtaFirmada(p) { return p.Estado === 'firmada' && (!estado.compuertaFirmas || !!firmaDe('prealta', p.id)); }
+function excepcionAutorizada(e) { return !!e.ExcepcionAutorizo && (!estado.compuertaFirmas || !!firmaDe('excepcion', e.id)); }
+/** Sellos escritos sin su renglon de firma (de antes del corte, o por fuera de la app): la compuerta no los acepta. */
+function sellosSinFirma() {
+    if (!estado.compuertaFirmas) return { prealtas: [], embarques: [] };
+    return { prealtas: estado.prealtas.filter(p => p.Estado === 'firmada' && !firmaDe('prealta', p.id)),
+             embarques: estado.embarques.filter(e => e.Etapa === 'compuerta' && !!e.ExcepcionAutorizo && !firmaDe('excepcion', e.id)) };
+}
+const selloSinFirma = e => (estado.compuertaFirmas && e.ExcepcionAutorizo ? `sello de ${e.ExcepcionAutorizo} SIN firma en PLANTA_Firmas · ` : '');
+/** El renglon de firma se escribe PRIMERO: para quien no esta en el grupo de firmantes es un 403, y ahi termina. */
+async function firmar(tipo, objeto, motivo) {
+    if (!estado.compuertaFirmas) return null;
+    const f = await estado.cliente.crearRenglon(estado.siteId, L.firmas, limpiar({
+        Title: `${tipo} · ${objeto.Title || objeto.PlacaTractor || objeto.id}`, Tipo: tipo, ObjetoId: objeto.id,
+        Firmante: estado.cuenta.username, FirmadoEl: new Date().toISOString(), Motivo: motivo || null }));
+    estado.firmas.push(f);
+    return f;
 }
 function pintarInsignias() {
     const b = estado.embarques.filter(enPlanta).length;
@@ -364,11 +399,11 @@ function fundirEnVentana(frescos) {
 
 async function cargarTodo() {
     const c = estado.cliente, s = estado.siteId;
-    [estado.carriers, estado.unidades, estado.choferes, estado.prealtas, estado.embarques, estado.vigencias, estado.roles] =
+    [estado.carriers, estado.unidades, estado.choferes, estado.prealtas, estado.embarques, estado.vigencias, estado.roles, estado.firmas] =
         await Promise.all([
             c.renglones(s, L.carriers), c.renglones(s, L.unidades), c.renglones(s, L.choferes),
             c.renglones(s, L.prealtas), cargarEmbarques(c, s), c.renglones(s, L.vigencias),
-            c.renglones(s, L.roles)
+            c.renglones(s, L.roles), cargarFirmas(c, s)
         ]);
     estado.cargadoEl = Date.now();
     reanclar();
@@ -453,9 +488,10 @@ function irA(p) {
 // ================================================================ PUERTA
 
 function pintarPuerta() {
-    const firmadas = estado.prealtas.filter(p => p.Estado === 'firmada');
+    const firmadas = estado.prealtas.filter(prealtaFirmada);
     // Aviso informativo: pre-altas en borrador (sin firma) — la puerta no las ve en el selector hasta que se firmen.
-    const borradores = estado.prealtas.filter(p => p.Estado === 'borrador');
+    // S-01: la que trae sello pero no renglon en PLANTA_Firmas cuenta igual: la compuerta manda.
+    const borradores = estado.prealtas.filter(p => p.Estado === 'borrador' || (p.Estado === 'firmada' && !prealtaFirmada(p)));
     const pp = $('puPendientes'); pp.classList.toggle('oculto', !borradores.length);
     if (borradores.length) pp.textContent = `${borradores.length === 1 ? 'Hay 1 pre-alta por firmar' : `Hay ${borradores.length} pre-altas por firmar`}: ${borradores.map(p => p.Title).join(' · ')}. Sus góndolas no pueden entrar hasta que el validador firme.`;
     opciones($('puPrealta'), firmadas, p => p.id, p => `${p.Title} · ${p.Corriente || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}`);
@@ -871,6 +907,7 @@ async function autorizarExcepcion(e) {
     if (!ok) return;
     try {
         await refrescarCliente();
+        await firmar('excepcion', e, e.ExcepcionMotivo);   // S-01: primero la firma (403 si no eres gerencia), luego el sello
         const campos = { ExcepcionAutorizo: estado.cuenta.username, ExcepcionEl: new Date().toISOString() };
         await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, campos);
         Object.assign(e, campos);
@@ -1128,6 +1165,7 @@ function pintarPrealtas() {
             r.classList.add('conavance');
             if (p.Campana) r.firstChild.firstChild.appendChild(el('span', 'folio', p.Campana));
             if (p.Estado !== grupo) r.firstChild.firstChild.appendChild(etiqueta(p.Estado || 'sin estado', p.Estado));
+            if (grupo === 'firmada' && !prealtaFirmada(p)) r.firstChild.firstChild.appendChild(etiqueta('sin firma', 'vencida'));   // S-01
             const sm = grupo === 'firmada' ? sinMovimientoDe(p) : null;
             if (sm) { r.firstChild.firstChild.appendChild(etiqueta('¿se cierra?', 'aviso')); r.firstChild.appendChild(el('p', 'pista', `${sm.motivo}. Sigue saliendo en la puerta hasta que alguien cierre el programa.`)); }
             r.firstChild.appendChild(barraAvance(g));
@@ -1308,7 +1346,7 @@ function verPrealta(p) {
         ['Unidades', lista(p.UnidadesIds).map(id => { const u = porId(estado.unidades, id); return u ? `${u.Title}/${u.PlacaPlana || ''}` : `#${id}`; }).join(', ') || '—'],
         ['Choferes', lista(p.ChoferesIds).map(id => nombreDe(estado.choferes, id)).join(', ') || '—'],
         ['Primer envío', fechaCorta(p.FechaEstimada)], ['Correo', `${fechaCorta(p.CorreoFecha)} · ${p.CorreoRemitente || ''}`],
-        ['Capturó', p.CapturadaPor || '—'], ['Firmó', p.FirmadaPor ? `${p.FirmadaPor} · ${horaCorta(p.FirmadaEl)}` : '—'], ['Cerró', p.CerradaPor ? `${p.CerradaPor} · ${horaCorta(p.CerradaEl)}` : '—'], ['Notas', p.Notas || '—']
+        ['Capturó', p.CapturadaPor || '—'], ['Firmó', p.FirmadaPor ? `${p.FirmadaPor} · ${horaCorta(p.FirmadaEl)}${p.Estado === 'firmada' && !prealtaFirmada(p) ? ' · SIN FIRMA en PLANTA_Firmas' : ''}` : '—'], ['Cerró', p.CerradaPor ? `${p.CerradaPor} · ${horaCorta(p.CerradaEl)}` : '—'], ['Notas', p.Notas || '—']
     ];
     for (const [k, v] of filas) { const li = el('li', '', k); li.appendChild(el('span', 'd', v)); ul.appendChild(li); }
     // Cotejo automatico de vigencias (lo que el validador firma que reviso).
@@ -1326,10 +1364,12 @@ function verPrealta(p) {
     if (!hallazgos.length) { const li = el('li', '', 'Vigencias '); li.appendChild(etiqueta('todo vigente', 'ok')); vg.appendChild(li); }
     for (const h of hallazgos) { const li = el('li', '', h.regla + ' '); li.appendChild(etiqueta(h.clase, h.clase)); li.appendChild(el('span', 'd', h.detalle)); vg.appendChild(li); }
     const hayLegal = hallazgos.some(h => h.clase === 'legal');
-    $('btnFirmar').classList.toggle('oculto', !(p.Estado === 'borrador' && PUEDE.firmarPrealta(estado.rol)));
+    const porFirmar = p.Estado === 'borrador' || (p.Estado === 'firmada' && !prealtaFirmada(p));   // S-01: el sello sin firma se firma aqui mismo
+    $('btnFirmar').classList.toggle('oculto', !(porFirmar && PUEDE.firmarPrealta(estado.rol)));
     $('btnEditarPrealta').classList.toggle('oculto', !(p.Estado === 'borrador' && PUEDE.capturarPrealta(estado.rol)));
     $('btnFirmar').disabled = hayLegal;
-    if (hayLegal && p.Estado === 'borrador') avisar('No se puede firmar con un hallazgo legal abierto: corrige el padrón (con el oficio a la vista) o cambia el carrier.', 'ojo');
+    if (hayLegal && porFirmar) avisar('No se puede firmar con un hallazgo legal abierto: corrige el padrón (con el oficio a la vista) o cambia el carrier.', 'ojo');
+    else if (porFirmar && p.Estado === 'firmada') avisar('Trae sello pero no firma en PLANTA_Firmas (se escribió por fuera de la app o antes del corte): la puerta no la ve hasta que un validador o gerencia la firme.', 'ojo');
     $('btnCerrarPrealta').classList.toggle('oculto', !(p.Estado === 'firmada' && PUEDE.capturarPrealta(estado.rol)));
     const sm = sinMovimientoDe(p);
     if (sm) avisar(`Este programa ${sm.motivo}. Sigue saliendo en la puerta hasta que se cierre; si ya no vienen más góndolas, ciérralo.`, 'ojo');
@@ -1359,11 +1399,14 @@ async function eliminarPrealta() {
 
 async function firmarPrealta() {
     const p = estado.prealtaAbierta; if (!p) return;
+    const reFirma = p.Estado === 'firmada';   // S-01: trae el sello pero no su renglon en PLANTA_Firmas; solo falta la firma
     const { ok } = await confirmar({ titulo: 'Firmar la pre-alta', ok: 'Firmar',
-        texto: `«${p.Title}». Con tu firma la puerta empieza a aceptar sus góndolas; queda registrado quién y cuándo.` });
+        texto: reFirma ? `«${p.Title}» trae el sello de ${p.FirmadaPor} pero no su firma en PLANTA_Firmas, así que la puerta no la ve. Con tu firma queda completa; queda registrado quién y cuándo.`
+            : `«${p.Title}». Con tu firma la puerta empieza a aceptar sus góndolas; queda registrado quién y cuándo.` });
     if (!ok) return;
     try {
         await refrescarCliente();
+        await firmar('prealta', p);   // S-01: primero la firma (403 si no eres validador/gerencia), luego el sello
         const campos = { Estado: 'firmada', FirmadaPor: estado.cuenta.username, FirmadaEl: new Date().toISOString() };
         await estado.cliente.actualizarRenglon(estado.siteId, L.prealtas, p.id, campos);
         Object.assign(p, campos);
@@ -1786,7 +1829,7 @@ function segmentosEtapa(e) {
 }
 function etiquetaCompuertaDe(e) {
     if (e.Etapa === 'anulado') return etiqueta('anulado', 'anulado');
-    return etiqueta(e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'no entró' : e.ExcepcionAutorizo ? 'excepción ok' : 'espera',
+    return etiqueta(e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'no entró' : excepcionAutorizada(e) ? 'excepción ok' : 'espera',
                     e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'rechazo-legal' : 'excepcion-comercial');
 }
 /** «neto 21,220» / «bruto 44,600» / null; `rotuloNeto` vacio deja el neto solo (la tabla ya tiene la columna). */
@@ -1810,7 +1853,7 @@ function pintarFranjaHoy(pendientes, botonesExcepcion) {
         const it = el('div', 'item');
         it.appendChild(el('b', 'w', 'Espera'));
         it.appendChild(el('span', 't', `${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)} · ${e.Manifiesto || 'sin manifiesto'}`));
-        it.appendChild(el('span', 's', `«${e.ExcepcionMotivo || 'sin motivo'}» · ${e.CapturadoPor || '?'}, ${horaCorta(e.Arribo)}`));
+        it.appendChild(el('span', 's', `${selloSinFirma(e)}«${e.ExcepcionMotivo || 'sin motivo'}» · ${e.CapturadoPor || '?'}, ${horaCorta(e.Arribo)}`));
         const bs = botonesExcepcion(e);
         if (bs.length) { const d = el('div', 'botones'); for (const b of bs) d.appendChild(botonAccion(b)); it.appendChild(d); }
         fr.appendChild(it);
@@ -1887,13 +1930,17 @@ function pintarFilaDia(hoy, dia) {
 function pintarPendientesHoy(borradores, pendientes, botonesExcepcion) {
     const pf = $('tbPendientes'); pf.textContent = '';
     const dormidas = estado.prealtas.filter(p => p.Estado === 'firmada').map(p => ({ p, sm: sinMovimientoDe(p) })).filter(x => x.sm);
-    const nPend = borradores.length + pendientes.length + dormidas.length;
+    // S-01: sellos sin firma en PLANTA_Firmas (la compuerta no los acepta) y la lista misma si no esta provisionada.
+    const ssf = sellosSinFirma().prealtas;
+    const nPend = borradores.length + pendientes.length + dormidas.length + ssf.length + (estado.compuertaFirmas ? 0 : 1);
     $('tbPendientesTarjeta').classList.toggle('alerta', nPend > 0);
     $('tbPendientesN').classList.toggle('oculto', !nPend); $('tbPendientesN').textContent = String(nPend);
     if (!nPend) pf.appendChild(el('p', 'vacio', 'Nada pendiente.'));
+    if (!estado.compuertaFirmas) pf.appendChild(renglon('PLANTA_Firmas no existe en el sitio', 'la compuerta de firmas (S-01) está INACTIVA: manda el sello · provisionar la lista y romper su herencia (setup-carlos.md, tarea 11)'));
+    for (const p of ssf) pf.appendChild(renglon(`Firma · ${p.Title}`, `sello de ${p.FirmadaPor || '?'} SIN firma en PLANTA_Firmas · la puerta no la ve · la firma un validador o gerencia desde su detalle`, 'Ver', () => verPrealta(p)));
     for (const { p, sm } of dormidas) pf.appendChild(renglon(`Programa · ${p.Title}`, `${sm.motivo} · ¿se cierra? Sigue saliendo en la puerta`, 'Ver', () => verPrealta(p)));
     for (const p of borradores) { const d = diasPara(p.FechaEstimada); pf.appendChild(renglon(`Pre-alta · ${p.Title}`, `firma del validador · 1er envío ${fechaCorta(p.FechaEstimada)}${d !== null ? ` (en ${d} días)` : ''} · capturó ${p.CapturadaPor || '?'}`, 'Ver', () => verPrealta(p))); }
-    for (const e of pendientes) pf.appendChild(renglon(`Excepción · ${e.PlacaTractor}`, `autorización de gerencia · «${e.ExcepcionMotivo || 'sin motivo'}» · ${horaCorta(e.Arribo)}`, null, null, botonesExcepcion(e).map(b => ({ ...b, clase: b.accion === 'autorizar' ? '' : 'peligro' }))));
+    for (const e of pendientes) pf.appendChild(renglon(`Excepción · ${e.PlacaTractor}`, `${selloSinFirma(e)}autorización de gerencia · «${e.ExcepcionMotivo || 'sin motivo'}» · ${horaCorta(e.Arribo)}`, null, null, botonesExcepcion(e).map(b => ({ ...b, clase: b.accion === 'autorizar' ? '' : 'peligro' }))));
 }
 
 function pintarRechazosHoy() {

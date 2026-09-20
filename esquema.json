@@ -1,6 +1,6 @@
 {
   "_que_es": "Esquema de las listas de SharePoint de la app de control de planta CALYTEK. Es la UNICA fuente: la lee herramientas-dev/provisionar.html para crearlas y app/graph.js para leerlas/escribirlas. Los nombres de columna son los INTERNOS (sin espacios ni acentos); el titulo visible va en 'titulo'. Las relaciones van por ID de renglon (numero), no por columna de busqueda: mas simple de leer por Graph y no obliga a crear las listas en orden. Los campos citan los 24 de minsa-energy/ambiental/calytek/registro-prestador-servicios.md seccion 4.1 (c1..c24) y el padron (padron-transportistas-y-vigencias.md).",
-  "version": 3,
+  "version": 4,
   "listas": [
     {
       "nombre": "PLANTA_Carriers",
@@ -150,6 +150,20 @@
         { "nombre": "Nombre", "titulo": "Nombre", "tipo": "text" },
         { "nombre": "Rol", "titulo": "Rol", "tipo": "choice", "opciones": ["trazabilidad", "validador", "gerencia", "lectura"], "obligatorio": true },
         { "nombre": "Activo", "titulo": "Activo", "tipo": "boolean" }
+      ]
+    },
+    {
+      "nombre": "PLANTA_Firmas",
+      "titulo": "Firmas (validador y gerencia)",
+      "clave": "firmas",
+      "regla": "S-01, mitad del tenant (v0.24.0): la firma de la pre-alta y la autorizacion de la excepcion viven AQUI, en una lista SIN herencia donde solo el grupo Planta-Firmantes (validador + gerencia) tiene Colaborar; los demas miembros, Leer (setup-carlos.md, tarea 11). El sello en PreAltas/Embarques (FirmadaPor, ExcepcionAutorizo) es informativo; la COMPUERTA MANDA: sin renglon aqui la pre-alta no sale en la puerta y la excepcion no pasa a bascula. La app escribe este renglon PRIMERO: para quien no es firmante es un 403 y ahi termina.",
+      "columnas": [
+        { "nombre": "Title", "titulo": "Referencia", "tipo": "text", "obligatorio": true, "nota": "tipo + titulo del objeto, solo para leerse" },
+        { "nombre": "Tipo", "titulo": "Tipo", "tipo": "choice", "opciones": ["prealta", "excepcion"], "obligatorio": true },
+        { "nombre": "ObjetoId", "titulo": "ID del renglon firmado", "tipo": "number", "obligatorio": true, "indexada": true },
+        { "nombre": "Firmante", "titulo": "Firmante (correo)", "tipo": "text", "obligatorio": true },
+        { "nombre": "FirmadoEl", "titulo": "Firmado el", "tipo": "dateTime", "obligatorio": true },
+        { "nombre": "Motivo", "titulo": "Motivo (excepcion)", "tipo": "text" }
       ]
     }
   ]
