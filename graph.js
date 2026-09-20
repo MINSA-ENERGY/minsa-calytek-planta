@@ -33,17 +33,30 @@ export async function conReintento(hacer, alAvisar) {
     throw new Error('se agotaron los reintentos');
 }
 
+/** Cuerpo de error de Graph, leido UNA vez: codigo (invalidRequest, itemNotFound, accessDenied…) y mensaje. */
+async function cuerpoDeError(r) {
+    try { const j = await r.json(); return { codigo: j?.error?.code || '', mensaje: j?.error?.message || '' }; }
+    catch (_) { return { codigo: '', mensaje: '' }; }   // no era JSON
+}
+function frase(status, d) {
+    const detalle = d.mensaje || d.codigo;
+    if (status === 403) return `sin permiso (403). ${detalle}`;
+    if (status === 404) return `no existe (404). ${detalle}`;
+    if (status === 401) return 'la sesión caducó (401). Vuelve a entrar.';
+    return `HTTP ${status}. ${detalle}`;
+}
+
 /** Mensaje util a partir de una respuesta fallida. No nombra la operacion: la pone quien llama. */
-export async function motivo(r) {
-    let detalle = '';
-    try {
-        const j = await r.json();
-        detalle = j?.error?.message || j?.error?.code || '';
-    } catch (_) { /* no era JSON */ }
-    if (r.status === 403) return `sin permiso (403). ${detalle}`;
-    if (r.status === 404) return `no existe (404). ${detalle}`;
-    if (r.status === 401) return 'la sesión caducó (401). Vuelve a entrar.';
-    return `HTTP ${r.status}. ${detalle}`;
+export async function motivo(r) { return frase(r.status, await cuerpoDeError(r)); }
+
+/**
+ * C-15 (v0.27.0): el Error que sale del cliente trae `status` (HTTP) y `codigo` (error.code de Graph) ademas del texto.
+ * app.js decide por ellos —esColumnaFaltante, cargarFirmas—, no por regex sobre el mensaje: hasta v0.26.0 «invalid»
+ * casaba con InvalidAuthenticationToken y una sesion caducada se leia como «la lista no tiene la columna».
+ */
+export async function fallo(r, prefijo) {
+    const d = await cuerpoDeError(r);
+    return Object.assign(new Error(prefijo + frase(r.status, d)), { status: r.status, codigo: d.codigo });
 }
 
 /** Codifica una ruta para Graph SIN destruir las diagonales. */
@@ -75,7 +88,7 @@ export function crearCliente(graph, token) {
     return {
         async sitio(host, ruta) {
             const r = await pedir(`${graph}/sites/${host}:${ruta}`);
-            if (!r.ok) throw new Error(`no se pudo abrir el sitio ${ruta}: ` + await motivo(r));
+            if (!r.ok) throw await fallo(r, `no se pudo abrir el sitio ${ruta}: `);
             return (await r.json()).id;
         },
 
@@ -87,7 +100,7 @@ export function crearCliente(graph, token) {
             const v = [];
             while (url) {
                 const r = await pedir(url);
-                if (!r.ok) throw new Error('no se pudieron ver las listas del sitio: ' + await motivo(r));
+                if (!r.ok) throw await fallo(r, 'no se pudieron ver las listas del sitio: ');
                 const j = await r.json();
                 v.push(...j.value);
                 url = j['@odata.nextLink'] || null;
@@ -99,14 +112,15 @@ export function crearCliente(graph, token) {
         async idDeLista(siteId, nombre) {
             if (!listasPorNombre.has(nombre)) await this.listas(siteId);
             const id = listasPorNombre.get(nombre);
-            if (!id) throw new Error(`no existe la lista ${nombre} en el sitio: hay que provisionarla (herramientas-dev/provisionar.html)`);
+            // C-15: excepcion tipada como el 404 de Graph, para que quien llama no dependa del texto.
+            if (!id) throw Object.assign(new Error(`no existe la lista ${nombre} en el sitio: hay que provisionarla (herramientas-dev/provisionar.html)`), { status: 404, codigo: 'listaNoExiste' });
             return id;
         },
 
         /** Columnas reales de una lista (nombre interno + tipo), para cotejar contra esquema.json. */
         async columnas(siteId, listaId) {
             const r = await pedir(`${graph}/sites/${siteId}/lists/${listaId}/columns?$top=200`);
-            if (!r.ok) throw new Error('no se pudieron leer las columnas: ' + await motivo(r));
+            if (!r.ok) throw await fallo(r, 'no se pudieron leer las columnas: ');
             return (await r.json()).value;
         },
 
@@ -114,7 +128,7 @@ export function crearCliente(graph, token) {
             const r = await pedir(`${graph}/sites/${siteId}/lists`, {
                 method: 'POST', headers: json, body: JSON.stringify(cuerpo)
             });
-            if (!r.ok) throw new Error(`no se pudo crear la lista ${cuerpo.displayName}: ` + await motivo(r));
+            if (!r.ok) throw await fallo(r, `no se pudo crear la lista ${cuerpo.displayName}: `);
             return await r.json();
         },
 
@@ -122,7 +136,7 @@ export function crearCliente(graph, token) {
             const r = await pedir(`${graph}/sites/${siteId}/lists/${listaId}/columns`, {
                 method: 'POST', headers: json, body: JSON.stringify(columna)
             });
-            if (!r.ok) throw new Error(`no se pudo crear la columna ${columna.name}: ` + await motivo(r));
+            if (!r.ok) throw await fallo(r, `no se pudo crear la columna ${columna.name}: `);
             return await r.json();
         },
 
@@ -139,7 +153,7 @@ export function crearCliente(graph, token) {
             const todos = [];
             while (url) {
                 const r = await pedir(url, { headers: { Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly' } }, avisar);
-                if (!r.ok) throw new Error(`no se pudieron leer los renglones de ${nombreLista}: ` + await motivo(r));
+                if (!r.ok) throw await fallo(r, `no se pudieron leer los renglones de ${nombreLista}: `);
                 const j = await r.json();
                 for (const it of j.value) todos.push(aplanar(it));
                 url = j['@odata.nextLink'] || null;
@@ -151,7 +165,7 @@ export function crearCliente(graph, token) {
         async renglon(siteId, nombreLista, id, avisar) {
             const listaId = await this.idDeLista(siteId, nombreLista);
             const r = await pedir(`${graph}/sites/${siteId}/lists/${listaId}/items/${id}?expand=fields`, {}, avisar);
-            if (!r.ok) throw new Error(`no se pudo leer el renglón ${id} de ${nombreLista}: ` + await motivo(r));
+            if (!r.ok) throw await fallo(r, `no se pudo leer el renglón ${id} de ${nombreLista}: `);
             return aplanar(await r.json());
         },
 
@@ -160,7 +174,7 @@ export function crearCliente(graph, token) {
             const r = await pedir(`${graph}/sites/${siteId}/lists/${listaId}/items`, {
                 method: 'POST', headers: json, body: JSON.stringify({ fields: campos })
             }, avisar);
-            if (!r.ok) throw new Error(`no se pudo escribir en ${nombreLista}: ` + await motivo(r));
+            if (!r.ok) throw await fallo(r, `no se pudo escribir en ${nombreLista}: `);
             return aplanar(await r.json());
         },
 
@@ -169,7 +183,7 @@ export function crearCliente(graph, token) {
             const r = await pedir(`${graph}/sites/${siteId}/lists/${listaId}/items/${id}/fields`, {
                 method: 'PATCH', headers: json, body: JSON.stringify(campos)
             }, avisar);
-            if (!r.ok) throw new Error(`no se pudo actualizar el renglón ${id} de ${nombreLista}: ` + await motivo(r));
+            if (!r.ok) throw await fallo(r, `no se pudo actualizar el renglón ${id} de ${nombreLista}: `);
             return await r.json();
         },
 
@@ -177,7 +191,7 @@ export function crearCliente(graph, token) {
         async borrarRenglon(siteId, nombreLista, id, avisar) {
             const listaId = await this.idDeLista(siteId, nombreLista);
             const r = await pedir(`${graph}/sites/${siteId}/lists/${listaId}/items/${id}`, { method: 'DELETE' }, avisar);
-            if (!r.ok && r.status !== 404) throw new Error(`no se pudo borrar el renglón ${id} de ${nombreLista}: ` + await motivo(r));
+            if (!r.ok && r.status !== 404) throw await fallo(r, `no se pudo borrar el renglón ${id} de ${nombreLista}: `);
         },
 
         /** Cambia las opciones (u otro atributo) de una columna existente: PATCH sobre la definicion. */
@@ -185,14 +199,14 @@ export function crearCliente(graph, token) {
             const r = await pedir(`${graph}/sites/${siteId}/lists/${listaId}/columns/${columnaId}`, {
                 method: 'PATCH', headers: json, body: JSON.stringify(cuerpo)
             }, avisar);
-            if (!r.ok) throw new Error(`no se pudo actualizar la columna ${columnaId}: ` + await motivo(r));
+            if (!r.ok) throw await fallo(r, `no se pudo actualizar la columna ${columnaId}: `);
             return await r.json();
         },
 
         /** Borra una carpeta o archivo de la biblioteca por id. Solo se usa para deshacer un lote que quedo a medias. */
         async borrarItemDrive(siteId, itemId, avisar) {
             const r = await pedir(`${graph}/sites/${siteId}/drive/items/${itemId}`, { method: 'DELETE' }, avisar);
-            if (!r.ok && r.status !== 404) throw new Error(`no se pudo borrar el elemento ${itemId}: ` + await motivo(r));
+            if (!r.ok && r.status !== 404) throw await fallo(r, `no se pudo borrar el elemento ${itemId}: `);
         },
 
         /** Carpeta en la biblioteca (para la evidencia). conflictBehavior rename: dos lotes iguales no se mezclan. */
@@ -201,7 +215,7 @@ export function crearCliente(graph, token) {
                 method: 'POST', headers: json,
                 body: JSON.stringify({ name: nombre, folder: {}, '@microsoft.graph.conflictBehavior': 'rename' })
             }, avisar);
-            if (!r.ok) throw new Error(`no se pudo crear la carpeta ${nombre}: ` + await motivo(r));
+            if (!r.ok) throw await fallo(r, `no se pudo crear la carpeta ${nombre}: `);
             const j = await r.json();
             return { nombreReal: j.name, id: j.id };
         },
@@ -209,7 +223,7 @@ export function crearCliente(graph, token) {
         async subirPieza(siteId, rutaCarpeta, nombreArchivo, bytes, tipoMime, avisar) {
             const url = `${graph}/sites/${siteId}/drive/root:/${rutaUrl(rutaCarpeta)}/${rutaUrl(nombreArchivo)}:/content`;
             const r = await pedir(url, { method: 'PUT', headers: { 'Content-Type': tipoMime }, body: bytes }, avisar);
-            if (!r.ok) throw new Error(`no se pudo subir ${nombreArchivo}: ` + await motivo(r));
+            if (!r.ok) throw await fallo(r, `no se pudo subir ${nombreArchivo}: `);
             return await r.json();
         }
     };

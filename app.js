@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento } from './reglas.js';
 
-const VERSION = '0.26.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.27.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -332,11 +332,16 @@ function excepcionesPendientes() {
 async function cargarFirmas(c, s, avisar) {
     try { const f = await c.renglones(s, L.firmas, null, avisar); estado.firmasError = null; return f; }
     catch (e) {
-        const m = String(e && e.message);
-        if (!/no existe la lista|no existe \(404\)|sin permiso \(403\)/.test(m)) throw e;
-        estado.firmasError = m; return [];
+        if (!(e && (e.status === 404 || e.status === 403))) throw e;   // C-15: por status (idDeLista tipa su 404), no por texto
+        estado.firmasError = String(e.message); return [];
     }
 }
+/**
+ * C-15 (v0.27.0): «la lista no tiene todavia esa columna / esa opcion» se decide por el 400 de Graph (invalidRequest:
+ * «Field 'X' is not recognized», «not a valid option»), no por regex sobre el texto. Un 401, 403, 404 o 5xx NO es una
+ * columna faltante y sube tal cual: antes «invalid» casaba con InvalidAuthenticationToken y «no existe» con el 404 del sitio.
+ */
+function esColumnaFaltante(e) { return !!e && e.status === 400; }
 function firmaDe(tipo, id) { return estado.firmas.find(f => f.Tipo === tipo && Number(f.ObjetoId) === Number(id)) || null; }
 function prealtaFirmada(p) { return p.Estado === 'firmada' && !!firmaDe('prealta', p.id); }
 function excepcionAutorizada(e) { return !!e.ExcepcionAutorizo && !!firmaDe('excepcion', e.id); }
@@ -929,7 +934,7 @@ async function anularEmbarque(e) {
             await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, campos);
         } catch (err) {
             // Lista sin actualizar: la opcion 'anulado' o las columnas Anulado* no existen todavia.
-            if (/anulado|Anulado|no es una opci|not a valid|does not exist|no existe/i.test(String(err.message)))
+            if (esColumnaFaltante(err))   // C-15
                 throw new Error('la app no puede anular todavía: avisa a gerencia' + (estado.rol === 'gerencia' ? ' (la lista PLANTA_Embarques no tiene la etapa «anulado» ni las columnas de anulación: herramientas-dev/provisionar.html, setup tarea 5). Detalle: ' + err.message : '.'));   // U-31
             throw err;
         }
@@ -1481,7 +1486,7 @@ async function cerrarPrealta() {
         try { await estado.cliente.actualizarRenglon(estado.siteId, L.prealtas, p.id, campos); }
         catch (err) {
             // Lista sin las columnas CerradaPor/CerradaEl (tarea 10 del setup): se cierra igual, sin sello, y se avisa.
-            if (!/Cerrada|does not exist|no existe|not found|invalid/i.test(String(err.message))) throw err;
+            if (!esColumnaFaltante(err)) throw err;   // C-15
             await estado.cliente.actualizarRenglon(estado.siteId, L.prealtas, p.id, { Estado: 'cerrada' });
             delete campos.CerradaPor; delete campos.CerradaEl;
             avisar('Programa cerrado, pero sin registrar quién lo cerró' + (estado.rol === 'gerencia' ? ': la lista PLANTA_Prealtas no tiene todavía CerradaPor / CerradaEl (setup, tarea 10).' : '. Avisa a gerencia.'), 'ojo');   // U-31
@@ -1732,7 +1737,7 @@ async function activarPadron(clave, x, activo) {
         let sinNotas = false;
         try { await estado.cliente.actualizarRenglon(estado.siteId, L[clave], x.id, campos); }
         catch (e) {
-            if (!campos.Notas || !/Notas/.test(String(e.message))) throw e;
+            if (!campos.Notas || !esColumnaFaltante(e)) throw e;   // C-15
             delete campos.Notas; sinNotas = true;
             await estado.cliente.actualizarRenglon(estado.siteId, L[clave], x.id, campos);
         }
@@ -1839,7 +1844,7 @@ async function guardarPadron(clave) {
             }
             const vsAntes = clave === 'carriers' ? vigenciasDelCarrier(edit) : [];
             try { await estado.cliente.actualizarRenglon(estado.siteId, L[clave], edit.id, paraPatch(campos)); }
-            catch (e) { if (campos.Notas && /Notas/.test(e.message)) throw new Error('la vigencia no se puede cambiar todavía' + (estado.rol === 'gerencia' ? ': la lista no tiene la columna Notas (tarea 9 de setup-carlos.md)' : '; avisa a gerencia')); throw e; }   // U-31
+            catch (e) { if (campos.Notas && esColumnaFaltante(e)) throw new Error('la vigencia no se puede cambiar todavía' + (estado.rol === 'gerencia' ? ': la lista no tiene la columna Notas (tarea 9 de setup-carlos.md)' : '; avisa a gerencia')); throw e; }   // U-31
             Object.assign(edit, campos);
             // La vigencia ASEA del tablero se llama por el carrier y guarda su fecha: se corrige junto con él. Es el segundo
             // paso (C-05): si falla, el carrier ya quedo y el aviso lo dice; guardar de nuevo la sincroniza (Activo incluido).
@@ -2010,9 +2015,28 @@ function pintarRechazosHoy() {
 }
 
 // Vigencias como tiempo restante: barra llena = hoy vence; roja = ya vencio.
+/**
+ * U-29 (v0.27.0): las vigencias del PADRON (tarjeta, poliza, licencia, CSF de carriers/unidades/choferes activos) que
+ * vencen dentro de la ventana, con la forma de un renglon del tablero. Hasta v0.26.0 Hoy solo miraba estado.vigencias
+ * —al tablero solo se espeja la ASEA del carrier (C-05)— y decia «Nada vence» con una licencia venciendo la semana
+ * siguiente. La ASEA del carrier que YA tiene renglon en el tablero no se repite (vive en las dos listas).
+ */
+function vigenciasPadronHoy() {
+    const v = [];
+    for (const [tipo, coleccion] of [['carriers', estado.carriers], ['unidades', estado.unidades], ['choferes', estado.choferes]]) {
+        for (const it of coleccion.filter(x => x.Activo !== false)) {
+            for (const [n, col] of VIGENCIAS_PADRON[tipo]) {
+                if (tipo === 'carriers' && col === 'VigenciaASEA' && vigenciasDelCarrier(it).length) continue;
+                const d = diasPara(it[col]);
+                if (d !== null && d <= CONFIG.avisoVigenciaDias) v.push({ Title: `${NOMBRE_PADRON[tipo].replace(/^./, c => c.toUpperCase())} ${it.Title} · ${n}`, Vence: it[col], Fuente: 'padrón', AvisoDias: CONFIG.avisoVigenciaDias });
+            }
+        }
+    }
+    return v;
+}
 function pintarVigenciasHoy() {
     const vg = $('tbVigencias'); vg.textContent = '';
-    const prox = estado.vigencias.filter(v => v.Activo !== false).map(v => ({ v, d: diasPara(v.Vence) })).filter(x => x.d !== null && x.d <= (Number(x.v.AvisoDias) || CONFIG.avisoVigenciaDias)).sort((a, b) => a.d - b.d);
+    const prox = [...estado.vigencias.filter(v => v.Activo !== false), ...vigenciasPadronHoy()].map(v => ({ v, d: diasPara(v.Vence) })).filter(x => x.d !== null && x.d <= (Number(x.v.AvisoDias) || CONFIG.avisoVigenciaDias)).sort((a, b) => a.d - b.d);
     if (!prox.length) vg.appendChild(el('p', 'vacio', `Nada vence en ${CONFIG.avisoVigenciaDias} días.`));
     for (const { v, d } of prox) {
         const ventana = Number(v.AvisoDias) || CONFIG.avisoVigenciaDias;

@@ -64,7 +64,9 @@
     function json(status, cuerpo) {
         return new Response(cuerpo === undefined ? null : JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } });
     }
-    function error(status, mensaje) { return json(status, { error: { code: 'falso', message: mensaje } }); }
+    // C-15 (v0.27.0): error.code como lo devuelve Graph por status (obs. 604: el falso reproduce los TIPOS del servicio).
+    const CODIGO = { 400: 'invalidRequest', 401: 'InvalidAuthenticationToken', 403: 'accessDenied', 404: 'itemNotFound', 429: 'activityLimitReached', 500: 'generalException' };
+    function error(status, mensaje) { return json(status, { error: { code: CODIGO[status] || 'falso', message: mensaje } }); }
     function validarChoices(l, campos) {
         const esq = DB.esquema.listas.find(x => x.nombre === l.nombre);
         for (const c of esq.columnas) {
@@ -996,6 +998,69 @@ try {
         await esperar(() => avisoCon('se da de baja, no se elimina'), 'negativa por cita vieja');
         R.ok('pero el borrado se NIEGA: la consulta en vivo lo encuentra citado fuera de la ventana',
             filas('choferes').some(c => c.id === idChoferViejo));
+
+        // C-19 (v0.27.0): lo que la app hacia y ninguna asercion tocaba — la tarjeta de vigencias de Hoy (con U-29), el orden
+        // C-05 al eliminar un carrier, el aviso ambar del segundo paso, las flechas del ticket, Salir, y el 401 que C-15 ya no
+        // lee como «columna faltante». Va ANTES del paso 14, que deja acquireTokenSilent roto.
+        {
+            // (a) una licencia a 5 dias sale en «Vigencias a 30 dias» aunque solo viva en el padron (U-29), con clase ojo (<= 7 d).
+            const en5 = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+            filas('choferes')[0].fields.LicenciaVigencia = en5 + 'T18:00:00.000Z';
+            clic('btnActualizar'); await esperar(() => !$('btnActualizar').disabled, 'recarga C-19a');   // el finally de recargar() lo re-habilita; antes, Hoy pintaria el padron viejo
+            document.querySelector('#pestanas button[data-p="hoy"]').click();
+            const vigLic = await esperar(() => [...document.querySelectorAll('#tbVigencias .vig')].find(v => v.textContent.includes('licencia')), 'licencia en la tarjeta de vigencias').catch(() => null);
+            R.ok('C-19/U-29: la licencia del chofer a 5 días aparece en #tbVigencias con clase ojo y fuente padrón', !!vigLic && !!vigLic.querySelector('.d.ojo') && vigLic.textContent.includes('padrón') && vigLic.textContent.includes('Chofer'), $('tbVigencias').textContent.slice(0, 160));
+            R.ok('C-19/U-29: la ASEA del carrier (2028) no sale: vive en el tablero y está fuera de la ventana', ![...document.querySelectorAll('#tbVigencias .vig')].some(v => v.textContent.includes('ASEA')), $('tbVigencias').textContent.slice(0, 160));
+            // (b) eliminar un carrier sin referencias borra ANTES su vigencia del tablero (orden C-05) y filas(vigencias) queda sin ella.
+            document.querySelector('#pestanas button[data-p="padron"]').click();
+            clic('btnNuevoCarrier'); poner('pcTitle', 'CARRIER SUELTO'); poner('pcAut', '00-ASEA-T-RME-99-99'); poner('pcVig', '2028-01-01'); poner('pcFolio', 'UGI-SUELTO-0000-2025'); poner('pcCSF', '2027-01-01');
+            document.querySelector('input[name="pcCorr"][value="base-agua"]').checked = true;
+            clic('btnGuardarCarrier'); await esperar(() => filas('carriers').some(c => c.fields.Title === 'CARRIER SUELTO'), 'carrier suelto');
+            await esperar(() => filas('vigencias').some(v => String(v.fields.Title).includes('CARRIER SUELTO')), 'vigencia del carrier suelto');
+            const nVig = filas('vigencias').length;
+            const rSuelto = await esperar(() => [...document.querySelectorAll('#pdCarriers .renglon')].find(r => r.textContent.includes('CARRIER SUELTO') && r.querySelector('button[data-accion="eliminar"]')), 'renglón del carrier suelto con Eliminar');
+            const nLl = DB.llamadas.length;
+            rSuelto.querySelector('button[data-accion="eliminar"]').click(); await confirmar();
+            await esperar(() => !filas('carriers').some(c => c.fields.Title === 'CARRIER SUELTO'), 'carrier suelto eliminado');
+            const borrados = DB.llamadas.slice(nLl).filter(l => l.startsWith('DELETE'));
+            R.ok('C-19/C-05: eliminar el carrier borra ANTES su vigencia (DELETE vigencias → DELETE carriers) y filas(vigencias) queda sin su renglón', !filas('vigencias').some(v => String(v.fields.Title).includes('CARRIER SUELTO')) && filas('vigencias').length === nVig - 1 && borrados.length === 2 && borrados[0].includes('lista-vigencias') && borrados[1].includes('lista-carriers'), borrados.join(' | '));
+            // (c) si el PATCH a la vigencia del tablero falla, el carrier ya quedo y el aviso ambar lo dice.
+            const fallaVig = { metodo: 'PATCH', incluye: 'lista-vigencias', status: 403, veces: 1 }; DB.fallas.push(fallaVig);
+            const rDemo = await esperar(() => [...document.querySelectorAll('#pdCarriers .renglon')].find(r => r.textContent.includes('TRANSPORTES DEMO') && r.querySelector('button[data-accion="editar"]')), 'Editar del carrier DEMO');
+            rDemo.querySelector('button[data-accion="editar"]').click(); await esperar(() => $('pdFormaCarrier').open, 'edición del carrier');
+            poner('pcFolio', 'UGI-DEMO-0001-2025'); clic('btnGuardarCarrier');
+            await esperar(() => avisoCon('no se sincronizó'), 'aviso ámbar del segundo paso');
+            R.ok('C-19: PATCH fallido sobre la vigencia del tablero → el carrier queda actualizado y el aviso «no se sincronizó» lo dice', filas('carriers')[0].fields.FolioOficio === 'UGI-DEMO-0001-2025' && fallaVig.veces === 0 && !$('pdFormaCarrier').open && !!avisoCon('no se sincronizó'), (avisoCon('no se sincronizó') || {}).textContent);
+            // (d) las flechas del teclado mueven el ticket.
+            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            document.querySelector('#baCerrados .renglon button').click(); await esperar(() => $('dlgTicket').open, 'ticket para flechas');
+            const pos0 = $('tkPos').textContent;
+            $('dlgTicket').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+            R.ok('C-19: ArrowRight en el ticket pasa al siguiente (tkPos cambia a «2 de»)', $('tkPos').textContent !== pos0 && $('tkPos').textContent.startsWith('2 de'), `${pos0} → ${$('tkPos').textContent}`);
+            $('dlgTicket').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+            R.ok('C-19: ArrowLeft regresa al primero', $('tkPos').textContent === pos0, $('tkPos').textContent);
+            clic('tkCerrar');
+            // (e) Salir pregunta; cancelar no cierra la sesion; aceptar llama logoutRedirect con la cuenta. La rama del catch
+            // (sessionStorage.clear + location.reload) no se afirma: reload no se puede falsear y mataria la corrida.
+            let logoutCon = null;
+            window.msal.PublicClientApplication.prototype.logoutRedirect = async o => { logoutCon = o; };
+            clic('btnSalir'); await esperar(() => $('dlg').open && $('dlgTitulo').textContent.includes('Salir'), 'confirm de Salir');
+            clic('dlgCancelar'); await dormir(30);
+            R.ok('C-19: Salir pregunta y Cancelar no cierra la sesión', !$('dlg').open && logoutCon === null);
+            clic('btnSalir'); await confirmar(); await esperar(() => logoutCon, 'logoutRedirect').catch(() => {});
+            R.ok('C-19: al aceptar, Salir llama logoutRedirect con la cuenta', !!logoutCon && !!logoutCon.account && logoutCon.account.username === window.__CUENTA.username, JSON.stringify(logoutCon));
+            // (f) C-15: un 401 al anular sube como sesion caducada; hasta v0.26.0 «invalid|no existe» lo leia como lista sin actualizar.
+            document.querySelector('#pestanas button[data-p="hoy"]').click();
+            const trEmb1 = [...document.querySelectorAll('#tbFila tr')].find(tr => tr.textContent.includes(emb1.fields.Title));
+            const btnAn1 = trEmb1 && trEmb1.querySelector('button[data-accion="anular"]');
+            if (btnAn1) {
+                const falla401 = { metodo: 'PATCH', incluye: 'lista-embarques', status: 401, veces: 1 }; DB.fallas.push(falla401);
+                btnAn1.click(); await confirmar('Prueba C-15');
+                await esperar(() => avisoCon('No se pudo anular'), 'anulación con 401');
+                const av = avisoCon('No se pudo anular');
+                R.ok('C-15: un 401 al anular sube como «la sesión caducó (401)», no como «la app no puede anular todavía»', falla401.veces === 0 && av.textContent.includes('caducó') && !av.textContent.includes('anular todavía') && emb1.fields.Etapa === 'cerrado', av.textContent.slice(0, 120));
+            } else R.ok('C-15: el embarque cerrado de hoy ofrece Anular para la prueba del 401', false, trEmb1 ? trEmb1.textContent.slice(0, 80) : 'sin renglón');
+        }
 
         // 14. Sesion caducada: acquireTokenSilent pide interaccion -> la app manda al login, no un error mudo.
         const pcaFalso = window.msal;
