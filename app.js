@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento } from './reglas.js';
 
-const VERSION = '0.25.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.26.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -58,6 +58,7 @@ function avisar(texto, clase = '') {
     // U-08 (v0.22.0): con la pantalla de entrada visible el aviso va DENTRO de ella, sobre el boton. #avisos vive
     // arriba de una seccion de 100dvh en un body sin scroll: «No se pudo entrar» empujaba «Entrar» fuera de la vista.
     if (!$('pantallaEntrar').classList.contains('oculto')) { const z = $('entradaAviso'); z.textContent = texto; z.className = d.className; return; }
+    $('avisos').setAttribute('aria-live', clase === 'error' ? 'assertive' : 'polite');   // U-32 (v0.26.0): el error interrumpe; lo demás espera su turno
     $('avisos').appendChild(d);
     // U-10 (v0.23.0): con dos formas abiertas (la del carrier encima de la pre-alta) el aviso va a la de ENCIMA, que es la
     // ultima abierta y, en el DOM, la ultima de las abiertas (las del padron van despues de #paForma).
@@ -69,7 +70,9 @@ function avisar(texto, clase = '') {
 }
 function limpiarAvisos() { $('avisos').textContent = ''; $('entradaAviso').textContent = ''; $('entradaAviso').className = 'mensaje oculto'; for (const z of document.querySelectorAll('.dlg-forma .dlg-avisos')) z.textContent = ''; }
 // Los formularios de alta viven en <dialog> (v0.19.8): abrir es showModal, cerrar es close. Idempotentes.
-function abrirForma(id) { const d = $(id); limpiarAvisos(); if (!d.open) d.showModal(); d.scrollTo({ top: 0 }); }
+function abrirForma(id) { const d = $(id); limpiarAvisos(); if (!d.open) d.showModal(); d.scrollTo({ top: 0 }); d.dataset.huella = huellaForma(d); }
+/** Valores de la forma en una cadena (U-34, v0.26.0): se toma al abrir y Escape pregunta solo si cambió — un Editar sin tocar nada cierra directo. */
+const huellaForma = d => JSON.stringify([...d.querySelectorAll('input:not([type=hidden]), textarea, select')].map(c => c.type === 'checkbox' || c.type === 'radio' ? c.checked : String(c.value)));
 function cerrarForma(id) { const d = $(id); if (d.open) d.close(); }
 
 function el(tag, clase, texto) {
@@ -78,6 +81,8 @@ function el(tag, clase, texto) {
     if (texto !== undefined) e.textContent = texto;
     return e;
 }
+/** «1 góndola» / «3 góndolas» (U-36, v0.26.0): sin «(s)». El plural se pasa solo cuando no es singular + «s». */
+const plural = (n, uno, varios = uno + 's') => `${n} ${n === 1 ? uno : varios}`;
 /**
  * Renglon de lista con un boton principal y, opcionalmente, acciones secundarias
  * ({texto, alClic, accion, clase}) apiladas a la derecha; `accion` sale como data-accion.
@@ -340,9 +345,9 @@ function sellosSinFirma() {
     return { prealtas: estado.prealtas.filter(p => p.Estado === 'firmada' && !firmaDe('prealta', p.id)),
              embarques: estado.embarques.filter(e => e.Etapa === 'compuerta' && !!e.ExcepcionAutorizo && !firmaDe('excepcion', e.id)) };
 }
-const selloSinFirma = e => (e.ExcepcionAutorizo ? `sello de ${e.ExcepcionAutorizo} SIN firma en PLANTA_Firmas · ` : '');
+const selloSinFirma = e => (e.ExcepcionAutorizo ? `sello de ${quien(e.ExcepcionAutorizo)} sin firma registrada · ` : '');   // U-28 / U-31 (v0.26.0)
 /** S-07: por que la app no puede firmar ni autorizar ahora mismo, o null. Va como `title` del boton deshabilitado. */
-const motivoSinFirmas = () => (estado.firmasError ? `no se pudo leer PLANTA_Firmas (${estado.firmasError}): no se firma ni se autoriza hasta que la lista se vea. Actualiza; si sigue, avisa a gerencia.` : null);
+const motivoSinFirmas = () => (estado.firmasError ? `No se pudo leer el registro de firmas: no se firma ni se autoriza hasta que se vea. Actualiza; si sigue, avisa a gerencia.${estado.rol === 'gerencia' ? ` (PLANTA_Firmas: ${estado.firmasError})` : ''}` : null);   // U-31: lenguaje de planta primero; el detalle técnico solo a gerencia
 /** El renglon de firma se escribe PRIMERO: para quien no esta en el grupo de firmantes es un 403, y ahi termina. */
 async function firmar(tipo, objeto, motivo) {
     if (estado.firmasError) throw new Error(motivoSinFirmas());
@@ -522,7 +527,7 @@ function pintarPuerta() {
     pintarChoferesPuerta();
     pintarUnidadesPuerta();
     $('btnCompuerta').disabled = !PUEDE.puerta(estado.rol);
-    if (!PUEDE.puerta(estado.rol)) avisar('Tu rol es de lectura: puedes ver, no capturar.', 'ojo');
+    $('puSoloLectura').classList.toggle('oculto', PUEDE.puerta(estado.rol));   // U-38 (v0.26.0): texto fijo, no avisar(): el refresco silencioso lo repetía cada 2 min y pisaba el aviso que se leía
     pintarPrevioPuerta();
 }
 // I6 (7-sep): las unidades que la pre-alta autorizo (o, si no marco ninguna, todas las activas del carrier).
@@ -540,6 +545,7 @@ function pintarUnidadesPuerta() {
     const actual = placaNormal($('puPlaca').value);
     for (const u of us) {
         const b = el('button', 'u' + (placaNormal(u.Title) === actual ? ' sel' : '')); b.type = 'button';
+        b.setAttribute('aria-pressed', String(placaNormal(u.Title) === actual));   // U-33 (v0.26.0): el estado seleccionado existe para teclado y lector, no solo como clase
         b.dataset.placa = placaNormal(u.Title);   // U-17: la seleccion al teclear compara contra esto, no contra el texto del chip
         const t = el('span', 't', u.PlacaPlana ? `${u.Title} / ${u.PlacaPlana}` : u.Title);
         const v = etiquetaVigencia('unidades', u);
@@ -548,7 +554,7 @@ function pintarUnidadesPuerta() {
         if (v) b.appendChild(v);
         b.addEventListener('click', () => {
             $('puPlaca').value = u.Title; $('puPlacaPlana').value = u.PlacaPlana || '';
-            for (const x of cont.querySelectorAll('.u')) x.classList.toggle('sel', x === b);
+            for (const x of cont.querySelectorAll('.u')) { x.classList.toggle('sel', x === b); x.setAttribute('aria-pressed', String(x === b)); }
             pintarPrevioPuerta();
         });
         cont.appendChild(b);
@@ -558,7 +564,12 @@ function pintarChoferesPuerta() {
     const pre = porId(estado.prealtas, $('puPrealta').value);
     const carrierId = pre ? Number(pre.CarrierId) : null;
     const ch = estado.choferes.filter(x => x.Activo !== false && (!carrierId || Number(x.CarrierId) === carrierId));
-    opciones($('puChofer'), ch, x => x.id, x => x.Title, '— no está en el padrón —');
+    // U-21 (v0.26.0): como los chips de unidad — primero los que la pre-alta autorizó; los demás del carrier siguen
+    // eligibles pero marcados «fuera del programa», porque la compuerta los saca ámbar (reglas.js «Chofer vs pre-alta»).
+    const autorizados = pre ? lista(pre.ChoferesIds).map(String) : [];
+    const fuera = x => autorizados.length > 0 && !autorizados.includes(String(x.id));
+    const orden = ch.filter(x => !fuera(x)).concat(ch.filter(fuera));
+    opciones($('puChofer'), orden, x => x.id, x => fuera(x) ? `${x.Title} · fuera del programa` : x.Title, '— no está en el padrón —');
 }
 
 /**
@@ -656,7 +667,7 @@ function pintarPrevioPuerta() {
  * a tres metros sabe si entra sin leer nada (mockup aprobado 2026-09-05).
  */
 const VEREDICTOS = {
-    pasa: { clase: 'v-ok', palabra: 'Pasa', frase: 'Todo lo legal está amparado. Que suba a la báscula.', boton: 'Registrar y pasar a báscula' },
+    pasa: { clase: 'v-ok', palabra: 'Pasa', frase: 'Todo lo legal está amparado. Que suba a la báscula.', boton: 'Registrar: la góndola pasa a báscula' },
     'rechazo-legal': { clase: 'v-bad', palabra: 'No entra', frase: 'Rechazo legal. El residuo no se recibe y no hay dispensa.', boton: 'Registrar el rechazo' },
     'excepcion-comercial': { clase: 'v-warn', palabra: 'Espera', frase: 'Excepción comercial. Puede entrar si gerencia lo autoriza con motivo.', boton: 'Registrar y pedir autorización' }
 };
@@ -710,7 +721,7 @@ function pintarResultadoCompuerta() {
     // Las reglas: primero las que decidieron (legal si es rechazo, comercial si es excepcion), luego el resto.
     const decide = r.resultado === 'rechazo-legal' ? 'legal' : r.resultado === 'excepcion-comercial' ? 'comercial' : null;
     pintarHallazgos($('puHallazgos'), r.hallazgos, decide);
-    $('vkLbl').textContent = decide ? 'Qué lo decidió' : `${r.hallazgos.length} reglas · ${r.hallazgos.filter(h => h.clase === 'aviso').length} aviso(s)`;
+    $('vkLbl').textContent = decide ? 'Qué lo decidió' : `${r.hallazgos.length} reglas · ${plural(r.hallazgos.filter(h => h.clase === 'aviso').length, 'aviso')}`;
 
     $('puExcepcion').classList.toggle('oculto', r.resultado !== 'excepcion-comercial');
     const guion = $('vkGuion');
@@ -849,7 +860,7 @@ function pintarCerrados() {
     const todos = estado.embarques.filter(e => e.Title && !enPlanta(e)).sort((a, b) => momento(b).localeCompare(momento(a)));
     const cerrados = todos.filter(e => e.Etapa === 'cerrado');
     const res = $('baResCerrados'); res.textContent = '';
-    res.appendChild(document.createTextNode(`${cerrados.length} con neto${todos.length - cerrados.length ? ` · ${todos.length - cerrados.length} anulado(s) o rechazado(s)` : ''} · últimos ${CONFIG.ventanaDias} días`));
+    res.appendChild(document.createTextNode(`${cerrados.length} con neto${todos.length - cerrados.length ? ` · ${plural(todos.length - cerrados.length, 'anulado o rechazado', 'anulados o rechazados')}` : ''} · últimos ${CONFIG.ventanaDias} días`));
     let n = 0;
     const visibles = [];
     for (const e of todos) {
@@ -865,7 +876,7 @@ function pintarCerrados() {
         caja.appendChild(r);
     }
     if (!n) caja.appendChild(el('p', 'pista', q ? 'Nada coincide en los últimos ' + CONFIG.ventanaDias + ' días.' : 'Ningún folio cerrado en la ventana cargada.'));
-    $('baBuscaCuenta').textContent = q ? `${n} resultado(s)` : '';
+    $('baBuscaCuenta').textContent = q ? plural(n, 'resultado') : '';
 }
 
 /** El boton de deshacer que le toca a un embarque segun su etapa (reglas.accionCorreccion), o ninguno. */
@@ -919,7 +930,7 @@ async function anularEmbarque(e) {
         } catch (err) {
             // Lista sin actualizar: la opcion 'anulado' o las columnas Anulado* no existen todavia.
             if (/anulado|Anulado|no es una opci|not a valid|does not exist|no existe/i.test(String(err.message)))
-                throw new Error('la lista PLANTA_Embarques no tiene todavía la etapa «anulado» ni las columnas de anulación: hay que correr herramientas-dev/provisionar.html (setup, tarea 5). Detalle: ' + err.message);
+                throw new Error('la app no puede anular todavía: avisa a gerencia' + (estado.rol === 'gerencia' ? ' (la lista PLANTA_Embarques no tiene la etapa «anulado» ni las columnas de anulación: herramientas-dev/provisionar.html, setup tarea 5). Detalle: ' + err.message : '.'));   // U-31
             throw err;
         }
         Object.assign(e, campos);
@@ -1189,7 +1200,7 @@ function barraAvance({ rec, esp }) {
         const i = el('i'); i.style.width = Math.min(100, Math.round(rec / esp * 100)) + '%';
         b.appendChild(i); d.appendChild(b);
         d.appendChild(el('span', 'cifra', `${rec}/${esp}`));
-    } else d.appendChild(el('span', 'cifra', `${rec} recibida(s) · sin estimado`));
+    } else d.appendChild(el('span', 'cifra', `${plural(rec, 'recibida')} · sin estimado`));
     return d;
 }
 function pintarPrealtas() {
@@ -1224,16 +1235,18 @@ function pintarPrealtas() {
     const suma = ps => ps.reduce((a, p) => { const g = gondolasDe(p); a.rec += g.rec; a.esp += g.esp; return a; }, { rec: 0, esp: 0 });
     const sb = suma(grupos.borrador), sf = suma(grupos.firmada), sc = suma(grupos.cerrada);
     $('paResBorradores').textContent = grupos.borrador.length
-        ? `${grupos.borrador.length} · ${sb.esp} góndola(s) comprometida(s), ninguna puede entrar`
+        ? `${grupos.borrador.length} · ${plural(sb.esp, 'góndola comprometida', 'góndolas comprometidas')}, ninguna puede entrar`
         : 'ninguno pendiente de firma';
     $('paResFirmadas').textContent = grupos.firmada.length
         ? `${grupos.firmada.length} · ${sf.rec} de ${sf.esp} góndolas recibidas`
         : 'ninguna · la puerta no puede recibir';
     $('paResCerradas').textContent = grupos.cerrada.length
-        ? `${grupos.cerrada.length} · ${sc.rec} góndola(s) en total`
+        ? `${grupos.cerrada.length} · ${plural(sc.rec, 'góndola')} en total`
         : 'ninguna';
-    for (const [id, ps] of [['paGrupoFirmadas', grupos.firmada], ['paGrupoCerradas', grupos.cerrada]])
-        $(id).classList.toggle('oculto', !ps.length);
+    // U-23 (v0.26.0): Firmadas se queda visible aunque esté vacío — su resumen «la puerta no puede recibir» es el aviso
+    // que importa justo cuando no hay ninguna. Solo Cerradas se oculta vacío.
+    $('paGrupoFirmadas').classList.remove('oculto');
+    $('paGrupoCerradas').classList.toggle('oculto', !grupos.cerrada.length);
 }
 
 function nuevaPrealta() {
@@ -1389,7 +1402,7 @@ function verPrealta(p) {
         ['Unidades', lista(p.UnidadesIds).map(id => { const u = porId(estado.unidades, id); return u ? `${u.Title}/${u.PlacaPlana || ''}` : `#${id}`; }).join(', ') || '—'],
         ['Choferes', lista(p.ChoferesIds).map(id => nombreDe(estado.choferes, id)).join(', ') || '—'],
         ['Primer envío', fechaCorta(p.FechaEstimada)], ['Correo', `${fechaCorta(p.CorreoFecha)} · ${p.CorreoRemitente || ''}`],
-        ['Capturó', p.CapturadaPor || '—'], ['Firmó', p.FirmadaPor ? `${p.FirmadaPor} · ${horaCorta(p.FirmadaEl)}${p.Estado === 'firmada' && !prealtaFirmada(p) ? ' · SIN FIRMA en PLANTA_Firmas' : ''}` : '—'], ['Cerró', p.CerradaPor ? `${p.CerradaPor} · ${horaCorta(p.CerradaEl)}` : '—'], ['Notas', p.Notas || '—']
+        ['Capturó', quien(p.CapturadaPor) || '—'], ['Firmó', p.FirmadaPor ? `${quien(p.FirmadaPor)} · ${horaCorta(p.FirmadaEl)}${p.Estado === 'firmada' && !prealtaFirmada(p) ? ' · sello sin firma: la puerta no la ve' : ''}` : '—'], ['Cerró', p.CerradaPor ? `${quien(p.CerradaPor)} · ${horaCorta(p.CerradaEl)}` : '—'], ['Notas', p.Notas || '—']   // U-28 / U-31 (v0.26.0)
     ];
     for (const [k, v] of filas) { const li = el('li', '', k); li.appendChild(el('span', 'd', v)); ul.appendChild(li); }
     // Cotejo automatico de vigencias (lo que el validador firma que reviso).
@@ -1411,9 +1424,9 @@ function verPrealta(p) {
     $('btnFirmar').classList.toggle('oculto', !(porFirmar && PUEDE.firmarPrealta(estado.rol)));
     $('btnFirmar').disabled = !!estado.firmasError; $('btnFirmar').title = motivoSinFirmas() || '';   // S-07
     $('btnEditarPrealta').classList.toggle('oculto', !(p.Estado === 'borrador' && PUEDE.capturarPrealta(estado.rol)));
-    $('btnFirmar').disabled = hayLegal;
+    $('btnFirmar').disabled = hayLegal || !!estado.firmasError;   // v0.26.0: antes esta línea pisaba el disabled de S-07 (dos renglones arriba)
     if (hayLegal && porFirmar) avisar('No se puede firmar con un hallazgo legal abierto: corrige el padrón (con el oficio a la vista) o cambia el carrier.', 'ojo');
-    else if (porFirmar && p.Estado === 'firmada') avisar('Trae sello pero no firma en PLANTA_Firmas (se escribió por fuera de la app o antes del corte): la puerta no la ve hasta que un validador o gerencia la firme.', 'ojo');
+    else if (porFirmar && p.Estado === 'firmada') avisar('Falta la firma del validador: trae el sello pero no la firma registrada (se escribió por fuera de la app o antes del corte). La puerta no la ve hasta que un validador o gerencia la firme.', 'ojo');   // U-31
     $('btnCerrarPrealta').classList.toggle('oculto', !(p.Estado === 'firmada' && PUEDE.capturarPrealta(estado.rol)));
     const sm = sinMovimientoDe(p);
     if (sm) avisar(`Este programa ${sm.motivo}. Sigue saliendo en la puerta hasta que se cierre; si ya no vienen más góndolas, ciérralo.`, 'ojo');
@@ -1445,7 +1458,7 @@ async function firmarPrealta() {
     const p = estado.prealtaAbierta; if (!p) return;
     const reFirma = p.Estado === 'firmada';   // S-01: trae el sello pero no su renglon en PLANTA_Firmas; solo falta la firma
     const { ok } = await confirmar({ titulo: 'Firmar la pre-alta', ok: 'Firmar',
-        texto: reFirma ? `«${p.Title}» trae el sello de ${p.FirmadaPor} pero no su firma en PLANTA_Firmas, así que la puerta no la ve. Con tu firma queda completa; queda registrado quién y cuándo.`
+        texto: reFirma ? `«${p.Title}» trae el sello de ${quien(p.FirmadaPor)} pero no su firma registrada, así que la puerta no la ve. Con tu firma queda completa; queda registrado quién y cuándo.`
             : `«${p.Title}». Con tu firma la puerta empieza a aceptar sus góndolas; queda registrado quién y cuándo.` });
     if (!ok) return;
     try {
@@ -1471,7 +1484,7 @@ async function cerrarPrealta() {
             if (!/Cerrada|does not exist|no existe|not found|invalid/i.test(String(err.message))) throw err;
             await estado.cliente.actualizarRenglon(estado.siteId, L.prealtas, p.id, { Estado: 'cerrada' });
             delete campos.CerradaPor; delete campos.CerradaEl;
-            avisar('Programa cerrado, pero sin registrar quién: la lista PLANTA_Prealtas no tiene todavía CerradaPor / CerradaEl (setup, tarea 10).', 'ojo');
+            avisar('Programa cerrado, pero sin registrar quién lo cerró' + (estado.rol === 'gerencia' ? ': la lista PLANTA_Prealtas no tiene todavía CerradaPor / CerradaEl (setup, tarea 10).' : '. Avisa a gerencia.'), 'ojo');   // U-31
         }
         Object.assign(p, campos); trasCambioPrealta();
     } catch (e) { avisar('No se pudo cerrar: ' + e.message, 'error'); }
@@ -1573,7 +1586,8 @@ function resumenPadron(tipo, items, unidad) {
     const vivos = items.filter(x => x.Activo !== false);
     const vencidos = vivos.filter(x => vigenciasPadron(tipo, x).some(h => !h.ok && !sinFecha(h))).length;
     const porVencer = vivos.filter(x => { const h = vigenciasPadron(tipo, x); return !h.some(v => !v.ok && !sinFecha(v)) && h.some(v => v.ok); }).length;
-    const s = el('span', '', `${vivos.length} ${unidad}`);
+    const [uno, varios] = Array.isArray(unidad) ? unidad : [unidad, unidad + 's'];   // U-36: 'activo' → activos; ['con licencia', 'con licencia'] no cambia
+    const s = el('span', '', plural(vivos.length, uno, varios));
     if (vencidos) { s.appendChild(document.createTextNode(' · ')); s.appendChild(el('span', 'mal', `${vencidos} vencid${vencidos === 1 ? 'o' : 'os'}`)); }
     if (porVencer) { s.appendChild(document.createTextNode(' · ')); s.appendChild(el('span', 'ojo', `${porVencer} por vencer`)); }
     return s;
@@ -1599,9 +1613,9 @@ function pintarPadron() {
     const sel = estado.padronCarrier;
     const q = normaliza($('pdBusca').value.trim());
     const pega = (...campos) => !q || campos.some(v => normaliza(v).includes(q));
-    $('pdResCarriers').textContent = ''; $('pdResCarriers').appendChild(resumenPadron('carriers', estado.carriers, 'activo(s)'));
-    $('pdResUnidades').textContent = ''; $('pdResUnidades').appendChild(resumenPadron('unidades', estado.unidades, 'amparada(s)'));
-    $('pdResChoferes').textContent = ''; $('pdResChoferes').appendChild(resumenPadron('choferes', estado.choferes, 'con licencia'));
+    $('pdResCarriers').textContent = ''; $('pdResCarriers').appendChild(resumenPadron('carriers', estado.carriers, 'activo'));
+    $('pdResUnidades').textContent = ''; $('pdResUnidades').appendChild(resumenPadron('unidades', estado.unidades, 'amparada'));
+    $('pdResChoferes').textContent = ''; $('pdResChoferes').appendChild(resumenPadron('choferes', estado.choferes, ['con licencia', 'con licencia']));
     let encontrados = 0;
     // C-18 (v0.25.0): un solo bucle sobre GRUPOS_PADRON en vez de tres gemelos; lo que cambia por grupo vive en la tabla.
     const filtraCarrier = x => sel === null || sel === undefined || Number(x.CarrierId) === Number(sel);
@@ -1614,7 +1628,7 @@ function pintarPadron() {
             encontrados++;
             const r = renglon(g.titulo(x), null, null, null, botonesPadron(clave, x));
             marcaEstado(r, clave, x);
-            if (clave === 'carriers' && sel === x.id) r.classList.add('sel');
+            if (clave === 'carriers') { r.classList.toggle('sel', sel === x.id); r.firstChild.setAttribute('aria-pressed', String(sel === x.id)); }   // U-33: el filtro por carrier como estado accesible
             cont.appendChild(conFicha(r, clave, x, g.extra ? g.extra(x) : undefined));
         }
     }
@@ -1634,7 +1648,7 @@ function pintarPadron() {
             $(g).open = !!hay;
         }
     }
-    $('pdBuscaCuenta').textContent = q ? `${encontrados} resultado(s)` : '';
+    $('pdBuscaCuenta').textContent = q ? plural(encontrados, 'resultado') : '';
     const sels = [$('puuCarrier'), $('pchCarrier')];
     for (const s of sels) opciones(s, estado.carriers.filter(c => c.Activo !== false), c => c.id, c => c.Title);
 }
@@ -1726,7 +1740,7 @@ async function activarPadron(clave, x, activo) {
         const pendiente = clave === 'carriers' ? await segundoPaso(async () => { for (const v of vigenciasDelCarrier(x)) { await estado.cliente.actualizarRenglon(estado.siteId, L.vigencias, v.id, { Activo: activo }); v.Activo = activo; } }) : null;
         if (pendiente) avisar(`${NOMBRE_PADRON[clave]} ${activo ? 'reactivado' : 'dado de baja'}, pero su vigencia ASEA del tablero no cambió (${pendiente}). Edítalo y guarda para sincronizarla.`, 'ojo');
         else if (activo) avisar(`${NOMBRE_PADRON[clave]} reactivado.`, 'bien');
-        else if (sinNotas) avisar(`${NOMBRE_PADRON[clave]} dado de baja, pero el motivo NO quedó: la lista no tiene todavía la columna Notas (setup, tarea 9).`, 'ojo');
+        else if (sinNotas) avisar(`${NOMBRE_PADRON[clave]} dado de baja, pero el motivo NO quedó` + (estado.rol === 'gerencia' ? ': la lista no tiene todavía la columna Notas (setup, tarea 9).' : '. Avisa a gerencia.'), 'ojo');   // U-31
         else avisar(`${NOMBRE_PADRON[clave]} dado de baja${motivo ? ' · el motivo quedó en Notas' : ''}.`, 'bien');
         pintarPadron();
     } catch (e) { avisar('No se pudo cambiar: ' + e.message, 'error'); }
@@ -1825,7 +1839,7 @@ async function guardarPadron(clave) {
             }
             const vsAntes = clave === 'carriers' ? vigenciasDelCarrier(edit) : [];
             try { await estado.cliente.actualizarRenglon(estado.siteId, L[clave], edit.id, paraPatch(campos)); }
-            catch (e) { if (campos.Notas && /Notas/.test(e.message)) throw new Error('la lista no tiene la columna Notas todavía (tarea 9 de setup-carlos.md); mientras, la vigencia no se cambia'); throw e; }
+            catch (e) { if (campos.Notas && /Notas/.test(e.message)) throw new Error('la vigencia no se puede cambiar todavía' + (estado.rol === 'gerencia' ? ': la lista no tiene la columna Notas (tarea 9 de setup-carlos.md)' : '; avisa a gerencia')); throw e; }   // U-31
             Object.assign(edit, campos);
             // La vigencia ASEA del tablero se llama por el carrier y guarda su fecha: se corrige junto con él. Es el segundo
             // paso (C-05): si falla, el carrier ya quedo y el aviso lo dice; guardar de nuevo la sincroniza (Activo incluido).
@@ -1892,7 +1906,7 @@ function pintarFranjaHoy(pendientes, botonesExcepcion) {
         const it = el('div', 'item');
         it.appendChild(el('b', 'w', 'Espera'));
         it.appendChild(el('span', 't', `${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)} · ${e.Manifiesto || 'sin manifiesto'}`));
-        it.appendChild(el('span', 's', `${selloSinFirma(e)}«${e.ExcepcionMotivo || 'sin motivo'}» · ${e.CapturadoPor || '?'}, ${horaCorta(e.Arribo)}`));
+        it.appendChild(el('span', 's', `${selloSinFirma(e)}«${e.ExcepcionMotivo || 'sin motivo'}» · ${quien(e.CapturadoPor) || '?'}, ${horaCorta(e.Arribo)}`));   // U-28: nombre, no correo
         const bs = botonesExcepcion(e);
         if (bs.length) { const d = el('div', 'botones'); for (const b of bs) d.appendChild(botonAccion(b)); it.appendChild(d); }
         fr.appendChild(it);
@@ -1975,10 +1989,10 @@ function pintarPendientesHoy(borradores, pendientes, botonesExcepcion) {
     $('tbPendientesTarjeta').classList.toggle('alerta', nPend > 0);
     $('tbPendientesN').classList.toggle('oculto', !nPend); $('tbPendientesN').textContent = String(nPend);
     if (!nPend) pf.appendChild(el('p', 'vacio', 'Nada pendiente.'));
-    if (estado.firmasError) pf.appendChild(renglon('PLANTA_Firmas no se pudo leer', `${estado.firmasError} · la app NO firma ni autoriza y ningún sello vale sin su firma (S-07) · Actualiza; si sigue, revisar la lista y sus permisos (setup-carlos.md, tarea 11)`));
-    for (const p of ssf) pf.appendChild(renglon(`Firma · ${p.Title}`, `sello de ${p.FirmadaPor || '?'} SIN firma en PLANTA_Firmas · la puerta no la ve · la firma un validador o gerencia desde su detalle`, 'Ver', () => verPrealta(vivo('prealtas', p))));
+    if (estado.firmasError) pf.appendChild(renglon('No se pudo leer el registro de firmas', `la app no firma ni autoriza y ningún sello vale sin su firma · Actualiza; si sigue, avisa a gerencia${estado.rol === 'gerencia' ? ` · PLANTA_Firmas: ${estado.firmasError} (permisos de la lista; setup-carlos.md, tarea 11)` : ''}`));   // U-31
+    for (const p of ssf) pf.appendChild(renglon(`Firma · ${p.Title}`, `falta la firma del validador (trae el sello de ${quien(p.FirmadaPor) || '?'}, sin firma registrada) · la puerta no la ve · se firma desde su detalle`, 'Ver', () => verPrealta(vivo('prealtas', p))));   // U-28 / U-31
     for (const { p, sm } of dormidas) pf.appendChild(renglon(`Programa · ${p.Title}`, `${sm.motivo} · ¿se cierra? Sigue saliendo en la puerta`, 'Ver', () => verPrealta(vivo('prealtas', p))));
-    for (const p of borradores) { const d = diasPara(p.FechaEstimada); pf.appendChild(renglon(`Pre-alta · ${p.Title}`, `firma del validador · 1er envío ${fechaCorta(p.FechaEstimada)}${d !== null ? ` (en ${d} días)` : ''} · capturó ${p.CapturadaPor || '?'}`, 'Ver', () => verPrealta(vivo('prealtas', p)))); }
+    for (const p of borradores) { const d = diasPara(p.FechaEstimada); pf.appendChild(renglon(`Pre-alta · ${p.Title}`, `firma del validador · 1er envío ${fechaCorta(p.FechaEstimada)}${d !== null ? ` (en ${d} días)` : ''} · capturó ${quien(p.CapturadaPor) || '?'}`, 'Ver', () => verPrealta(vivo('prealtas', p)))); }
     for (const e of pendientes) pf.appendChild(renglon(`Excepción · ${e.PlacaTractor}`, `${selloSinFirma(e)}autorización de gerencia · «${e.ExcepcionMotivo || 'sin motivo'}» · ${horaCorta(e.Arribo)}`, null, null, botonesExcepcion(e).map(b => ({ ...b, clase: b.accion === 'autorizar' ? '' : 'peligro' }))));
 }
 
@@ -1989,7 +2003,7 @@ function pintarRechazosHoy() {
     for (const e of rech) {
         let causa = '';
         try { causa = JSON.parse(e.CompuertaDetalle || '[]').filter(h => h.clase === 'legal' || h.clase === 'comercial').map(h => h.regla).join(', '); } catch (_) { /* detalle ilegible */ }
-        const r = renglon(`${e.Title || '(excepción)'} · ${e.PlacaTractor}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + e.ExcepcionAutorizo : ''}`);
+        const r = renglon(`${e.Title || '(excepción)'} · ${e.PlacaTractor}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + quien(e.ExcepcionAutorizo) : ''}`);
         r.firstChild.firstChild.appendChild(etiqueta(e.Compuerta === 'rechazo-legal' ? 'legal' : 'comercial', e.Compuerta === 'rechazo-legal' ? 'legal' : 'comercial'));
         rj.appendChild(r);
     }
@@ -2031,7 +2045,7 @@ function pintarHoy() {
     // revisar», que era la unica entrada de esa tarjeta sin accion; la excepcion se cuenta una sola vez (en la tarjeta).
     const botonesExcepcion = e => {
         const bs = [];
-        if (PUEDE.autorizarExcepcion(estado.rol)) bs.push({ texto: 'Autorizar con motivo', accion: 'autorizar', clase: 'si', alClic: () => autorizarExcepcion(vivo('embarques', e)), deshabilitado: motivoSinFirmas() });
+        if (PUEDE.autorizarExcepcion(estado.rol)) bs.push({ texto: 'Autorizar', accion: 'autorizar', clase: 'si', alClic: () => autorizarExcepcion(vivo('embarques', e)), deshabilitado: motivoSinFirmas() });
         for (const b of botonCorreccion(e)) bs.push({ ...b, clase: 'no' });
         return bs;
     };
@@ -2068,7 +2082,7 @@ function exportarCsv() {
     a.download = `CALYTEK_Embarques_${fechaCorta(estado.ventanaDesde).replace(/\//g, '-')}_a_${fechaMexico()}.csv`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    avisar(`CSV con ${filas.length} embarque(s) descargado.`, 'bien');
+    avisar(`CSV con ${plural(filas.length, 'embarque')} descargado.`, 'bien');
 }
 $('btnExportar').addEventListener('click', exportarCsv);
 $('pdBusca').addEventListener('input', () => { estado.padronFicha = null; pintarPadron(); });
@@ -2145,7 +2159,15 @@ $('btnFoto').addEventListener('click', () => $('baFotoEntrada').click());
 $('baFotoEntrada').addEventListener('change', e => { if (e.target.files[0]) tomarFoto(e.target.files[0]); e.target.value = ''; });
 $('baKg').addEventListener('input', revisarNeto);
 $('btnGuardarPeso').addEventListener('click', guardarPeso);
-$('btnCancelarPeso').addEventListener('click', () => { estado.pesando = null; estado.fotoBytes = null; soltarFotoPrevia(); $('baPesar').classList.add('oculto'); repintar(); });   // C-12: la lista se repinta (un refresco con el pesaje abierto la dejaba vieja)
+$('btnCancelarPeso').addEventListener('click', async () => {
+    // U-24 (v0.26.0): con kg o foto ya capturados pregunta, como las formas (U-09); vacío cierra directo. En el celular
+    // Cancelar queda justo bajo el Guardar pegado y un toque con guante tiraba la foto del indicador sin avisar.
+    if ($('baKg').value.trim() || estado.fotoBytes) {
+        const { ok } = await confirmar({ titulo: 'Cancelar el pesaje', peligro: true, ok: 'Descartar', texto: 'Se pierden el peso tecleado y la foto del indicador; habría que volver a tomarla.' });
+        if (!ok) return;
+    }
+    estado.pesando = null; estado.fotoBytes = null; soltarFotoPrevia(); $('baPesar').classList.add('oculto'); repintar();   // C-12: la lista se repinta (un refresco con el pesaje abierto la dejaba vieja)
+});
 $('btnImprimir').addEventListener('click', () => window.print());
 // El boton vive dentro del <summary>: sin preventDefault el clic pliega el grupo (igual que en el padron).
 $('btnNuevaPrealta').addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); $('paGrupoBorradores').open = true; nuevaPrealta(); });
@@ -2168,7 +2190,7 @@ for (const clave of Object.keys(FORMA_PADRON)) $(FORMA_PADRON[clave].forma).addE
 // boton Cancelar sigue cerrando sin preguntar. Un select cuenta solo si no esta en su primera opcion.
 const hayCaptura = d => [...d.querySelectorAll('input:not([type=hidden]):not([type=checkbox]), textarea, select')].some(c => c.tagName === 'SELECT' ? c.selectedIndex > 0 : String(c.value).trim() !== '');
 for (const id of ['paForma', 'pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer']) $(id).addEventListener('cancel', async ev => {
-    if (!hayCaptura($(id))) return;
+    if (!hayCaptura($(id)) || huellaForma($(id)) === $(id).dataset.huella) return;   // U-34: sin cambios desde que abrió → cierra directo
     ev.preventDefault();
     const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: 'Este formulario tiene datos sin guardar. Si lo cierras, se pierden.' });
     if (ok) cerrarForma(id);

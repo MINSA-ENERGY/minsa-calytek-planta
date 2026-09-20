@@ -418,10 +418,14 @@ try {
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras la campaña ajena');
         R.ok('pre-alta en borrador con campaña L-AA-NNN', /^L-\d\d-\d{3}$/.test(filas('prealtas')[0].fields.Campana), filas('prealtas')[0].fields.Campana);
         R.ok('pre-alta liga unidades y choferes del carrier', filas('prealtas')[0].fields.UnidadesIds === String(unidadId) && filas('prealtas')[0].fields.ChoferesIds === String(choferId));
+        // U-23 (v0.26.0): sin ninguna firmada, el grupo Firmadas sigue visible con su aviso; antes se ocultaba justo cuando importaba.
+        R.ok('U-23: el grupo Firmadas vacío sigue visible y dice que la puerta no puede recibir', visible('paGrupoFirmadas') && $('paResFirmadas').textContent.includes('la puerta no puede recibir') && !visible('paGrupoCerradas'), $('paResFirmadas').textContent);
         // Editar el borrador (v0.19.10): PATCH que conserva la campana y el estado.
         const campanaAntes = filas('prealtas')[0].fields.Campana;
         document.querySelector('#paBorradores .renglon button').click();
         await esperar(() => visible('paDetalle'), 'detalle del borrador');
+        // U-28 (v0.26.0): fuera del ticket también sale el Nombre de PLANTA_Roles, no el correo.
+        R.ok('U-28: «Capturó» del detalle muestra el nombre, no el correo', $('paDetalleLista').textContent.includes('Capturó') && $('paDetalleLista').textContent.includes('Prueba') && !$('paDetalleLista').textContent.includes(window.__CUENTA.username), $('paDetalleLista').textContent.slice(0, 120));
         R.ok('el detalle de un borrador ofrece Editar', visible('btnEditarPrealta'));
         // Desde Hoy, «Ver» abre el pop-up y Cerrar deja la pestaña en Hoy (v0.19.16).
         clic('btnVolverPrealtas');
@@ -436,6 +440,12 @@ try {
         await esperar(() => visible('paDetalle'), 'detalle del borrador otra vez');
         clic('btnEditarPrealta'); await esperar(() => $('paForma').open, 'formulario de edición');
         R.ok('el formulario abre con los datos del borrador', $('paCliente').value === 'CLIENTE DEMO' && $('paPozoTitulo').value === 'POZO 1' && $('paMes').value === '2026' && $('paTitulo').value === 'CLIENTE DEMO-POZO 1-2026' && $('paPozo').value === 'Pozo-1' && $('paCarrier').value === String(carrierId));
+        // U-34 (v0.26.0): Escape sobre un Editar SIN cambios no pregunta (la huella al abrir es la misma); con un cambio, sí.
+        $('paForma').dispatchEvent(new Event('cancel', { cancelable: true })); await dormir(30);
+        R.ok('U-34: Escape sobre Editar sin tocar nada no abre «Descartar»', !$('dlg').open);
+        poner('paPozo', 'Pozo-2');
+        $('paForma').dispatchEvent(new Event('cancel', { cancelable: true })); await esperar(() => $('dlg').open, 'descarte tras cambio');
+        R.ok('U-34: con un cambio sí pregunta', $('dlgTitulo').textContent.includes('Descartar')); clic('dlgCancelar'); await dormir(30);
         poner('paPozo', 'Pozo-2'); poner('paGondolas', '12'); clic('btnGuardarPrealta');
         await esperar(() => avisoCon('Borrador actualizado'), 'borrador actualizado');
         const pe = filas('prealtas')[0].fields;
@@ -477,12 +487,12 @@ try {
             document.querySelector('#pestanas button[data-p="puerta"]').click();
             R.ok('S-01: la compuerta MANDA — con sello y sin firma NO sale en la puerta y cuenta como por firmar', ![...$('puPrealta').options].some(o => o.textContent.includes('SELLO SIN FIRMA')) && visible('puPendientes') && $('puPendientes').textContent.includes('SELLO SIN FIRMA'), $('puPendientes').textContent.slice(0, 90));
             document.querySelector('#pestanas button[data-p="hoy"]').click();
-            R.ok('S-01: Hoy la lista en Pendiente revisar como «Firma ·» con el sello sin firma', [...document.querySelectorAll('#tbPendientes .renglon')].some(r => r.textContent.includes('Firma · SELLO SIN FIRMA') && r.textContent.includes('SIN firma en PLANTA_Firmas')));
+            R.ok('S-01: Hoy la lista en Pendiente revisar como «Firma ·» con el sello sin firma', [...document.querySelectorAll('#tbPendientes .renglon')].some(r => r.textContent.includes('Firma · SELLO SIN FIRMA') && r.textContent.includes('sin firma registrada')));
             document.querySelector('#pestanas button[data-p="prealtas"]').click();
             const rSF = [...document.querySelectorAll('#paFirmadas .renglon')].find(r => r.textContent.includes('SELLO SIN FIRMA'));
             R.ok('S-01: en Pre-altas lleva la etiqueta «sin firma»', !!rSF && rSF.textContent.includes('sin firma'));
             rSF.querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle del sello sin firma');
-            R.ok('S-01: el detalle dice SIN FIRMA y ofrece Firmar aunque el Estado ya sea firmada', visible('btnFirmar') && !$('btnFirmar').disabled && $('paDetalleLista').textContent.includes('SIN FIRMA en PLANTA_Firmas') && !!avisoCon('no firma en PLANTA_Firmas'));
+            R.ok('S-01: el detalle dice SIN FIRMA y ofrece Firmar aunque el Estado ya sea firmada', visible('btnFirmar') && !$('btnFirmar').disabled && $('paDetalleLista').textContent.includes('sello sin firma') && !!avisoCon('Falta la firma del validador'));
             clic('btnFirmar'); await confirmar(); await esperar(() => avisoCon('Pre-alta firmada'), 'firma del sello');
             R.ok('S-01: firmar crea el renglón y el sello pasa a quien firmó', !!filas('firmas').find(x => x.fields.Tipo === 'prealta' && Number(x.fields.ObjetoId) === sinFirma.id) && sinFirma.fields.FirmadaPor === window.__CUENTA.username);
             document.querySelector('#pestanas button[data-p="puerta"]').click();
@@ -508,6 +518,15 @@ try {
         R.ok('firmada la pre-alta, la puerta ya no avisa pendientes de firma', !visible('puPendientes'));
         document.querySelector('#pestanas button[data-p="prealtas"]').click();
         R.ok('una firmada reciente con fecha futura no se señala como dormida', !$('paFirmadas').textContent.includes('¿se cierra?'));
+        // U-21 (v0.26.0): un chofer del carrier que la pre-alta NO autorizó sale al final y marcado «fuera del programa».
+        {
+            const fuera = { id: DB.siguienteId++, fields: { Title: 'PEDRO FUERA DEMO', CarrierId: carrierId, LicenciaVigencia: '2027-01-15T18:00:00.000Z', Activo: true } };
+            filas('choferes').push(fuera); clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con chofer fuera');
+            document.querySelector('#pestanas button[data-p="puerta"]').click(); elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
+            const ops = [...$('puChofer').options].map(o => o.textContent);
+            R.ok('U-21: el chofer autorizado va primero sin marca y el otro al final como «fuera del programa»', ops[1] === 'JUAN PEREZ DEMO' && ops[2] === 'PEDRO FUERA DEMO · fuera del programa' && ops.length === 3, ops.join(' | '));
+            filas('choferes').splice(filas('choferes').indexOf(fuera), 1); clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga sin chofer fuera');
+        }
         document.querySelector('#pestanas button[data-p="puerta"]').click();
         elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
         poner('puManifiesto', 'MINSA/RME/000/2026'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M');
@@ -546,6 +565,10 @@ try {
         document.querySelector('#baLista .renglon button').click();
         await esperar(() => visible('baPesar'), 'pesaje abierto');
         poner('baKg', '44600');
+        // U-24 (v0.26.0): Cancelar con peso tecleado (o foto) pregunta antes de tirarlo; al no confirmar, el pesaje sigue con su peso.
+        clic('btnCancelarPeso'); await esperar(() => $('dlg').open, 'confirmación de cancelar pesaje');
+        R.ok('U-24: Cancelar con kg tecleado abre «Cancelar el pesaje»', $('dlgTitulo').textContent.includes('Cancelar el pesaje')); clic('dlgCancelar'); await dormir(30);
+        R.ok('U-24: al no confirmar, el pesaje sigue abierto con su peso', visible('baPesar') && $('baKg').value === '44600');
         clic('btnGuardarPeso'); await dormir(50);
         R.ok('sin foto del indicador no se guarda', !!avisoCon('Falta la foto del indicador'));
         await foto();
@@ -674,7 +697,7 @@ try {
                 document.querySelector('#pestanas button[data-p="bascula"]').click();
                 const fueraBascula = !$('baLista').textContent.includes(exc.fields.Manifiesto);
                 document.querySelector('#pestanas button[data-p="hoy"]').click();
-                R.ok('S-01: un sello ExcepcionAutorizo sin firma en PLANTA_Firmas NO mete la góndola a báscula y Hoy lo señala', fueraBascula && visible('hoyFranja') && $('hoyFranja').textContent.includes('SIN firma en PLANTA_Firmas'), $('hoyFranja').textContent.slice(0, 120));
+                R.ok('S-01: un sello ExcepcionAutorizo sin firma en PLANTA_Firmas NO mete la góndola a báscula y Hoy lo señala', fueraBascula && visible('hoyFranja') && $('hoyFranja').textContent.includes('sin firma registrada'), $('hoyFranja').textContent.slice(0, 120));
                 delete exc.fields.ExcepcionAutorizo; delete exc.fields.ExcepcionEl;
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras retirar el sello');
                 document.querySelector('#pestanas button[data-p="hoy"]').click();
@@ -700,7 +723,7 @@ try {
                 document.querySelector('#pestanas button[data-p="hoy"]').click();
                 const btnAutS07 = $('hoyFranja').querySelector('button.si');
                 R.ok('S-07: sin PLANTA_Firmas legible la excepción autorizada sale de báscula, «Autorizar» queda deshabilitado con motivo y Hoy lo dice',
-                    excFuera && !!btnAutS07 && btnAutS07.disabled && /PLANTA_Firmas/.test(btnAutS07.title) && $('tbPendientes').textContent.includes('PLANTA_Firmas no se pudo leer'),
+                    excFuera && !!btnAutS07 && btnAutS07.disabled && /registro de firmas/.test(btnAutS07.title) && $('tbPendientes').textContent.includes('No se pudo leer el registro de firmas') && (ROL !== 'gerencia' || $('tbPendientes').textContent.includes('PLANTA_Firmas')),
                     `fuera ${excFuera} · disabled ${btnAutS07 && btnAutS07.disabled} · ${$('tbPendientes').textContent.slice(0, 80)}`);
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con PLANTA_Firmas de vuelta');
                 document.querySelector('#pestanas button[data-p="bascula"]').click();
@@ -984,7 +1007,8 @@ try {
     } else {
         R.log('nota', `rol ${ROL}: sin captura de puerta; se prueba solo lectura`);
         document.querySelector('#pestanas button[data-p="puerta"]').click();
-        R.ok('rol de lectura: la compuerta está deshabilitada', $('btnCompuerta').disabled && !!avisoCon('Tu rol es de lectura'));
+        // U-38 (v0.26.0): el rol de lectura es texto fijo de la tarjeta, no un aviso (el refresco silencioso lo repetía cada 2 min).
+        R.ok('rol de lectura: la compuerta está deshabilitada y lo dice la tarjeta, no un aviso', $('btnCompuerta').disabled && visible('puSoloLectura') && !avisoCon('Tu rol es de lectura'));
         document.querySelector('#pestanas button[data-p="padron"]').click();
         R.ok('rol de lectura: sin botones de alta en el padrón', !visible('btnNuevoCarrier') && !visible('btnNuevaUnidad'));
     }
@@ -992,6 +1016,8 @@ try {
     R.ok('la corrida terminó sin excepción', false, (e && e.stack) || String(e));
 } finally {
     R.ok('ningún texto > 255 llegó a Graph en toda la corrida (el falso lo rechaza como SharePoint)', window.__DB.textoLargo.length === 0, window.__DB.textoLargo.join('|'));
+    R.ok('U-36: ningún «(s)» en el texto que quedó pintado', !/\w\(s\)/.test($('app-real').textContent), ($('app-real').textContent.match(/.{0,20}\w\(s\).{0,10}/g) || []).join(' | '));
+    R.ok('U-32: #avisos es región viva', $('avisos').getAttribute('role') === 'status' && ['polite', 'assertive'].includes($('avisos').getAttribute('aria-live')));
     await R.cerrar();
     // ?vista=padron oculta la bitacora y deja esa pestana abierta: para una captura de pantalla.
     // Los <dialog> que la corrida dejo abiertos (el detalle de la firmada del paso 12c) taparian la captura.
