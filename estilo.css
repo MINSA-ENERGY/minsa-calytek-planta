@@ -188,6 +188,20 @@ body:has(#pantallaEntrar:not(.oculto)) #pie { display: none; }
 @keyframes girar { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .entrada .principal.ocupado::before { animation: none; } }
 .entrada .pista { align-self: center; color: rgba(242, 246, 255, .5); font-family: var(--mono); letter-spacing: .14em; text-transform: uppercase; font-size: .68rem; }
+/* v0.31.0 (Carlos, 20-sep; artifact JFvaeE16): en escritorio la entrada va en DOS COLUMNAS como la de minsa-proyectos-app
+   (su v0.62.0): lockup grande a la izquierda, texto + semáforo + botón a la derecha, y el brillo de la rejilla se corre al
+   lado izquierdo. Mismo corte (721 px) que Proyectos; en celular se apila igual que antes. */
+@media (min-width: 721px) {
+    .entrada-caja { max-width: 64rem; flex-direction: row; align-items: center; gap: 4rem; padding: 1rem 2rem; }
+    .entrada-arriba { flex: 1 1 0; padding: 0; }
+    .entrada-arriba .logo { width: 24rem; max-width: 100%; }
+    .entrada-abajo { flex: 0 0 24rem; }
+    .entrada-titulo { font-size: 2.6rem; }
+    .entrada-rejilla {
+        background-image: linear-gradient(rgba(195, 213, 251, .10) 1px, transparent 1px), linear-gradient(90deg, rgba(195, 213, 251, .10) 1px, transparent 1px), radial-gradient(60% 70% at 25% 50%, rgba(105, 198, 255, .32), transparent 65%);
+        -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 50%, rgba(0, 0, 0, .25) 100%); mask-image: linear-gradient(90deg, #000 0%, #000 50%, rgba(0, 0, 0, .25) 100%);
+    }
+}
 .lema { margin: 0; color: var(--mute); font-size: .95rem; text-wrap: balance; }
 .semaforo-demo { display: flex; gap: .4rem; }
 .semaforo-demo span { font-family: var(--titulo); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: .85rem; padding: .3rem .7rem; border-radius: .4rem; color: #fff; }
