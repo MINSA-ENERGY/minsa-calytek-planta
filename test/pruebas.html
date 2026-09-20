@@ -297,6 +297,15 @@ try {
     // 2. Sesion: entra con la cuenta ya presente y aterriza en la pantalla del rol.
     await esperar(() => !visible('pantallaEntrar'), 'sesión iniciada');
     R.ok('sesión iniciada y rol resuelto', $('quien').textContent.includes(ROL), $('quien').textContent);
+    // U-51 / U-47 (v0.29.0): el rail y el menú «···» dicen quién entró (nombre o correo) con el correo en title.
+    R.ok('U-51/U-47: el rail lleva el correo en title y el menú móvil trae la cuenta', $('quien').title === window.__CUENTA.username && $('quienMovil').textContent.length > 0 && $('quienMovil').title === window.__CUENTA.username, `${$('quien').textContent} · title ${$('quien').title}`);
+    // U-57 (v0.29.0): la pestaña abierta se anuncia con aria-current=page; no hay role=tablist.
+    R.ok('U-57: la pestaña abierta lleva aria-current=page y el nav no es tablist', document.querySelectorAll('#pestanas [aria-current="page"]').length === 1 && !$('pestanas').hasAttribute('role') && !document.querySelector('#pestanas [role="tab"]'));
+    // U-43 (v0.29.0): existe --ok-fg y el aviso «bien» lo usa (texto verde chico con contraste).
+    {   // en oscuro --ok-fg = --ok a propósito (el verde claro ya contrasta); en claro es más oscuro
+        const cs = getComputedStyle(document.documentElement), okFg = cs.getPropertyValue('--ok-fg').trim(), ok = cs.getPropertyValue('--ok').trim();
+        R.ok('U-43: --ok-fg está definido (y en tema claro es distinto de --ok)', okFg !== '' && (ok !== '#2f9e44' || okFg !== ok), `--ok ${ok} · --ok-fg ${okFg}`);
+    }
     const inicial = ['hoy', 'puerta', 'bascula', 'prealtas', 'padron'].find(p => visible('p-' + p));
     R.ok('pantalla inicial por rol', ROL === 'trazabilidad' ? inicial === 'puerta' : ROL === 'validador' ? inicial === 'prealtas' : inicial === 'hoy', inicial);
 
@@ -323,6 +332,11 @@ try {
         const esc = window.matchMedia('(min-width: 900px)').matches;
         const abiertos = ['pdGrupoCarriers', 'pdGrupoUnidades', 'pdGrupoChoferes'].filter(id => $(id).open).length;
         R.ok('C-08: abrirGruposPadronEscritorio abre los 3 grupos en escritorio y ninguno en celular', abiertos === (esc ? 3 : 0), `${window.innerWidth}px → ${abiertos} abiertos`);
+        // U-56 (v0.29.0): en escritorio el clic en la cabecera del grupo NO lo pliega (los tres van abiertos); en celular sigue plegando.
+        const antesU56 = $('pdGrupoUnidades').open;
+        $('pdGrupoUnidades').querySelector('summary').click(); await dormir(10);
+        R.ok('U-56: el clic en el summary del padrón no pliega en escritorio y sí en celular', esc ? $('pdGrupoUnidades').open === true : $('pdGrupoUnidades').open !== antesU56, `${esc ? 'escritorio' : 'celular'}: ${antesU56} → ${$('pdGrupoUnidades').open}`);
+        if (!esc) $('pdGrupoUnidades').open = antesU56;
     }
     if (captura) {
     // U-18 (v0.22.0): los tres grupos vacios lo dicen (antes solo Carriers).
@@ -352,6 +366,9 @@ try {
     const carrierId = filas('carriers')[0].id;
 
     clic('btnNuevaUnidad');
+    // U-46 (v0.29.0): el alta de unidad arranca con el carrier que se acaba de dar de alta (o el del filtro).
+    R.ok('U-55: la etiqueta del folio del oficio es corta y la aclaración va en .pista', document.querySelector('label[for="puuFolio"]').textContent.trim() === 'Folio del oficio' && !!$('puuFolio').parentElement.querySelector('.pista'), document.querySelector('label[for="puuFolio"]').textContent);
+    R.ok('U-46: «+ Alta» de unidad preselecciona el último carrier guardado en la sesión', $('puuCarrier').value === String(carrierId), `puuCarrier "${$('puuCarrier').value}" vs ${carrierId}`);
     poner('puuCarrier', String(carrierId)); poner('puuPlaca', '55-xy-9k'); poner('puuPlana', '66ZW3M'); poner('puuFolio', 'UGI-DEMO-0000-2025'); poner('puuCap', '25000'); poner('puuPolizaVig', '2027-03-01'); poner('puuTarjetaVig', '2027-06-01');
     clic('btnGuardarUnidad');
     await esperar(() => avisoCon('Unidad transcrita'), 'unidad guardada');
@@ -368,6 +385,7 @@ try {
     }
 
     clic('btnNuevoChofer');
+    R.ok('U-46: «+ Alta» de chofer también preselecciona el carrier', $('pchCarrier').value === String(carrierId), $('pchCarrier').value);
     poner('pchCarrier', String(carrierId)); poner('pchNombre', 'JUAN PEREZ DEMO'); poner('pchLicVig', '2027-01-15');
     clic('btnGuardarChofer');
     await esperar(() => avisoCon('Chofer dado de alta'), 'chofer guardado');
@@ -566,6 +584,18 @@ try {
         R.ok('U-02: tras registrar, la puerta queda en cero (chofer sin elegir, bloque de placa sin «Listo», botón «Faltan»)',
             $('puChofer').value === '' && $('puEst2').textContent !== 'Listo' && $('btnCompuerta').classList.contains('incompleto') && !document.querySelector('#puUnidades .u.sel'),
             `chofer "${$('puChofer').value}" · est2 ${$('puEst2').textContent} · botón ${$('btnCompuerta').textContent}`);
+        // U-48 (v0.29.0): el bloque 2 cuenta el chofer como faltante (sin volverlo obligatorio para la compuerta).
+        R.ok('U-48: tras registrar, el bloque 2 cuenta placa Y chofer como faltantes (title los nombra)', $('puEst2').textContent === 'Faltan 2' && $('puEst2').title.includes('el chofer') && $('puEst2').title.includes('la placa'), `${$('puEst2').textContent} · ${$('puEst2').title}`);
+        poner('puPlaca', '55XY9K');
+        R.ok('U-48: con la placa y sin chofer el bloque 2 dice «Falta 1 · el chofer», no «Listo»', $('puEst2').textContent === 'Falta 1 · el chofer', $('puEst2').textContent);
+        poner('puPlaca', '');
+        // U-40 (v0.29.0): el programa elegido sobrevive al cambio de pestaña y al repintado (opciones() conserva el value).
+        {
+            const progAntes = $('puPrealta').value;
+            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            R.ok('U-40: el programa elegido en la Puerta se conserva al cambiar de pestaña y volver', progAntes !== '' && $('puPrealta').value === progAntes && $('puEst1').textContent === 'Listo', `${progAntes} → ${$('puPrealta').value}`);
+        }
         // U-01 (v0.21.0): con datos faltantes el botón no abre el veredicto: enfoca el primer faltante (aquí, la placa).
         clic('btnCompuerta'); await dormir(30);
         R.ok('U-01: con datos faltantes el botón NO abre el veredicto y enfoca el primer campo que falta',
@@ -688,6 +718,7 @@ try {
         if (esExc) {
             clic('btnRegistrarPuerta'); await dormir(50);
             R.ok('la excepción exige motivo escrito', !!avisoCon('lleva motivo escrito'));
+            R.ok('U-39: con el veredicto abierto el aviso se pinta dentro de su cuerpo y el motivo queda aria-invalid con foco', $('vkAvisos').textContent.includes('lleva motivo escrito') && $('puMotivo').getAttribute('aria-invalid') === 'true' && document.activeElement === $('puMotivo'), `vkAvisos "${$('vkAvisos').textContent.slice(0, 40)}" · foco ${document.activeElement && document.activeElement.id}`);
             poner('puMotivo', 'Póliza renovada, el carrier manda el PDF hoy'); clic('btnRegistrarPuerta');
             await esperar(() => avisoCon('Gerencia lo ve'), 'excepción registrada');
             const exc = filas('embarques').find(e => e.fields.Compuerta === 'excepcion-comercial');
@@ -695,6 +726,7 @@ try {
             R.ok('la excepción NO está en planta hasta que se autorice', !$('baLista').textContent.includes(exc.fields.Manifiesto));
             document.querySelector('#pestanas button[data-p="hoy"]').click();
             R.ok('Hoy muestra la franja de excepción con su motivo', visible('hoyFranja') && $('hoyFranja').textContent.includes('Póliza renovada'));
+            R.ok('U-52: en la franja, Anular/Eliminar llevan la clase peligro (no la neutral «no»)', !!$('hoyFranja').querySelector('.botones button.peligro') && !$('hoyFranja').querySelector('.botones button.no'), [...$('hoyFranja').querySelectorAll('.botones button')].map(b => b.textContent + ':' + b.className).join(' '));
             // U-12 (v0.22.0): el renglon de la excepcion en «Pendiente revisar» trae los mismos botones que la franja.
             {
                 const rExc = [...document.querySelectorAll('#tbPendientes .renglon')].find(r => r.textContent.includes('Excepción'));
@@ -867,7 +899,7 @@ try {
             clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con pesaje A abierto');
             R.ok('C-12: el refresco con captura a medias no repinta la lista (sigue el DOM viejo con el pesaje abierto)', visible('baPesar'));
             const btnTaraB = [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e110.fields.Title)).querySelector('button');
-            btnTaraB.click(); await esperar(() => $('baTitulo').textContent.includes(`Tara · ${e110.fields.Title}`), 'pesaje B (110) abierto desde el DOM viejo');
+            btnTaraB.click(); await esperar(() => $('baTitulo').textContent.includes('Tara') && $('baTitulo').textContent.includes(e110.fields.Title), 'pesaje B (110) abierto desde el DOM viejo');   // U-44: el título trae placa y folio
             // C-13 (v0.25.0): entre abrir la tara y guardar, OTRA sesion anula la gondola (mutacion directa del Graph falso).
             // La app relee el renglon antes de subir la foto: no cierra, no sube lote y lo dice.
             e110.fields.Etapa = 'anulado'; e110.fields.AnuladoPor = 'gerencia@example.invalid';
@@ -886,18 +918,24 @@ try {
         }
         // 12c. Pre-alta en borrador: se elimina; firmada: no.
         document.querySelector('#pestanas button[data-p="prealtas"]').click();
-        clic('btnNuevaPrealta'); poner('paCliente', 'Borrador'); poner('paPozoTitulo', 'equivocado'); poner('paMes', 'x'); poner('paCorriente', 'base-agua'); poner('paCarrier', String(carrierId)); await dormir(20); clic('btnGuardarPrealta');
+        clic('btnNuevaPrealta');
+        R.ok('U-54: «+ Nueva» prellena el año en curso', $('paMes').value === String(new Date().getFullYear()), $('paMes').value);
+        poner('paCliente', 'Borrador'); poner('paPozoTitulo', 'equivocado'); poner('paMes', 'x'); poner('paCorriente', 'base-agua'); poner('paCarrier', String(carrierId)); await dormir(20); clic('btnGuardarPrealta');
+        await dormir(30);
+        R.ok('U-54: un año que no es de cuatro cifras no se guarda y lo dice la forma', filas('prealtas').length === 1 && $('paForma').querySelector('.dlg-avisos').textContent.includes('cuatro cifras'), $('paForma').querySelector('.dlg-avisos').textContent);
+        poner('paMes', '2026'); clic('btnGuardarPrealta');
         await esperar(() => filas('prealtas').length === 2, 'segunda pre-alta');
-        const rBorr = [...document.querySelectorAll('#paBorradores .renglon')].find(r => r.textContent.includes('BORRADOR-EQUIVOCADO-X'));
+        const rBorr = [...document.querySelectorAll('#paBorradores .renglon')].find(r => r.textContent.includes('BORRADOR-EQUIVOCADO-2026'));
         rBorr.querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle borrador');
         const btnElimPa = $('btnEliminarPrealta');
         R.ok('pre-alta en borrador ofrece Eliminar', !!btnElimPa && visible('btnEliminarPrealta'));
         if (btnElimPa) {
             btnElimPa.click(); await confirmar('Se capturó dos veces');
             await esperar(() => filas('prealtas').length === 1, 'pre-alta eliminada');
-            R.ok('borrador eliminado de la lista', filas('prealtas').length === 1 && !$('paBorradores').textContent.includes('BORRADOR-EQUIVOCADO-X'));
+            R.ok('borrador eliminado de la lista', filas('prealtas').length === 1 && !$('paBorradores').textContent.includes('BORRADOR-EQUIVOCADO-2026'));
             [...document.querySelectorAll('#paFirmadas .renglon')][0].querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle firmada');
-            R.ok('pre-alta firmada NO ofrece Eliminar (solo Cerrar)', !visible('btnEliminarPrealta') && visible('btnCerrarPrealta'));
+            R.ok('pre-alta firmada NO ofrece Eliminar (solo Cerrar el programa)', !visible('btnEliminarPrealta') && visible('btnCerrarPrealta'));
+            R.ok('U-45: el botón que cierra el detalle dice «Volver», no «Cerrar»', $('btnVolverPrealtas').textContent.trim() === 'Volver' && $('btnCerrarPrealta').classList.contains('peligro'));
         }
         // 12d. Padron: unidad referenciada -> baja (no borrado); chofer sin referencias -> eliminar.
         document.querySelector('#pestanas button[data-p="padron"]').click();
@@ -996,12 +1034,14 @@ try {
         document.querySelector('#pestanas button[data-p="hoy"]').click();
         // U-14 (v0.22.0): la linea vive en #tbAlcance, fuera de la tabla que el celular oculta.
         R.ok('«Hoy» dice hasta dónde alcanza lo cargado, fuera de la tabla (U-14)', $('tbAlcance').textContent.includes('últimos 90 días') && !$('tbFila').textContent.includes('últimos 90 días'), $('tbAlcance').textContent.slice(0, 80));
-        // U-15 (v0.22.0): la tarjeta de la fila del dia (celular) se abre con teclado.
+        // U-15 (v0.22.0) / U-58 (v0.29.0): el FOLIO de la tarjeta de la fila del dia (celular) es el <button> que la abre; la tarjeta
+        // ya no es role=button (tenia botones adentro).
         {
             const tar = [...document.querySelectorAll('#tbFilaTarjetas .ftar')].find(t => t.querySelector('.botones-fila'));
-            const antes = tar && tar.getAttribute('aria-expanded');
-            if (tar) tar.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-            R.ok('U-15: la tarjeta de la fila es role=button y Enter la abre (aria-expanded true, botones visibles)', !!tar && tar.getAttribute('role') === 'button' && antes === 'false' && tar.getAttribute('aria-expanded') === 'true' && tar.classList.contains('abierta'), `${antes} → ${tar && tar.getAttribute('aria-expanded')}`);
+            const cabF = tar && tar.querySelector('button.f');
+            const antes = cabF && cabF.getAttribute('aria-expanded');
+            if (cabF) cabF.click();
+            R.ok('U-58: el folio es un <button> con aria-expanded/aria-controls que abre la tarjeta; la tarjeta no es role=button', !!cabF && !tar.hasAttribute('role') && antes === 'false' && cabF.getAttribute('aria-expanded') === 'true' && cabF.getAttribute('aria-controls') === tar.querySelector('.botones-fila').id && tar.classList.contains('abierta'), `${antes} → ${cabF && cabF.getAttribute('aria-expanded')}`);
             // U-07: los botones de la tarjeta llevan la clase de peligro (Anular/Eliminar) que el CSS pinta; Ticket no.
             const pel = tar && tar.querySelector('.botones-fila button.peligro');
             R.ok('U-07: Anular/Eliminar de la tarjeta llevan clase peligro y Ticket no', !!pel && !!tar.querySelector('.botones-fila button:not(.peligro)'), tar ? [...tar.querySelectorAll('.botones-fila button')].map(b => b.textContent + ':' + b.className).join(' ') : '');
@@ -1117,6 +1157,8 @@ try {
             // Pesaje de la tara a medias (kg + foto) y cambio de pestana.
             [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e112.fields.Title)).querySelector('button').click();
             await esperar(() => visible('baPesar') && $('baTitulo').textContent.includes('Tara'), 'tara 112 abierta');
+            R.ok('U-53: en escritorio el foco va a los kilos al abrir el pesaje (en celular no aplica: teclado propio)', !window.matchMedia('(min-width: 900px)').matches || document.activeElement === $('baKg'), `${window.innerWidth}px · foco ${document.activeElement && document.activeElement.id}`);
+            R.ok('U-44: la tarjeta de la tara titula con placa y folio y el subtítulo trae el manifiesto', $('baTitulo').textContent.includes('55XY9K') && /E-\d\d-\d{5}/.test($('baTitulo').textContent) && $('baSub').textContent.includes('MINSA/RME/112/2025'), `${$('baTitulo').textContent} · ${$('baSub').textContent.slice(0, 40)}`);
             poner('baKg', '21000'); await foto();
             document.querySelector('#pestanas button[data-p="hoy"]').click();
             await esperar(() => $('dlg').open, 'confirm al salir de la bascula con pesaje a medias');
@@ -1175,6 +1217,7 @@ try {
         document.querySelector('#pestanas button[data-p="puerta"]').click();
         // U-38 (v0.26.0): el rol de lectura es texto fijo de la tarjeta, no un aviso (el refresco silencioso lo repetía cada 2 min).
         R.ok('rol de lectura: la compuerta está deshabilitada y lo dice la tarjeta, no un aviso', $('btnCompuerta').disabled && visible('puSoloLectura') && !avisoCon('Tu rol es de lectura'));
+        R.ok('U-50: el texto de la Puerta nombra el rol real (validador ≠ lectura)', ROL === 'validador' ? $('puSoloLectura').textContent.includes('validador') && $('puSoloLectura').textContent.includes('Pre-altas') : $('puSoloLectura').textContent.includes('lectura'), $('puSoloLectura').textContent);
         document.querySelector('#pestanas button[data-p="padron"]').click();
         R.ok('rol de lectura: sin botones de alta en el padrón', !visible('btnNuevoCarrier') && !visible('btnNuevaUnidad'));
     }

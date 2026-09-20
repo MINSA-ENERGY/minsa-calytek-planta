@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch } from './reglas.js';
 
-const VERSION = '0.28.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.29.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -31,6 +31,7 @@ const estado = {
     focoAntesVeredicto: null, // elemento con el foco antes de abrir el veredicto (vuelve ahi al cerrarlo)
     padronFicha: null,       // 'tipo:id' de la ficha del padron desplegada
     padronCarrier: null,     // id del carrier que filtra unidades y choferes en el padron
+    ultimoCarrierPadron: null,   // U-46: el ultimo carrier dado de alta o usado en un alta de unidad/chofer (solo esta sesion)
     pestana: 'hoy',
     cargadoEl: 0,
     ventanaDesde: ''      // ISO: inicio de la ventana de carga (cubeta 3)
@@ -65,10 +66,13 @@ function avisar(texto, clase = '') {
     const abiertas = document.querySelectorAll('dialog.dlg-forma[open]');
     const dlg = abiertas[abiertas.length - 1];
     if (dlg) { const z = dlg.querySelector('.dlg-avisos'); z.textContent = ''; z.appendChild(d.cloneNode(true)); dlg.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    // U-39 (v0.29.0): el veredicto es una <section> fija a pantalla completa (z-index 30) y tapa #avisos: «lleva motivo escrito»
+    // y «No se pudo registrar» se pintan dentro de su cuerpo, junto a las acciones, y se hace scroll hasta ahí.
+    if (!$('veredicto').classList.contains('oculto')) { const z = $('vkAvisos'); z.textContent = ''; z.appendChild(d.cloneNode(true)); z.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
     // Sin scrollTo (U-03, v0.21.0): #avisos es sticky y se ve donde este el usuario; el salto al tope alejaba
     // al basculista del formulario de pesaje con cada «Captura el peso» / «Falta la foto».
 }
-function limpiarAvisos() { $('avisos').textContent = ''; $('entradaAviso').textContent = ''; $('entradaAviso').className = 'mensaje oculto'; for (const z of document.querySelectorAll('.dlg-forma .dlg-avisos')) z.textContent = ''; }
+function limpiarAvisos() { $('avisos').textContent = ''; $('entradaAviso').textContent = ''; $('entradaAviso').className = 'mensaje oculto'; for (const z of document.querySelectorAll('.dlg-avisos')) z.textContent = ''; }   // U-39: incluye la del veredicto
 // Los formularios de alta viven en <dialog> (v0.19.8): abrir es showModal, cerrar es close. Idempotentes.
 function abrirForma(id) { const d = $(id); limpiarAvisos(); if (!d.open) d.showModal(); d.scrollTo({ top: 0 }); d.dataset.huella = huellaForma(d); }
 /** Valores de la forma en una cadena (U-34, v0.26.0): se toma al abrir y Escape pregunta solo si cambió — un Editar sin tocar nada cierra directo. */
@@ -154,12 +158,19 @@ function desplegable(nodo, abierto, alClic) {
     nodo.addEventListener('click', alClic);
     nodo.addEventListener('keydown', ev => { if (ev.target === nodo && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); alClic(ev); } });
 }
+/**
+ * U-40 (v0.29.0): conserva el value anterior si sigue entre las opciones nuevas. Antes cada repintado (cambio de pestaña,
+ * refresco de 2 minutos) rehacía el select en «— elige —» y la puerta perdía el programa elegido (los campos de texto sí
+ * sobrevivían). Quien quiera empezar en blanco pone sel.value = '' después.
+ */
 function opciones(sel, items, valor, textoDe, primera = '— elige —') {
+    const antes = sel.value;
     sel.textContent = '';
     const o = el('option', '', primera); o.value = ''; sel.appendChild(o);
     for (const it of items) {
         const op = el('option', '', textoDe(it)); op.value = String(valor(it)); sel.appendChild(op);
     }
+    if (antes && [...sel.options].some(op => op.value === antes)) sel.value = antes;
 }
 // Fechas: dd/mm/aaaa en pantalla, ISO en SharePoint. C-25 (v0.28.0): fechaCorta, aIsoDia y el autoformato viven en reglas.js
 // (puras, con casos en reglas.test.js); aqui solo queda el enganche al DOM.
@@ -273,9 +284,16 @@ async function refrescarCliente() {
     }
     estado.cliente = crearCliente(CONFIG.graph, estado.token);
 }
-function ponerQuien(texto) {
-    for (const q of document.querySelectorAll('.quien')) q.textContent = texto;
-    $('rolMovil').textContent = texto.includes(' · ') ? texto.split(' · ').pop() : '';
+/**
+ * U-51 / U-47 (v0.29.0): el rail y el menú «···» dicen QUIÉN entró por su nombre (quien(): PLANTA_Roles, luego la cuenta MSAL,
+ * luego el correo) y el correo queda en title; antes el rail partía el correo a media palabra y el celular no lo decía en ningún lado.
+ */
+function ponerQuien(correo, rol = '') {
+    const nombre = quien(correo);
+    for (const q of document.querySelectorAll('.quien')) { q.textContent = rol ? `${nombre} · ${rol}` : nombre; q.title = correo; }
+    $('rolMovil').textContent = rol;
+    $('quienMovil').textContent = nombre; $('quienMovil').title = correo;
+    $('correoMovil').textContent = nombre === correo ? '' : correo;
 }
 // I5 (7-sep): cuando se leyeron las listas por ultima vez, en la barra movil y en el rail. Ambar pasados 5 minutos.
 function pintarSync(leyendo = false, texto = 'Leyendo las listas…') {
@@ -299,7 +317,7 @@ async function sesionIniciada() {
     pasoEntrada('Leyendo las listas…');
     await cargarTodo();
     estado.rol = rolDe(estado.cuenta.username, estado.roles);
-    ponerQuien(`${estado.cuenta.username} · ${estado.rol}`);
+    ponerQuien(estado.cuenta.username, estado.rol);
     $('pantallaEntrar').classList.add('oculto');
     $('rail').classList.remove('oculto');
     $('barraMovil').classList.remove('oculto');
@@ -485,7 +503,7 @@ function capturaAMedias() {
     const abierto = id => !$(id).classList.contains('oculto');
     if (abierto('baPesar') || abierto('veredicto')) return true;
     if (['paForma', 'paDetalle', 'pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer'].some(id => $(id).open)) return true;
-    if (estado.pestana === 'puerta' && ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo'].some(id => $(id).value.trim())) return true;
+    if (estado.pestana === 'puerta' && ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo', 'puPrealta'].some(id => $(id).value.trim())) return true;   // U-40: el programa elegido también es captura
     return false;
 }
 
@@ -503,7 +521,7 @@ async function recargar(silencioso = false) {
         await refrescarCliente();
         await cargarTodo();
         estado.rol = rolDe(estado.cuenta.username, estado.roles);
-        ponerQuien(`${estado.cuenta.username} · ${estado.rol}`);
+        ponerQuien(estado.cuenta.username, estado.rol);
         // No pisar una captura a medias. El refresco SILENCIOSO repinta en su lugar (U-04, v0.21.0): irA()
         // limpiaba el aviso que se estaba leyendo y mandaba la pagina al tope cada 2 minutos.
         if (capturaAMedias()) pintarInsignias();
@@ -547,7 +565,7 @@ function irDesdePestana(p) {
 }
 function irA(p) {
     estado.pestana = p;
-    for (const b of $('pestanas').querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.p === p));
+    for (const b of $('pestanas').querySelectorAll('button')) { if (b.dataset.p === p) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }   // U-57 (v0.29.0): <nav> con aria-current, como .mn-rail de la piel; el role=tablist prometía flechas y tabpanel que no había
     for (const s of ['hoy', 'puerta', 'bascula', 'prealtas', 'padron']) $('p-' + s).classList.toggle('oculto', s !== p);
     limpiarAvisos();
     cerrarVeredicto();
@@ -565,10 +583,12 @@ function pintarPuerta() {
     const pp = $('puPendientes'); pp.classList.toggle('oculto', !borradores.length);
     if (borradores.length) pp.textContent = `${borradores.length === 1 ? 'Hay 1 pre-alta por firmar' : `Hay ${borradores.length} pre-altas por firmar`}: ${borradores.map(p => p.Title).join(' · ')}. Sus góndolas no pueden entrar hasta que el validador firme.`;
     opciones($('puPrealta'), firmadas, p => p.id, p => `${p.Title} · ${p.Corriente || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}`);
+    if (!$('puPrealta').value && firmadas.length === 1) $('puPrealta').value = String(firmadas[0].id);   // U-40: una sola firmada no se hace elegir
     pintarChoferesPuerta();
     pintarUnidadesPuerta();
     $('btnCompuerta').disabled = !PUEDE.puerta(estado.rol);
     $('puSoloLectura').classList.toggle('oculto', PUEDE.puerta(estado.rol));   // U-38 (v0.26.0): texto fijo, no avisar(): el refresco silencioso lo repetía cada 2 min y pisaba el aviso que se leía
+    $('puSoloLectura').textContent = estado.rol === 'validador' ? 'Tu rol es validador: aquí solo ves; capturas y firmas en Pre-altas.' : 'Tu rol es de lectura: puedes ver, no capturar.';   // U-50: al validador no se le dice «lectura»
     pintarPrevioPuerta();
 }
 // I6 (7-sep): las unidades que la pre-alta autorizo (o, si no marco ninguna, todas las activas del carrier).
@@ -667,17 +687,20 @@ function pintarPrevioPuerta() {
     const e = evaluarPuerta();
     const faltan = CAMPOS_PUERTA.filter(([id]) => !String($(id).value).trim()).map(([, n]) => n);
 
-    const lleno = ids => ids.every(id => String($(id).value).trim());
-    const bloques = [['puBloque1', 'puEst1', ['puPrealta'], 'sin programa'],
-                     ['puBloque2', 'puEst2', ['puPlaca'], 'falta la placa'],
-                     ['puBloque3', 'puEst3', ['puManifiesto', 'puCorriente'], 'falta el manifiesto o la corriente']];
-    for (const [bloque, est, ids, pendiente] of bloques) {
-        const ok = lleno(ids);
-        const n = ids.filter(id => !String($(id).value).trim()).length;
+    // U-48 (v0.29.0): cada dato del bloque es una lista de alternativas (el chofer vale por el select O por el nombre en
+    // licencia). El bloque 2 contaba solo la placa y decía «Listo» mientras la lista viva anunciaba Espera por el chofer;
+    // el chofer sigue sin ser obligatorio para correr la compuerta (CAMPOS_PUERTA no cambia).
+    const hay = alts => alts.some(id => String($(id).value).trim());
+    const bloques = [['puBloque1', 'puEst1', [['puPrealta', 'programa']], 'sin'],
+                     ['puBloque2', 'puEst2', [['puPlaca', 'la placa'], ['puChofer', 'puChoferNombre', 'el chofer']], 'falta'],
+                     ['puBloque3', 'puEst3', [['puManifiesto', 'el manifiesto'], ['puCorriente', 'la corriente']], 'falta']];
+    for (const [bloque, est, datos, pendiente] of bloques) {
+        const faltantes = datos.filter(d => !hay(d.slice(0, -1))).map(d => d[d.length - 1]);
+        const ok = !faltantes.length, n = faltantes.length;
         $(bloque).classList.toggle('listo', ok);
-        // D2 (2026-09-08): el estado cuenta lo que falta; el detalle («falta la placa») queda en el title.
-        $(est).textContent = ok ? 'Listo' : n === 1 ? 'Falta 1' : `Faltan ${n}`;
-        $(est).title = ok ? '' : pendiente;
+        // D2 (2026-09-08): el estado cuenta lo que falta; el detalle («falta la placa») queda en el title y en el texto.
+        $(est).textContent = ok ? 'Listo' : n === 1 ? `Falta 1 · ${faltantes[0]}` : `Faltan ${n}`;
+        $(est).title = ok ? '' : `${pendiente} ${faltantes.join(' y ')}`;
     }
 
     const decide = e.resultado === 'rechazo-legal' ? 'legal' : e.resultado === 'excepcion-comercial' ? 'comercial' : null;
@@ -797,7 +820,11 @@ document.addEventListener('keydown', ev => {
 
 async function registrarPuerta() {
     const r = estado.ultimaCompuerta; if (!r) return;
-    if (r.resultado === 'excepcion-comercial' && !$('puMotivo').value.trim()) { avisar('La excepción lleva motivo escrito, no una casilla.', 'error'); return; }
+    if (r.resultado === 'excepcion-comercial' && !$('puMotivo').value.trim()) {
+        avisar('La excepción lleva motivo escrito, no una casilla.', 'error');
+        $('puMotivo').setAttribute('aria-invalid', 'true'); $('puMotivo').focus();   // U-39: el campo que falta se marca y recibe el foco
+        return;
+    }
     const textoBoton = $('btnRegistrarPuerta').textContent;
     await escribiendo('btnRegistrarPuerta', async () => { try {   // C-24
         await refrescarCliente();
@@ -1013,10 +1040,13 @@ function abrirPesaje(e, fase) {
     estado.fotoBytes = null; soltarFotoPrevia();
     $('baPesar').classList.remove('oculto');
     $('baTicketCaja').classList.add('oculto');
-    $('baTitulo').textContent = fase === 'bruto' ? `Bruto · ${e.PlacaTractor}` : `Tara · ${e.Title}`;
+    // U-44 (v0.29.0): las dos fases titulan con la PLACA (lo que el basculista ve en el camión) y la tara además con el folio;
+    // el manifiesto va al subtítulo. Antes la tara decía solo «Tara · E-26-00004» y el bruto no traía el manifiesto.
+    $('baTitulo').textContent = fase === 'bruto' ? `Bruto · ${e.PlacaTractor}` : `Tara · ${e.PlacaTractor} · ${e.Title}`;
     const u = porId(estado.unidades, e.UnidadId);
-    $('baSub').textContent = fase === 'bruto' ? 'Primera pasada: la góndola cargada. Al guardar nace el folio E-.' :
-        `Segunda pasada: la góndola vacía. Bruto ${e.BrutoKg} kg${u && u.CapacidadKg ? ` · capacidad ${u.CapacidadKg} kg` : ''}.`;
+    const manif = e.Manifiesto ? `Manifiesto ${e.Manifiesto}. ` : '';
+    $('baSub').textContent = fase === 'bruto' ? `${manif}Primera pasada: la góndola cargada. Al guardar nace el folio E-.` :
+        `${manif}Segunda pasada: la góndola vacía. Bruto ${e.BrutoKg} kg${u && u.CapacidadKg ? ` · capacidad ${u.CapacidadKg} kg` : ''}.`;
     $('baKgLabel').textContent = fase === 'bruto' ? 'Bruto (kg)' : 'Tara (kg)';
     $('baKg').value = '';
     $('baFotoPrevia').classList.add('oculto');
@@ -1033,6 +1063,7 @@ function abrirPesaje(e, fase) {
     $('baMotivoNetoCampo').classList.add('oculto');
     $('baMotivoNeto').value = '';
     $('baPesar').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (ESCRITORIO.matches) $('baKg').focus();   // U-53: con ratón el foco va a los kilos; en celular el teclado es propio (inputmode none)
 }
 
 /** Revoca el blob URL de la vista previa (C-21, v0.25.0): cada foto comprimida quedaba viva hasta recargar la PWA. */
@@ -1307,9 +1338,11 @@ function nuevaPrealta() {
     estado.prealtaEdit = null;
     $('paFormaTitulo').textContent = 'Nueva pre-alta'; $('btnGuardarPrealta').textContent = 'Guardar como borrador';
     opciones($('paCarrier'), estado.carriers.filter(c => c.Activo !== false), c => c.id, c => c.Title);
+    $('paCarrier').value = '';   // U-40: opciones() ya conserva el value; una pre-alta nueva empieza sin carrier
     pintarUnidadesChoferesPrealta();
     for (const id of ['paTitulo', 'paCliente', 'paPozoTitulo', 'paMes', 'paGenerador', 'paGeneradorRegistro', 'paPozo', 'paFecha', 'paGondolas', 'paCorreoFecha', 'paCorreoRemitente', 'paNotas']) $(id).value = '';
     $('paCorriente').value = '';
+    $('paMes').value = String(new Date().getFullYear());   // U-54: casi siempre es el año en curso
     armarTituloPrealta();
     pintarEstadoPrealta();
     abrirForma('paForma');
@@ -1394,6 +1427,10 @@ $('paForma').addEventListener('change', pintarEstadoPrealta);
 async function guardarPrealta() {
     if (!PUEDE.capturarPrealta(estado.rol)) { avisar('Tu rol no captura pre-altas.', 'error'); return; }
     if (!$('paTitulo').value.trim() || !$('paCorriente').value || !$('paCarrier').value) { avisar('Faltan cliente, pozo o año del programa, la corriente o el carrier.', 'error'); return; }
+    // U-54 (v0.29.0): el año del nombre es un número de cuatro cifras entre el año pasado y el que viene; antes «202» o «x»
+    // se quedaban en el título que la puerta ve en el select y en el ticket.
+    const anio = Number($('paMes').value.trim()), hoyAnio = new Date().getFullYear();
+    if (!/^\d{4}$/.test($('paMes').value.trim()) || anio < hoyAnio - 1 || anio > hoyAnio + 1) { avisar(`El año del programa va con cuatro cifras, entre ${hoyAnio - 1} y ${hoyAnio + 1}.`, 'error'); $('paMes').focus(); return; }
     const edit = estado.prealtaEdit && estado.prealtaEdit.Estado === 'borrador' ? estado.prealtaEdit : null;
     await escribiendo('btnGuardarPrealta', async () => { try {   // C-24
         await refrescarCliente();
@@ -1615,6 +1652,11 @@ function conFicha(r, tipo, x, extra) {
 // Plegar un grupo del padrón suelta lo que tenía seleccionado (pedido de Carlos 2026-09-07): un filtro o una
 // ficha escondidos dentro de un grupo cerrado seguían actuando sin que nadie los viera (la foto del chofer único).
 for (const [id, tipo] of [['pdGrupoCarriers', 'carriers'], ['pdGrupoUnidades', 'unidades'], ['pdGrupoChoferes', 'choferes']]) {
+    // U-56 (v0.29.0): en escritorio la cabecera no tiene chevron ni cursor de mano y los tres grupos van abiertos (C-08); un clic
+    // en «Unidades» para enfocar la columna la plegaba sin señal de cómo volver. Los botones del summary («+ Alta») ya cortan el evento.
+    const sinPlegar = ev => { if (ESCRITORIO.matches && !ev.target.closest('button')) ev.preventDefault(); };
+    $(id).querySelector('summary').addEventListener('click', sinPlegar);
+    $(id).querySelector('summary').addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') sinPlegar(ev); });
     $(id).addEventListener('toggle', () => {
         if ($(id).open) return;
         let cambio = false;
@@ -1859,9 +1901,18 @@ function tituloFormaPadron(clave) {
     const e = estado.padronEdit && estado.padronEdit.clave === clave ? estado.padronEdit.x : null;
     $(FORMA_PADRON[clave].forma).querySelector('h2').textContent = e ? `Editar ${FORMA_PADRON[clave].titulo}: ${e.Title}` : `Alta de ${FORMA_PADRON[clave].titulo}`;
 }
+const SELECT_CARRIER_PADRON = { unidades: 'puuCarrier', choferes: 'pchCarrier' };
 function abrirFormaPadron(clave, x = null) {
     estado.padronEdit = x ? { clave, x } : null;
     if (x) llenarFormaPadron(clave, x); else vaciarFormaPadron(clave);
+    // U-46 (v0.29.0): el alta de unidad/chofer arranca con el carrier que el padrón ya tiene elegido (el filtro «Mostrando solo
+    // lo de X») o, si no hay filtro, el último que se guardó en esta sesión. Transcribir 8 placas de un oficio eran 8 búsquedas
+    // en el select. El value se conserva además entre altas consecutivas (opciones(), U-40).
+    if (!x && SELECT_CARRIER_PADRON[clave]) {
+        const sel = $(SELECT_CARRIER_PADRON[clave]);
+        const quiero = estado.padronCarrier !== null && estado.padronCarrier !== undefined ? estado.padronCarrier : estado.ultimoCarrierPadron;
+        if (quiero !== null && quiero !== undefined && [...sel.options].some(o => o.value === String(quiero))) sel.value = String(quiero);
+    }
     tituloFormaPadron(clave);
     $(FORMA_PADRON[clave].grupo).open = true;
     abrirForma(FORMA_PADRON[clave].forma);
@@ -1909,6 +1960,7 @@ async function guardarPadron(clave) {
         } else {
             const nuevo = await estado.cliente.crearRenglon(estado.siteId, L[clave], limpiar(campos));
             anclar(clave, nuevo);   // C-23
+            estado.ultimoCarrierPadron = clave === 'carriers' ? nuevo.id : (nuevo.CarrierId ? Number(nuevo.CarrierId) : estado.ultimoCarrierPadron);   // U-46
             const pendiente = clave === 'carriers' && nuevo.VigenciaASEA ? await segundoPaso(() => altaVigencia(`Autorización ASEA transporte · ${nuevo.Title}`, 'tercero', 'carrier', 'legal', nuevo.VigenciaASEA, nuevo.FolioOficio)) : null;
             vaciarFormaPadron(clave); cerrarFormaPadron(clave);
             if (pendiente) avisar(`${NOMBRE_PADRON[clave]} dado de alta, pero su vigencia ASEA NO quedó en el tablero (${pendiente}). Edítalo y guarda para crearla.`, 'ojo');
@@ -2005,14 +2057,24 @@ function pintarFilaDia(hoy, dia) {
     if (!deHoy.length) { tw.appendChild(el('p', 'vacio', 'Hoy no ha llegado ninguna; estos son los últimos.')); tt.appendChild(el('p', 'vacio', 'Hoy no ha llegado ninguna; estos son los últimos.')); }
     for (const e of fila) {
         const t = el('div', 'ftar' + (e.Etapa === 'anulado' ? ' anulado' : ''));
-        t.appendChild(el('span', 'f' + (e.Title ? '' : ' mudo'), e.Title || 'sin folio'));
+        // U-58 (v0.29.0): la tarjeta era role=button con botones adentro (interactivo anidado, deuda de U-15). Ahora el que
+        // despliega es el FOLIO, un <button> con aria-expanded y aria-controls a la zona de botones; la tarjeta entera sigue
+        // abriendo al toque (sin role ni tabindex) porque con guante el dedo no apunta al folio.
+        const bf = botonesFila(e, abrirTicketDeHoy, true);
+        const f = el(bf.childElementCount ? 'button' : 'span', 'f' + (e.Title ? '' : ' mudo'), e.Title || 'sin folio');
+        t.appendChild(f);
         t.appendChild(segmentosEtapa(e));
         const c = el('span', 'c');
         c.textContent = [e.PlacaTractor || '—', nombreDe(estado.carriers, e.CarrierId), pesoFila(e), horaFila(e)].filter(Boolean).join(' · ');
         c.appendChild(etiquetaCompuertaDe(e));
         t.appendChild(c);
-        const bf = botonesFila(e, abrirTicketDeHoy, true);
-        if (bf.childElementCount) { t.appendChild(bf); desplegable(t, false, () => { t.classList.toggle('abierta'); t.setAttribute('aria-expanded', String(t.classList.contains('abierta'))); }); }
+        if (bf.childElementCount) {
+            bf.id = `ftarBotones${e.id}`; t.appendChild(bf);
+            f.type = 'button'; f.setAttribute('aria-expanded', 'false'); f.setAttribute('aria-controls', bf.id);
+            const alternar = () => { t.classList.toggle('abierta'); f.setAttribute('aria-expanded', String(t.classList.contains('abierta'))); };
+            f.addEventListener('click', ev => { ev.stopPropagation(); alternar(); });
+            t.addEventListener('click', alternar);
+        }
         tt.appendChild(t);
     }
     const t = el('table', 'fila'); const th = el('tr');
@@ -2120,7 +2182,7 @@ function pintarHoy() {
     const botonesExcepcion = e => {
         const bs = [];
         if (PUEDE.autorizarExcepcion(estado.rol)) bs.push({ texto: 'Autorizar', accion: 'autorizar', clase: 'si', alClic: ev => autorizarExcepcion(vivo('embarques', e), ev.currentTarget), deshabilitado: motivoSinFirmas() });
-        for (const b of botonCorreccion(e)) bs.push({ ...b, clase: 'no' });
+        for (const b of botonCorreccion(e)) bs.push(b);   // U-52 (v0.29.0): Anular/Eliminar en rojo también en la franja; antes iban con la clase neutral «no»
         return bs;
     };
     pintarFranjaHoy(pendientes, botonesExcepcion);
@@ -2220,6 +2282,7 @@ $('puChofer').addEventListener('change', () => {
 for (const id of ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre']) $(id).addEventListener('input', pintarPrevioPuerta);
 for (const id of ['puChofer', 'puCorriente', 'pu79']) $(id).addEventListener('change', pintarPrevioPuerta);
 $('btnCompuerta').addEventListener('click', correrCompuerta);
+$('puMotivo').addEventListener('input', () => $('puMotivo').removeAttribute('aria-invalid'));   // U-39: al escribir el motivo se quita la marca
 $('btnRegistrarPuerta').addEventListener('click', registrarPuerta);
 $('btnVolverVeredicto').addEventListener('click', () => { cerrarVeredicto(); estado.ultimaCompuerta = null; });
 // Teclado numerico de la bascula (celular): digitos enteros, sin coma. En computadora se oculta por CSS.

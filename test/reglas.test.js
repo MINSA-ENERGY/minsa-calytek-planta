@@ -37,7 +37,7 @@ const base = { prealta, carrier, unidad, chofer, placaTractor: '77-AN-5C', placa
 {
     const r = compuerta({ ...base, unidad: { ...unidad, PolizaVigencia: en(-3) } });
     assert.equal(r.resultado, 'excepcion-comercial');
-    const h = r.hallazgos.find(x => x.regla === 'Poliza de la unidad');
+    const h = r.hallazgos.find(x => x.regla === 'Póliza de la unidad');
     assert.equal(h.clase, 'comercial');
     assert.match(h.detalle, /vencida hace 3/);
 }
@@ -61,7 +61,7 @@ const base = { prealta, carrier, unidad, chofer, placaTractor: '77-AN-5C', placa
     assert.equal(compuerta({ ...base, carrier: { ...carrier, VigenciaASEA: en(-1) } }).resultado, 'rechazo-legal');
     const r = compuerta({ ...base, carrier: { ...carrier, VigenciaASEA: en(20) } });
     assert.equal(r.resultado, 'pasa');
-    assert.ok(r.hallazgos.find(h => h.regla === 'Autorizacion ASEA del carrier' && h.clase === 'aviso'));
+    assert.ok(r.hallazgos.find(h => h.regla === 'Autorización ASEA del carrier' && h.clase === 'aviso'));
 }
 
 // Placa de la plana distinta a la del padron -> legal (dos placas, dos veces).

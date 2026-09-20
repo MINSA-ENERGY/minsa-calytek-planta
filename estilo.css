@@ -26,6 +26,7 @@
     --acc-soft: rgba(8, 51, 163, .10);
     --tint: #0833a3;
     --ok: #2f9e44;   --ok-ink: #ffffff;  --ok-soft: rgba(47, 158, 68, .12);
+    --ok-fg: #1e7a33;     /* U-43: TEXTO chico verde (~5.4:1 sobre blanco); --ok sigue para filetes, sólidos y el hero, como --warn-fg (U-13) */
     --warn: #c98700; --warn-ink: #ffffff; --warn-soft: rgba(201, 135, 0, .12);
     --warn-fg: #8a5a00;   /* U-13: TEXTO chico ambar (~5.9:1 sobre blanco); --warn sigue para filetes, chips solidos y el hero */
     --bad: #d63b2f;  --bad-ink: #ffffff;  --bad-soft: rgba(214, 59, 47, .12);
@@ -48,7 +49,7 @@
         color-scheme: dark;
         --bg: #0e1116; --surf: #151a21; --surf2: #1c232c; --ink: #e6ebf1; --mute: #8b96a5; --faint: #5c6775; --line: #2a333f; --dim: #3a4552;
         --acc: #69c6ff; --acc-ink: #04123d; --acc-soft: rgba(105, 198, 255, .12); --tint: #69c6ff;
-        --ok: #61cd6a; --ok-ink: #04120a; --ok-soft: rgba(97, 205, 106, .15); --warn: #f5ad2e; --warn-ink: #1f1500; --warn-soft: rgba(245, 173, 46, .15); --warn-fg: #f5ad2e; --bad: #ff6b61; --bad-ink: #ffffff; --bad-soft: rgba(255, 107, 97, .15);
+        --ok: #61cd6a; --ok-ink: #04120a; --ok-soft: rgba(97, 205, 106, .15); --ok-fg: #61cd6a; --warn: #f5ad2e; --warn-ink: #1f1500; --warn-soft: rgba(245, 173, 46, .15); --warn-fg: #f5ad2e; --bad: #ff6b61; --bad-ink: #ffffff; --bad-soft: rgba(255, 107, 97, .15);
         --rail: #151a21; --rail-ink: #8b96a5; --rail-on: #69c6ff; --rail-sel: rgba(105, 198, 255, .12);
         --tab: #151a21;
         --top: rgba(14, 17, 22, .94);
@@ -59,7 +60,7 @@
     color-scheme: dark;
     --bg: #0e1116; --surf: #151a21; --surf2: #1c232c; --ink: #e6ebf1; --mute: #8b96a5; --faint: #5c6775; --line: #2a333f; --dim: #3a4552;
     --acc: #69c6ff; --acc-ink: #04123d; --acc-soft: rgba(105, 198, 255, .12); --tint: #69c6ff;
-    --ok: #61cd6a; --ok-ink: #04120a; --ok-soft: rgba(97, 205, 106, .15); --warn: #f5ad2e; --warn-ink: #1f1500; --warn-soft: rgba(245, 173, 46, .15); --warn-fg: #f5ad2e; --bad: #ff6b61; --bad-ink: #ffffff; --bad-soft: rgba(255, 107, 97, .15);
+    --ok: #61cd6a; --ok-ink: #04120a; --ok-soft: rgba(97, 205, 106, .15); --ok-fg: #61cd6a; --warn: #f5ad2e; --warn-ink: #1f1500; --warn-soft: rgba(245, 173, 46, .15); --warn-fg: #f5ad2e; --bad: #ff6b61; --bad-ink: #ffffff; --bad-soft: rgba(255, 107, 97, .15);
     --rail: #151a21; --rail-ink: #8b96a5; --rail-on: #69c6ff; --rail-sel: rgba(105, 198, 255, .12);
     --tab: #151a21;
     --top: rgba(14, 17, 22, .94);
@@ -108,7 +109,7 @@ button:disabled { opacity: .45; cursor: default; }
     font-size: .62rem; font-weight: 600; letter-spacing: 0; text-transform: none;
     display: flex; flex-direction: column; align-items: center; gap: .15rem; padding: .3rem 0;
 }
-#pestanas button[aria-selected="true"] { color: var(--acc); }
+#pestanas button[aria-current="page"] { color: var(--acc); }   /* U-57 */
 #pestanas svg { width: 1.45rem; height: 1.45rem; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 #pestanas .n {
     position: absolute; top: 0; right: calc(50% - 1.15rem);
@@ -148,7 +149,7 @@ button:disabled { opacity: .45; cursor: default; }
 .flujo span b { display: block; font-size: .9rem; font-family: var(--mono); color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .flujo span.on { border-color: var(--acc); color: var(--acc); }
 .flujo span.on b { color: var(--acc); }
-.flujo span.done { color: var(--ok); }
+.flujo span.done { color: var(--ok-fg); }   /* U-43 */
 
 /* ---------------------------------------------------------------- entrada */
 
@@ -273,8 +274,10 @@ button:not(:disabled):active { transform: translateY(1px); }
 /* formularios de alta en pop-up (v0.19.8): mismo cascaron que el dialogo de confirmar, con scroll propio */
 .dlg-forma { width: min(94vw, 36rem); max-height: 92dvh; overflow: auto; padding: 1rem; }
 .dlg-forma > h2 { margin: 0 0 .6rem; font-family: var(--titulo); font-weight: 700; font-size: 1.05rem; letter-spacing: -.01em; text-transform: none; color: var(--ink); }
-.dlg-forma .dlg-avisos:empty { display: none; }
-.dlg-forma .dlg-avisos .mensaje { box-shadow: none; border: 1px solid var(--line); margin: 0 0 .7rem; }
+.dlg-avisos:empty { display: none; }   /* U-39: también la del veredicto */
+.dlg-avisos .mensaje { box-shadow: none; border: 1px solid var(--line); margin: 0 0 .7rem; }
+.veredicto .dlg-avisos .mensaje { margin: 0; }
+.ta textarea[aria-invalid="true"] { outline: 2px solid var(--bad); outline-offset: 2px; border-radius: 4px; }   /* U-39: el motivo que falta se marca en el propio campo */
 .dlg-forma .dlg-botones { margin-top: 1rem; }
 .dlg-forma .dlg-botones button { flex: 1; }
 .dlg-forma .dlg-botones.envuelve { flex-wrap: wrap; }
@@ -284,7 +287,7 @@ button:not(:disabled):active { transform: translateY(1px); }
 .etiqueta::before { content: ""; width: .4rem; height: .4rem; border-radius: 2px; background: currentColor; }
 .etiqueta.legal, .etiqueta.rechazo-legal, .etiqueta.vencida { background: var(--bad-soft); color: var(--bad); }
 .etiqueta.comercial, .etiqueta.excepcion-comercial, .etiqueta.aviso, .etiqueta.borrador { background: var(--warn-soft); color: var(--warn-fg); }
-.etiqueta.ok, .etiqueta.firmada, .etiqueta.pasa { background: var(--ok-soft); color: var(--ok); }
+.etiqueta.ok, .etiqueta.firmada, .etiqueta.pasa { background: var(--ok-soft); color: var(--ok-fg); }   /* U-43 */
 .etiqueta.cerrada, .etiqueta.anulado, .etiqueta.baja { background: var(--surf2); color: var(--mute); }
 .hallazgos { list-style: none; margin: 0 0 .6rem; padding: 0; }
 .hallazgos li { display: flex; flex-wrap: wrap; gap: .2rem .4rem; padding: .45rem 0; border-top: 1px solid var(--line); font-size: .86rem; font-weight: 600; }
@@ -294,7 +297,7 @@ button:not(:disabled):active { transform: translateY(1px); }
 /* avisos */
 #avisos { position: sticky; top: 0; z-index: 10; }
 .mensaje { padding: .7rem .9rem; border-radius: 6px; margin: .5rem 0; background: var(--surf); border: 1px solid var(--line); border-left-width: 3px; font-weight: 600; font-size: .86rem; box-shadow: none; }
-.mensaje.bien { border-color: var(--ok); color: var(--ok); }
+.mensaje.bien { border-color: var(--ok); color: var(--ok-fg); }   /* U-43 */
 .mensaje.error { border-color: var(--bad); color: var(--bad); }
 .mensaje.ojo { border-color: var(--warn); color: var(--warn-fg); }
 .nueva-version { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
@@ -313,11 +316,11 @@ button:not(:disabled):active { transform: translateY(1px); }
 .padron summary::-webkit-details-marker { display: none; }
 .padron summary .ic { width: 1.9rem; height: 1.9rem; border-radius: 6px; display: grid; place-items: center; font-family: var(--mono); font-size: .62rem; font-weight: 700; flex: none; }
 .padron .ic.ca { background: var(--acc-soft); color: var(--acc); }
-.padron .ic.un { background: var(--ok-soft); color: var(--ok); }
+.padron .ic.un { background: var(--ok-soft); color: var(--ok-fg); }   /* U-43 */
 .padron .ic.ch { background: var(--warn-soft); color: var(--warn-fg); }   /* U-27 */
 /* Pre-altas: los tres estados del programa, mismo lenguaje que los tres grupos del padrón. */
 .padron .ic.bo { background: var(--warn-soft); color: var(--warn-fg); }   /* U-27 */
-.padron .ic.fi { background: var(--ok-soft); color: var(--ok); }
+.padron .ic.fi { background: var(--ok-soft); color: var(--ok-fg); }   /* U-43 */
 .padron .ic.ce { background: var(--surf2); color: var(--mute); }
 .padron summary .t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .padron summary .t b { font-size: .9rem; font-weight: 700; letter-spacing: -.01em; }
@@ -392,6 +395,7 @@ button:not(:disabled):active { transform: translateY(1px); }
 .franja .botones button { border: 0; border-radius: 5px; min-height: var(--control-h); padding: .4rem .8rem; font-weight: 700; font-size: .8rem; }
 .franja .botones .si { background: var(--warn); color: var(--warn-ink); }
 .franja .botones .no { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+.franja .botones .peligro { background: transparent; border: 1px solid var(--bad-soft); color: var(--bad); }   /* U-52: Anular/Eliminar en rojo, como en Pendiente revisar */
 /* Pendiente revisar: ámbar mientras haya algo (v0.19.15); en D2 es el borde y la cabecera, no toda la tarjeta. */
 .tarjeta.pendiente { transition: border-color .2s; }
 .tarjeta.pendiente.alerta { border-color: var(--warn); }
@@ -407,7 +411,7 @@ button:not(:disabled):active { transform: translateY(1px); }
 .kpi .n.mal { color: var(--bad); }
 .kpi .n.ojo { color: var(--warn-fg); }
 .kpi .t { font-size: .66rem; color: var(--mute); }
-.kpi .t .sube { color: var(--ok); font-weight: 800; }
+.kpi .t .sube { color: var(--ok-fg); font-weight: 800; }   /* U-43 */
 .kpi .t .baja { color: var(--bad); font-weight: 800; }
 .kpi .medidor { height: .3rem; border-radius: 1rem; background: var(--line); overflow: hidden; margin-top: .35rem; }
 .kpi .medidor i { display: block; height: 100%; background: var(--acc); }
@@ -442,7 +446,7 @@ button:not(:disabled):active { transform: translateY(1px); }
 /* ---------------------------------------------------------------- VEREDICTO (semáforo) */
 
 .veredicto { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto; }
-.veredicto.v-ok { --tono: var(--hero-ok); --tono-ink: var(--hero-ink); --tono-texto: var(--ok); --tono-soft: var(--ok-soft); }
+.veredicto.v-ok { --tono: var(--hero-ok); --tono-ink: var(--hero-ink); --tono-texto: var(--ok-fg); --tono-soft: var(--ok-soft); }   /* U-43 */
 .veredicto.v-warn { --tono: var(--hero-warn); --tono-ink: var(--hero-ink); --tono-texto: var(--warn-fg); --tono-soft: var(--warn-soft); }
 .veredicto.v-bad { --tono: var(--hero-bad); --tono-ink: var(--hero-ink); --tono-texto: var(--bad); --tono-soft: var(--bad-soft); }
 .veredicto-caja { min-height: 100%; display: flex; flex-direction: column; max-width: 34rem; margin: 0 auto; background: var(--bg); }
@@ -472,7 +476,7 @@ button:not(:disabled):active { transform: translateY(1px); }
 .bloque.listo .bn { background: var(--ok); border-color: var(--ok); color: var(--ok-ink); }
 .bloque .bt h2 { margin: 0; flex: 1; }
 .bloque .bt .est { margin-left: auto; font-family: var(--mono); font-size: .68rem; font-weight: 700; text-align: right; padding: .15rem .45rem; border-radius: 4px; background: var(--warn-soft); color: var(--warn-fg); }
-.bloque.listo .bt .est { background: var(--ok-soft); color: var(--ok); }
+.bloque.listo .bt .est { background: var(--ok-soft); color: var(--ok-fg); }   /* U-43 */
 .tarjeta.forma { background: transparent; border: 0; padding: 0; margin: 0; }
 
 /* Puerta: la lista viva de reglas, la misma evaluacion que corre el boton (G4). */
@@ -481,7 +485,7 @@ button:not(:disabled):active { transform: translateY(1px); }
 .revisa .reglas { padding: 0 .85rem; }
 .revisa .cuenta { font-size: .78rem; color: var(--mute); line-height: 1.45; margin: 0; padding: .6rem .85rem; border-top: 1px solid var(--line); }
 .revisa .cuenta b { color: var(--ink); }
-.revisa .cuenta.v-ok b { color: var(--ok); }
+.revisa .cuenta.v-ok b { color: var(--ok-fg); }   /* U-43 */
 .revisa .cuenta.v-warn b { color: var(--warn-fg); }
 .revisa .cuenta.v-bad b { color: var(--bad); }
 .revisa .principal { width: auto; margin: .6rem .85rem .85rem; width: calc(100% - 1.7rem); }
@@ -524,14 +528,14 @@ button:not(:disabled):active { transform: translateY(1px); }
     }
     .rail .marca { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: .3rem; color: var(--mute); padding: .3rem .55rem 1rem; }
     .rail .marca img.logo { width: 7.6rem; }
-    .rail .sesion { display: flex; flex-direction: column; gap: .5rem; margin-top: auto; padding: .6rem .55rem; font-size: .72rem; color: var(--mute); word-break: break-all; }
+    .rail .sesion { display: flex; flex-direction: column; gap: .5rem; margin-top: auto; padding: .6rem .55rem; font-size: .72rem; color: var(--mute); overflow-wrap: anywhere; }   /* U-51: nombre, no correo; sin partir a media palabra */
     .rail .salir { align-self: flex-start; }
     #pestanas { display: flex; flex-direction: column; gap: .15rem; }
     #pestanas button {
         flex-direction: row; gap: .6rem; padding: .5rem .6rem;
         font-size: .84rem; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--rail-ink); border-radius: 6px;
     }
-    #pestanas button[aria-selected="true"] { background: var(--rail-sel); color: var(--rail-on); font-weight: 600; }
+    #pestanas button[aria-current="page"] { background: var(--rail-sel); color: var(--rail-on); font-weight: 600; }   /* U-57 */
     #pestanas svg { width: 1rem; height: 1rem; stroke: currentColor; }
     #pestanas .n { position: static; margin-left: auto; }
     .contenido { max-width: none; padding: 0 1.4rem 3rem; }
@@ -552,7 +556,7 @@ button:not(:disabled):active { transform: translateY(1px); }
     #p-padron .padron summary { cursor: default; }
     #p-padron .padron summary .chev { display: none; }
     #p-prealtas .padron { max-width: 40rem; }
-    #avisos { position: static; max-width: 40rem; }
+    #avisos { max-width: 40rem; }   /* U-42: sigue sticky; estático, el resultado de una acción al fondo del padrón quedaba fuera de la vista */
     /* Hoy en dos columnas */
     .kpis { grid-template-columns: repeat(5, 1fr); gap: .5rem; }   /* U-35: cinco KPI, cinco columnas */
     .kpi:nth-child(5):last-child { grid-column: auto; }
@@ -600,13 +604,13 @@ button:not(:disabled):active { transform: translateY(1px); }
 .neto-vivo { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; font-size: .68rem; color: var(--mute); margin: .5rem 0 0; font-variant-numeric: tabular-nums; text-transform: uppercase; letter-spacing: .05em; }
 .neto-vivo > span { background: var(--surf2); border: 1px solid var(--line); border-radius: 6px; padding: .4rem .55rem; display: flex; flex-direction: column; gap: .05rem; }
 .neto-vivo b { color: var(--ink); font-family: var(--mono); font-weight: 600; font-size: .95rem; letter-spacing: 0; }
-.neto-vivo .neto-ok b { color: var(--ok); }
+.neto-vivo .neto-ok b { color: var(--ok-fg); }   /* U-43 */
 .neto-vivo .neto-mal b { color: var(--warn-fg); }   /* U-27: la cifra que se lee al sol */
 .foto-fila { display: flex; align-items: center; gap: .7rem; background: var(--surf2); border: 1px solid var(--line); border-radius: 6px; padding: .5rem .6rem; }
 .foto-fila .foto-previa { width: 3.6rem; height: 2.7rem; object-fit: cover; margin: 0; flex: none; }
 .foto-fila .foto-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .foto-fila .foto-texto small { font-size: .72rem; color: var(--warn-fg); font-weight: 600; }
-.foto-fila .foto-texto small.lista { color: var(--ok); }
+.foto-fila .foto-texto small.lista { color: var(--ok-fg); }   /* U-43 */
 .foto-fila button { flex: none; width: auto; margin: 0; padding: .5rem .8rem; font-size: .82rem; min-height: var(--control-h); }   /* U-25 */
 .pesaje #btnGuardarPeso { position: sticky; bottom: calc(4.9rem + env(safe-area-inset-bottom)); z-index: 5; box-shadow: 0 -8px 16px -8px var(--bg), 0 0 0 1px var(--line); }
 @media (min-width: 900px) { .pesaje #btnGuardarPeso { bottom: 1rem; } }
@@ -625,6 +629,9 @@ button:not(:disabled):active { transform: translateY(1px); }
 .ftar { background: transparent; border-top: 1px solid var(--line); border-radius: 0; padding: .5rem 0; display: grid; grid-template-columns: 1fr auto; gap: .15rem .6rem; font-size: .8rem; cursor: pointer; }
 .ftar:first-child { border-top: 0; }
 .ftar .f { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ftar button.f { background: none; border: 0; padding: 0; color: inherit; text-align: left; font-size: inherit; min-height: 0; }   /* U-58: el folio es el desplegable */
+.ftar button.f::after { content: "▾"; display: inline-block; margin-left: .35rem; color: var(--mute); font-size: .7rem; }   /* inline-block: el tachado de .anulado no lo alcanza */
+.ftar.abierta button.f::after { content: "▴"; }
 .ftar .f.mudo { color: var(--mute); font-weight: 500; }
 .ftar.anulado .f { text-decoration: line-through; color: var(--mute); }
 .ftar .etapa { align-self: center; }
@@ -652,6 +659,10 @@ button:not(:disabled):active { transform: translateY(1px); }
 .menu-movil .menu-caja { position: absolute; right: 0; top: 3rem; z-index: 30; background: var(--surf); border: 1px solid var(--line); border-radius: var(--radio); box-shadow: 0 8px 24px -8px rgba(0, 0, 0, .5); padding: .5rem; display: flex; flex-direction: column; gap: .4rem; min-width: 11rem; }
 .menu-movil .menu-caja button:not(.tema button) { width: 100%; text-align: left; background: var(--surf2); border: 1px solid var(--line); box-shadow: none; color: var(--ink); border-radius: 6px; padding: .5rem .7rem; font-size: .84rem; font-weight: 500; min-height: var(--control-h); }   /* U-25 */
 .menu-movil .menu-caja .tema { align-self: flex-start; margin: 0 .2rem; }
+.menu-movil .menu-quien { display: flex; flex-direction: column; gap: .1rem; padding: .2rem .3rem .4rem; border-bottom: 1px solid var(--line); min-width: 0; }   /* U-47: con qué cuenta se entró */
+.menu-movil .menu-quien b { font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-movil .menu-quien small { font-size: .68rem; color: var(--mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-movil .menu-quien:has(b:empty) { display: none; }
 .sync { font-family: var(--mono); font-size: .68rem; color: var(--mute); margin: -.15rem 0 .5rem; display: flex; align-items: center; gap: .35rem; }
 .sync::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
 .sync.viejo::before { background: var(--warn); }

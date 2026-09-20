@@ -75,21 +75,21 @@ export function compuerta(p) {
     };
 
     // 0. Manifiesto: sin numero no hay embarque que registrar (c6).
-    if (!String(p.manifiesto || '').trim()) legal('Manifiesto', 'sin numero de manifiesto');
+    if (!String(p.manifiesto || '').trim()) legal('Manifiesto', 'sin número de manifiesto');
 
     // 1. Pre-alta firmada (decision 4). Sin firma no hay contra que cotejar: rechazo legal.
     if (!p.prealta) legal('Pre-alta', 'no hay pre-alta para este embarque');
-    else if (p.prealta.Estado !== 'firmada') legal('Pre-alta', `la pre-alta esta en "${p.prealta.Estado}", no firmada`);
+    else if (p.prealta.Estado !== 'firmada') legal('Pre-alta', `la pre-alta está en "${p.prealta.Estado}", no firmada`);
     else ok('Pre-alta', `firmada por ${p.prealta.FirmadaPor || '?'}`);
 
     // 2. Carrier: autorizacion ASEA vigente (padron seccion 1, LEGAL).
-    if (!p.carrier) legal('Carrier', 'el carrier no esta en el padron');
+    if (!p.carrier) legal('Carrier', 'el carrier no está en el padrón');
     else {
-        if (!String(p.carrier.AutorizacionASEA || '').trim()) legal('Autorizacion ASEA del carrier', 'sin numero de autorizacion');
-        vig('Autorizacion ASEA del carrier', p.carrier.VigenciaASEA, CLASE.LEGAL);
+        if (!String(p.carrier.AutorizacionASEA || '').trim()) legal('Autorización ASEA del carrier', 'sin número de autorización');
+        vig('Autorización ASEA del carrier', p.carrier.VigenciaASEA, CLASE.LEGAL);
         // 3. Corriente amparada (padron seccion 2, eje 3).
         const corrientes = lista(p.carrier.Corrientes);
-        if (!p.corriente) legal('Corriente', 'no se declaro la corriente del manifiesto');
+        if (!p.corriente) legal('Corriente', 'no se declaró la corriente del manifiesto');
         else if (corrientes.length && !corrientes.includes(p.corriente)) {
             legal('Corriente', `el oficio del carrier no ampara "${p.corriente}" (ampara: ${corrientes.join(', ')})`);
         } else ok('Corriente', `${p.corriente} amparada`);
@@ -100,28 +100,28 @@ export function compuerta(p) {
     }
 
     // 4. Unidad: placa amparada por el oficio (padron seccion 4, LEGAL). Dos placas, dos veces.
-    if (!p.unidad) legal('Placa', `la placa ${placaNormal(p.placaTractor)} no esta en el padron: abrir el oficio, nunca darla de alta a mano`);
+    if (!p.unidad) legal('Placa', `la placa ${placaNormal(p.placaTractor)} no está en el padrón: abrir el oficio, nunca darla de alta a mano`);
     else {
         // El folio de la unidad hereda el del carrier si va vacio (v0.19.9): la placa se transcribio de ese mismo oficio.
         const folio = String(p.unidad.FolioOficio || (p.carrier && p.carrier.FolioOficio) || '').trim();
         if (!folio) legal('Placa amparada', 'ni la unidad ni el carrier tienen folio de oficio que la ampare');
         else ok('Placa amparada', `oficio ${folio}`);
         if (p.placaPlana && placaNormal(p.unidad.PlacaPlana) !== placaNormal(p.placaPlana)) {
-            legal('Placa de la plana', `se leyo ${placaNormal(p.placaPlana)} y el padron tiene ${placaNormal(p.unidad.PlacaPlana) || '(vacia)'}`);
+            legal('Placa de la plana', `se leyó ${placaNormal(p.placaPlana)} y el padrón tiene ${placaNormal(p.unidad.PlacaPlana) || '(vacía)'}`);
         }
         if (p.prealta && lista(p.prealta.UnidadesIds).length && !lista(p.prealta.UnidadesIds).includes(String(p.unidad.id))) {
-            comercial('Unidad vs pre-alta', 'la unidad no venia en la pre-alta firmada');
+            comercial('Unidad vs pre-alta', 'la unidad no venía en la pre-alta firmada');
         }
-        vig('Tarjeta de circulacion', p.unidad.TarjetaVigencia, CLASE.COMERCIAL);
-        vig('Poliza de la unidad', p.unidad.PolizaVigencia, CLASE.COMERCIAL);
+        vig('Tarjeta de circulación', p.unidad.TarjetaVigencia, CLASE.COMERCIAL);
+        vig('Póliza de la unidad', p.unidad.PolizaVigencia, CLASE.COMERCIAL);
     }
 
     // 5. Chofer: COMERCIAL (no aparece en el oficio).
-    if (!p.chofer) comercial('Chofer', 'el chofer no esta en el padron');
+    if (!p.chofer) comercial('Chofer', 'el chofer no está en el padrón');
     else {
         vig('Licencia del chofer', p.chofer.LicenciaVigencia, CLASE.COMERCIAL);
         if (p.prealta && lista(p.prealta.ChoferesIds).length && !lista(p.prealta.ChoferesIds).includes(String(p.chofer.id))) {
-            comercial('Chofer vs pre-alta', 'el chofer no venia en la pre-alta firmada');
+            comercial('Chofer vs pre-alta', 'el chofer no venía en la pre-alta firmada');
         }
     }
 
