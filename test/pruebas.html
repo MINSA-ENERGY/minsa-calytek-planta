@@ -114,8 +114,19 @@
 
         let m;
         if ((m = /^\/sites\/([^/]+):(\/[^?]+)$/.exec(ruta)) && metodo === 'GET') return json(200, { id: 'sitio-falso' });
-        if (/^\/sites\/sitio-falso\/lists\?/.test(ruta) && metodo === 'GET')
-            return json(200, { value: Object.values(DB.listas).map(l => ({ id: l.id, name: l.nombre, displayName: l.nombre })) });
+        if (/^\/sites\/sitio-falso\/lists\?/.test(ruta) && metodo === 'GET') {
+            // S-07 (v0.25.0): /lists sale SIEMPRE en dos paginas con @odata.nextLink, PLANTA_Firmas en la segunda: un
+            // cliente que se quede con la primera (como graph.js hasta v0.24.0) no encuentra la lista y la app lo delata.
+            const todas = Object.values(DB.listas).map(l => ({ id: l.id, name: l.nombre, displayName: l.nombre }));
+            const corte = Math.max(1, todas.length - 1);
+            if (/[&?]pagina=2/.test(ruta)) return json(200, { value: todas.slice(corte) });
+            return json(200, { value: todas.slice(0, corte), '@odata.nextLink': `${G}/sites/sitio-falso/lists?$select=id,name,displayName&$top=200&pagina=2` });
+        }
+        if ((m = /^\/sites\/sitio-falso\/lists\/([^/]+)\/items\/(\d+)\?/.exec(ruta)) && metodo === 'GET') {
+            const l = lista(m[1]); const it = l && l.items.find(x => x.id === Number(m[2]));
+            if (!it) return error(404, 'renglón');
+            return json(200, item(it));
+        }
         if ((m = /^\/sites\/sitio-falso\/lists\/([^/]+)\/items\?/.exec(ruta)) && metodo === 'GET') {
             const l = lista(m[1]); if (!l) return error(404, 'lista');
             const f = new URLSearchParams(ruta.slice(ruta.indexOf('?'))).get('$filter');
@@ -584,8 +595,11 @@ try {
         R.ok('el error del servidor se muestra al usuario', true);
         R.ok('sin lote huérfano cuando falla el guardado tras subir la foto', DB.carpetas.length === carpetasAntes, `carpetas antes ${carpetasAntes}, después ${DB.carpetas.length}`);
         R.ok('el embarque sigue en bruto (no se cerró a medias)', emb1.fields.Etapa === 'bruto');
-        // Reintento: ahora si.
+        // Reintento: ahora si. C-17 (v0.25.0): el PATCH contesta 429 una vez; graph.js reintenta y la pantalla lo DICE.
+        DB.fallas.push({ metodo: 'PATCH', incluye: `items/${emb1.id}/fields`, status: 429, veces: 1 });
         clic('btnGuardarPeso');
+        const dijoReintento = await esperar(() => /reintentando/.test($('textoAvance').textContent) && $('textoAvance').textContent, 'aviso de reintento', 3000).catch(() => '');
+        R.ok('C-17: un 429 en el guardado se ve en pantalla («reintentando»), no como pausa muda', !!dijoReintento, dijoReintento || $('textoAvance').textContent);
         await esperar(() => avisoCon('cerrado: neto 21220'), 'tara guardada');
         R.ok('neto = bruto − tara, etapa cerrado, InicioAlmacen = hora del bruto', emb1.fields.NetoKg === 21220 && emb1.fields.Etapa === 'cerrado' && emb1.fields.InicioAlmacen === emb1.fields.BrutoHora);
         R.ok('ticket final con NETO', $('ticket').textContent.includes('21220'));
@@ -677,6 +691,20 @@ try {
                 R.ok('S-01: la autorización deja su renglón en PLANTA_Firmas (Tipo excepcion, ObjetoId, motivo de la caseta)', filas('firmas').some(x => x.fields.Tipo === 'excepcion' && Number(x.fields.ObjetoId) === exc.id && x.fields.Firmante === window.__CUENTA.username && String(x.fields.Motivo).includes('Póliza renovada')));
                 document.querySelector('#pestanas button[data-p="bascula"]').click();
                 R.ok('ya autorizada, la góndola aparece en planta', $('baLista').textContent.includes('55XY9K'));
+                // S-07 (v0.25.0): la compuerta falla CERRADA. Si PLANTA_Firmas no se puede leer (404: la lista no se ve para
+                // esta cuenta), la app no acepta ningun sello, no ofrece Autorizar y lo dice en Hoy. Antes volvia al sello solo.
+                DB.fallas.push({ metodo: 'GET', incluye: 'lista-firmas/items', status: 404, veces: 1 });
+                clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga sin PLANTA_Firmas');
+                document.querySelector('#pestanas button[data-p="bascula"]').click();
+                const excFuera = !$('baLista').textContent.includes(exc.fields.Manifiesto);
+                document.querySelector('#pestanas button[data-p="hoy"]').click();
+                const btnAutS07 = $('hoyFranja').querySelector('button.si');
+                R.ok('S-07: sin PLANTA_Firmas legible la excepción autorizada sale de báscula, «Autorizar» queda deshabilitado con motivo y Hoy lo dice',
+                    excFuera && !!btnAutS07 && btnAutS07.disabled && /PLANTA_Firmas/.test(btnAutS07.title) && $('tbPendientes').textContent.includes('PLANTA_Firmas no se pudo leer'),
+                    `fuera ${excFuera} · disabled ${btnAutS07 && btnAutS07.disabled} · ${$('tbPendientes').textContent.slice(0, 80)}`);
+                clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con PLANTA_Firmas de vuelta');
+                document.querySelector('#pestanas button[data-p="bascula"]').click();
+                R.ok('S-07: con la lista de vuelta, la autorización vuelve a valer', $('baLista').textContent.includes(exc.fields.Manifiesto));
             }
         }
 
@@ -727,27 +755,18 @@ try {
         if (btnElim) {
             btnElim.click(); await confirmar('Captura duplicada: ya se había registrado la 108');
             await esperar(() => !filas('embarques').some(e => e.id === emb109.id), 'eliminado');
-            R.ok('el renglón sin folio se borró de la lista', !filas('embarques').some(e => e.id === emb109.id));
-            R.ok('desapareció de En planta', !$('baLista').textContent.includes('109'));
+            // C-14 (v0.25.0): el aviso «bien» sobrevive (antes irA() lo borraba en el mismo tick) y el repintado va en la
+            // misma continuacion que el dato: se espera el AVISO, que es lo ultimo que la app hace, y ya no hace falta dormir.
+            await esperar(() => avisoCon('Captura eliminada'), 'aviso de captura eliminada');
+            R.ok('C-14: «Captura eliminada» se queda en pantalla y la lista ya no trae el renglón', !!avisoCon('Captura eliminada') && !filas('embarques').some(e => e.id === emb109.id) && !$('baLista').textContent.includes('109'));
         }
         // 12b. Embarque cerrado con folio E-: se ANULA con motivo, el folio no se reutiliza.
         document.querySelector('#pestanas button[data-p="hoy"]').click();
-        // 12a termina esperando el DATO (el renglon ya no esta en el Graph falso), pero el repintado de la
-        // app llega un tick despues: sin esta pausa el boton se capturaba de una tabla que luego se
-        // reemplazaba, el clic caia en un nodo suelto y el dialogo nunca abria — 2 de 4 corridas en rojo
-        // sobre el mismo HEAD (medido 2026-09-13). Se espera al repintado, no al dato.
-        await dormir(150);
         const filaEmb2 = [...document.querySelectorAll('#tbFila tr')].find(tr => tr.textContent.includes(emb2.fields.Title));
         const btnAnular = filaEmb2 && filaEmb2.querySelector('button[data-accion="anular"]');
         R.ok('embarque cerrado con folio ofrece Anular (no eliminar)', !!btnAnular && !(filaEmb2 && filaEmb2.querySelector('button[data-accion="eliminar"]')));
         if (btnAnular) {
-            // v0.24.0: si el clic cayo en un nodo suelto (la tabla se repinto entre la captura y el clic), se vuelve a tomar
-            // el boton de la tabla viva y se reintenta; asi la prueba mide la app y no la carrera del arnes.
-            for (let intento = 0; intento < 3 && !$('dlg').open; intento++) {
-                const fila = [...document.querySelectorAll('#tbFila tr')].find(tr => tr.textContent.includes(emb2.fields.Title));
-                const b = fila && fila.querySelector('button[data-accion="anular"]'); if (b) b.click();
-                await esperar(() => $('dlg').open, 'diálogo de anular', 600).catch(() => {});
-            }
+            btnAnular.click();
             await confirmar('');
             await dormir(80);
             R.ok('anular sin motivo no procede (el diálogo sigue abierto)', emb2.fields.Etapa === 'cerrado' && $('dlg').open, `etapa ${emb2.fields.Etapa} · abierto ${$('dlg').open} · motivo "${$('dlgMotivo').value}"`);
@@ -757,6 +776,7 @@ try {
             btnAnular2.click(); await confirmar('Se tecleó la tara de otra góndola; se repesa con folio nuevo');
             await esperar(() => emb2.fields.Etapa === 'anulado', 'anulado');
             R.ok('etapa anulado + motivo y quién en Notas', emb2.fields.Etapa === 'anulado' && String(emb2.fields.Notas).includes('ANULADO') && String(emb2.fields.Notas).includes(window.__CUENTA.username));
+            R.ok('C-14: el aviso «anulado» sigue en pantalla tras el repintado', !!avisoCon('anulado. Para repesar'));
             R.ok('el folio anulado se conserva (no se borra el renglón)', filas('embarques').some(e => e.id === emb2.id && e.fields.Title === emb2.fields.Title));
             const kp2 = $('tbKpis').textContent.replace(/\s+/g, '');
             R.ok('KPI: el anulado ya no cuenta (cerradas hoy = 1, 21.2 t)', /Góndolascerradashoy1/.test(kp2) && kp2.includes('21.2'), kp2.slice(0, 60));
@@ -772,6 +792,36 @@ try {
             await esperar(() => avisoCon('Bruto guardado'), 'bruto 110');
             const e110 = filas('embarques').find(e => e.fields.Manifiesto === 'MINSA/RME/110/2025');
             R.ok('el folio del anulado NO se reutiliza', e110.fields.Title === `E-${aa}-00004`, e110.fields.Title);
+            // C-12 (v0.25.0): con el pesaje de A abierto, un refresco (captura a medias: NO repinta) sustituye estado.embarques;
+            // el boton «Pesar tara» de B sigue en el DOM viejo con un objeto huerfano. El handler resuelve el objeto VIVO al
+            // clic, la tara se guarda sobre el de la lista y B sale de «En planta». Antes: gondola cerrada seguia en planta.
+            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
+            poner('puManifiesto', 'MINSA/RME/111/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
+            clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 111'); clic('btnRegistrarPuerta');
+            await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/111/2025'), 'embarque 111');
+            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/111')).querySelector('button').click();
+            await esperar(() => visible('baPesar') && $('baTitulo').textContent.includes('Bruto'), 'pesaje A (111) abierto');
+            clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con pesaje A abierto');
+            R.ok('C-12: el refresco con captura a medias no repinta la lista (sigue el DOM viejo con el pesaje abierto)', visible('baPesar'));
+            const btnTaraB = [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e110.fields.Title)).querySelector('button');
+            btnTaraB.click(); await esperar(() => $('baTitulo').textContent.includes(`Tara · ${e110.fields.Title}`), 'pesaje B (110) abierto desde el DOM viejo');
+            // C-13 (v0.25.0): entre abrir la tara y guardar, OTRA sesion anula la gondola (mutacion directa del Graph falso).
+            // La app relee el renglon antes de subir la foto: no cierra, no sube lote y lo dice.
+            e110.fields.Etapa = 'anulado'; e110.fields.AnuladoPor = 'gerencia@example.invalid';
+            poner('baKg', '20000'); await foto();
+            const carpetasC13 = DB.carpetas.length;
+            clic('btnGuardarPeso'); await esperar(() => avisoCon('lo movió otra sesión'), 'tara rechazada por carrera');
+            R.ok('C-13: la tara NO cierra una góndola que otra sesión anuló: relee el renglón, no sube lote y avisa', e110.fields.Etapa === 'anulado' && !e110.fields.TaraKg && DB.carpetas.length === carpetasC13, `etapa ${e110.fields.Etapa} · carpetas ${carpetasC13}→${DB.carpetas.length}`);
+            // Se deshace la anulacion ajena y se guarda la tara sobre el objeto VIVO (C-12).
+            e110.fields.Etapa = 'bruto'; delete e110.fields.AnuladoPor;
+            clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras deshacer la anulación');
+            const revokeReal = URL.revokeObjectURL; let revocados = 0; URL.revokeObjectURL = u => { revocados++; return revokeReal.call(URL, u); };
+            clic('btnGuardarPeso'); await esperar(() => avisoCon(`Embarque ${e110.fields.Title} cerrado`), 'tara de B guardada');
+            URL.revokeObjectURL = revokeReal;
+            R.ok('C-12: la tara de B (tomada del DOM viejo) cierra el renglón de la lista fresca y B sale de «En planta»', e110.fields.Etapa === 'cerrado' && e110.fields.NetoKg === 21000 && !$('baLista').textContent.includes(e110.fields.Title), `etapa ${e110.fields.Etapa} · neto ${e110.fields.NetoKg}`);
+            R.ok('C-21: al guardar, la vista previa de la foto revoca su blob URL (antes quedaba vivo hasta recargar la PWA)', revocados >= 1, `revocados ${revocados}`);
         }
         // 12c. Pre-alta en borrador: se elimina; firmada: no.
         document.querySelector('#pestanas button[data-p="prealtas"]').click();

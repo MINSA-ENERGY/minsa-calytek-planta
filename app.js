@@ -13,18 +13,24 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento } from './reglas.js';
 
-const VERSION = '0.24.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.25.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
 const estado = {
     cuenta: null, token: null, cliente: null, siteId: null, rol: 'lectura',
     carriers: [], unidades: [], choferes: [], prealtas: [], embarques: [], vigencias: [], roles: [],
-    firmas: [], compuertaFirmas: false,   // S-01 (v0.24.0): PLANTA_Firmas y si existe (si no, manda el sello como antes)
+    firmas: [], firmasError: null,   // S-01 / S-07 (v0.25.0): renglones de PLANTA_Firmas; si la lista no se pudo leer, el motivo (y la app no firma ni autoriza)
     ultimaCompuerta: null,   // {resultado, hallazgos, campos}
     pesando: null,           // {embarque, fase: 'bruto'|'tara'}
     fotoBytes: null,
+    fotoUrl: null,           // blob URL de la vista previa; se revoca al reemplazar la foto o cancelar (C-21)
     prealtaAbierta: null,
+    prealtaEdit: null,       // borrador de pre-alta en edicion (paForma)
+    padronEdit: null,        // {clave, x} del renglon del padron en edicion, o null
+    focoAntesVeredicto: null, // elemento con el foco antes de abrir el veredicto (vuelve ahi al cerrarlo)
+    padronFicha: null,       // 'tipo:id' de la ficha del padron desplegada
+    padronCarrier: null,     // id del carrier que filtra unidades y choferes en el padron
     pestana: 'hoy',
     cargadoEl: 0,
     ventanaDesde: ''      // ISO: inicio de la ventana de carga (cubeta 3)
@@ -89,10 +95,11 @@ function renglon(titulo, sub, boton, alClic, extras = []) {
     else if (botones.length) { const d = el('div', 'acciones'); for (const b of botones) d.appendChild(botonAccion(b)); r.appendChild(d); }
     return r;
 }
-function botonAccion({ texto, alClic, accion, clase }) {
+function botonAccion({ texto, alClic, accion, clase, deshabilitado }) {
     const b = el('button', clase || '', texto);
     b.type = 'button';
     if (accion) b.dataset.accion = accion;
+    if (deshabilitado) { b.disabled = true; b.title = deshabilitado; }   // S-07: el motivo se lee al pasar el dedo / el raton
     b.addEventListener('click', alClic);
     return b;
 }
@@ -184,6 +191,13 @@ for (const inp of document.querySelectorAll('input.fecha')) inp.addEventListener
 });
 function limpiar(obj) { const o = {}; for (const k in obj) if (obj[k] !== null && obj[k] !== undefined && obj[k] !== '') o[k] = obj[k]; return o; }
 function porId(coleccion, id) { return coleccion.find(x => x.id === Number(id)) || null; }
+/**
+ * C-12 (v0.25.0): el objeto VIVO de estado[clave] con el id de `x`, resuelto AL CLIC. Los handlers de renglon capturan el
+ * objeto de la lista con que se pinto; tras un refresco con captura a medias (que no repinta) ese objeto ya no esta en
+ * estado.* y la tara / la anulacion / la firma se escribian sobre una copia rancia. Si ya no existe, se conserva el viejo
+ * y la operacion lo reporta (el bruto y la tara releen el renglon antes de escribir).
+ */
+function vivo(clave, x) { return (x && porId(estado[clave], x.id)) || x; }
 function nombreDe(coleccion, id) { if (id === null || id === undefined || id === '') return '—'; const x = porId(coleccion, id); return x ? x.Title : `#${id}`; }
 
 // ---------------------------------------------------------------- sesion
@@ -260,11 +274,11 @@ function ponerQuien(texto) {
     $('rolMovil').textContent = texto.includes(' · ') ? texto.split(' · ').pop() : '';
 }
 // I5 (7-sep): cuando se leyeron las listas por ultima vez, en la barra movil y en el rail. Ambar pasados 5 minutos.
-function pintarSync(leyendo = false) {
+function pintarSync(leyendo = false, texto = 'Leyendo las listas…') {
     const t = Date.now() - estado.cargadoEl;
     const hace = !estado.cargadoEl ? '' : t < 60000 ? `hace ${Math.max(1, Math.round(t / 1000))} s` : t < 3600000 ? `hace ${Math.round(t / 60000)} min` : `hace ${Math.round(t / 3600000)} h`;
     for (const x of document.querySelectorAll('.sync')) {
-        x.textContent = leyendo ? 'Leyendo las listas…' : estado.cargadoEl ? `Al día · leído ${hace}` : '';
+        x.textContent = leyendo ? texto : estado.cargadoEl ? `Al día · leído ${hace}` : '';
         x.classList.toggle('viejo', !leyendo && t > 300000);
         x.classList.toggle('leyendo', leyendo);
     }
@@ -305,26 +319,33 @@ function excepcionesPendientes() {
  * S-01, mitad del tenant (v0.24.0): la firma de la pre-alta y la autorizacion de la excepcion viven en PLANTA_Firmas,
  * una lista SIN herencia donde solo validador + gerencia escriben (setup-carlos.md, tarea 11). La COMPUERTA MANDA
  * (decision de Carlos, 2026-09-19): sin renglon ahi, la pre-alta no sale en la puerta y la excepcion no pasa a bascula,
- * aunque el sello (FirmadaPor / ExcepcionAutorizo) este escrito. Mientras la lista no exista, la compuerta queda
- * INACTIVA y manda el sello como antes: «Hoy» lo dice en Pendiente revisar y el exportador lo advierte.
+ * aunque el sello (FirmadaPor / ExcepcionAutorizo) este escrito. S-07 (v0.25.0): la compuerta falla CERRADA. Con la lista
+ * ya provisionada (tarea 11), si PLANTA_Firmas no se puede leer —no aparece en /lists, 404, 403— la app NO firma ni
+ * autoriza y no acepta ningun sello sin firma; «Hoy» lo dice en Pendiente revisar. Antes volvia al «sello solo» y una
+ * cuenta a la que le quitaran Leer en la lista corria como antes de S-01. Otro error (red, 5xx) sube y la recarga falla entera.
  */
-async function cargarFirmas(c, s) {
-    try { const f = await c.renglones(s, L.firmas); estado.compuertaFirmas = true; return f; }
-    catch (e) { if (!/no existe la lista/.test(String(e && e.message))) throw e; estado.compuertaFirmas = false; return []; }
+async function cargarFirmas(c, s, avisar) {
+    try { const f = await c.renglones(s, L.firmas, null, avisar); estado.firmasError = null; return f; }
+    catch (e) {
+        const m = String(e && e.message);
+        if (!/no existe la lista|no existe \(404\)|sin permiso \(403\)/.test(m)) throw e;
+        estado.firmasError = m; return [];
+    }
 }
 function firmaDe(tipo, id) { return estado.firmas.find(f => f.Tipo === tipo && Number(f.ObjetoId) === Number(id)) || null; }
-function prealtaFirmada(p) { return p.Estado === 'firmada' && (!estado.compuertaFirmas || !!firmaDe('prealta', p.id)); }
-function excepcionAutorizada(e) { return !!e.ExcepcionAutorizo && (!estado.compuertaFirmas || !!firmaDe('excepcion', e.id)); }
+function prealtaFirmada(p) { return p.Estado === 'firmada' && !!firmaDe('prealta', p.id); }
+function excepcionAutorizada(e) { return !!e.ExcepcionAutorizo && !!firmaDe('excepcion', e.id); }
 /** Sellos escritos sin su renglon de firma (de antes del corte, o por fuera de la app): la compuerta no los acepta. */
 function sellosSinFirma() {
-    if (!estado.compuertaFirmas) return { prealtas: [], embarques: [] };
     return { prealtas: estado.prealtas.filter(p => p.Estado === 'firmada' && !firmaDe('prealta', p.id)),
              embarques: estado.embarques.filter(e => e.Etapa === 'compuerta' && !!e.ExcepcionAutorizo && !firmaDe('excepcion', e.id)) };
 }
-const selloSinFirma = e => (estado.compuertaFirmas && e.ExcepcionAutorizo ? `sello de ${e.ExcepcionAutorizo} SIN firma en PLANTA_Firmas · ` : '');
+const selloSinFirma = e => (e.ExcepcionAutorizo ? `sello de ${e.ExcepcionAutorizo} SIN firma en PLANTA_Firmas · ` : '');
+/** S-07: por que la app no puede firmar ni autorizar ahora mismo, o null. Va como `title` del boton deshabilitado. */
+const motivoSinFirmas = () => (estado.firmasError ? `no se pudo leer PLANTA_Firmas (${estado.firmasError}): no se firma ni se autoriza hasta que la lista se vea. Actualiza; si sigue, avisa a gerencia.` : null);
 /** El renglon de firma se escribe PRIMERO: para quien no esta en el grupo de firmantes es un 403, y ahi termina. */
 async function firmar(tipo, objeto, motivo) {
-    if (!estado.compuertaFirmas) return null;
+    if (estado.firmasError) throw new Error(motivoSinFirmas());
     const f = await estado.cliente.crearRenglon(estado.siteId, L.firmas, limpiar({
         Title: `${tipo} · ${objeto.Title || objeto.PlacaTractor || objeto.id}`, Tipo: tipo, ObjetoId: objeto.id,
         Firmante: estado.cuenta.username, FirmadoEl: new Date().toISOString(), Motivo: motivo || null }));
@@ -363,12 +384,12 @@ const iso = d => new Date(d).toISOString();
  * saldria de la ventana y desapareceria de Bascula › En planta con la fosa todavia ocupada.
  * Las dos columnas del filtro (Arribo, Etapa) estan indexadas (esquema.json, cubeta 1).
  */
-async function cargarEmbarques(c, s) {
+async function cargarEmbarques(c, s, avisar) {
     const desde = iso(Date.now() - CONFIG.ventanaDias * 86400000);
     estado.ventanaDesde = desde;
     const [recientes, abiertos] = await Promise.all([
-        c.renglones(s, L.embarques, `fields/Arribo ge '${desde}'`),
-        c.renglones(s, L.embarques, FILTRO_ABIERTOS)
+        c.renglones(s, L.embarques, `fields/Arribo ge '${desde}'`, avisar),
+        c.renglones(s, L.embarques, FILTRO_ABIERTOS, avisar)
     ]);
     const porId = new Map();
     for (const e of recientes) porId.set(e.id, e);
@@ -382,9 +403,9 @@ async function cargarEmbarques(c, s) {
  * numeros ya emitidos. El folio SI se reinicia cada anio, y eso lo hace `siguienteFolio` solo
  * (su regex lleva el AA), asi que el anio en curso es exactamente lo que hay que mirar.
  */
-async function embarquesDelAno() {
+async function embarquesDelAno(avisar) {
     return await estado.cliente.renglones(estado.siteId, L.embarques,
-        `fields/Arribo ge '${iso(new Date(new Date().getFullYear(), 0, 1))}'`);
+        `fields/Arribo ge '${iso(new Date(new Date().getFullYear(), 0, 1))}'`, avisar);
 }
 
 /** Mete en la lista de la ventana los renglones frescos que le correspondan (por id). */
@@ -399,11 +420,14 @@ function fundirEnVentana(frescos) {
 
 async function cargarTodo() {
     const c = estado.cliente, s = estado.siteId;
+    // C-17 (v0.25.0): graph.js reintenta 429/503/red caida hasta 5.6 s; antes nadie recibia el aviso y la pantalla se
+    // quedaba en «Leyendo las listas…». La franja de sync dice que esta reintentando.
+    const av = texto => pintarSync(true, texto);
     [estado.carriers, estado.unidades, estado.choferes, estado.prealtas, estado.embarques, estado.vigencias, estado.roles, estado.firmas] =
         await Promise.all([
-            c.renglones(s, L.carriers), c.renglones(s, L.unidades), c.renglones(s, L.choferes),
-            c.renglones(s, L.prealtas), cargarEmbarques(c, s), c.renglones(s, L.vigencias),
-            c.renglones(s, L.roles), cargarFirmas(c, s)
+            c.renglones(s, L.carriers, null, av), c.renglones(s, L.unidades, null, av), c.renglones(s, L.choferes, null, av),
+            c.renglones(s, L.prealtas, null, av), cargarEmbarques(c, s, av), c.renglones(s, L.vigencias, null, av),
+            c.renglones(s, L.roles, null, av), cargarFirmas(c, s, av)
         ]);
     estado.cargadoEl = Date.now();
     reanclar();
@@ -719,6 +743,7 @@ async function registrarPuerta() {
     const r = estado.ultimaCompuerta; if (!r) return;
     if (r.resultado === 'excepcion-comercial' && !$('puMotivo').value.trim()) { avisar('La excepción lleva motivo escrito, no una casilla.', 'error'); return; }
     $('btnRegistrarPuerta').disabled = true;
+    const textoBoton = $('btnRegistrarPuerta').textContent;
     try {
         await refrescarCliente();
         const ahora = new Date().toISOString();
@@ -726,7 +751,8 @@ async function registrarPuerta() {
         // El folio R- se asigna aqui; el E- NO: nace en la primera pasada de bascula (ticket 03 regla 1).
         // Se relee la lista antes de escoger el numero: el estado local puede tener horas.
         // Se relee el ANIO, no la ventana: el consecutivo R- corre de enero a diciembre.
-        const delAno = esRechazo ? await embarquesDelAno() : [];
+        const av = texto => { $('btnRegistrarPuerta').textContent = texto; };   // C-17: el boton dice que reintenta
+        const delAno = esRechazo ? await embarquesDelAno(av) : [];
         if (esRechazo) fundirEnVentana(delAno);
         const folio = esRechazo ? siguienteFolio('R', delAno.map(e => e.Title)) : '';
         const campos = limpiar({
@@ -740,8 +766,8 @@ async function registrarPuerta() {
             ExcepcionMotivo: r.resultado === 'excepcion-comercial' ? $('puMotivo').value.trim() : null,
             CapturadoPor: estado.cuenta.username
         });
-        const nuevo = await estado.cliente.crearRenglon(estado.siteId, L.embarques, campos);
-        if (esRechazo) await asegurarFolioUnico(nuevo, 'R');
+        const nuevo = await estado.cliente.crearRenglon(estado.siteId, L.embarques, campos, av);
+        if (esRechazo) await asegurarFolioUnico(nuevo, 'R', av);
         estado.embarques.push(nuevo);
         avisar(esRechazo ? `Rechazo registrado con folio ${nuevo.Title}. La góndola no entra.` :
             r.resultado === 'pasa' ? 'Registrado. Ya aparece en Báscula › En planta.' :
@@ -758,7 +784,7 @@ async function registrarPuerta() {
         pintarUnidadesPuerta(); pintarPrevioPuerta();
     } catch (e) {
         avisar('No se pudo registrar: ' + (e && e.message ? e.message : e), 'error');
-    } finally { $('btnRegistrarPuerta').disabled = false; }
+    } finally { $('btnRegistrarPuerta').disabled = false; $('btnRegistrarPuerta').textContent = textoBoton; }
 }
 
 /**
@@ -770,15 +796,17 @@ async function registrarPuerta() {
 const FOLIOS = {
     E: { lista: () => L.embarques, campo: 'Title', releer: embarquesDelAno },
     R: { lista: () => L.embarques, campo: 'Title', releer: embarquesDelAno },
-    L: { lista: () => L.prealtas, campo: 'Campana', releer: () => estado.cliente.renglones(estado.siteId, L.prealtas) }
+    L: { lista: () => L.prealtas, campo: 'Campana', releer: av => estado.cliente.renglones(estado.siteId, L.prealtas, null, av) }
 };
-async function asegurarFolioUnico(renglon, tipo) {
+async function asegurarFolioUnico(renglon, tipo, avisar) {
     const { lista: lst, campo, releer } = FOLIOS[tipo];
-    const todos = await releer();   // el folio lleva el anio: el resto no puede chocar
-    const iguales = todos.filter(x => x[campo] === renglon[campo]);
+    // C-16 (v0.25.0): la unicidad solo necesita saber si ALGUIEN mas tiene ese folio: un filtro de igualdad (una peticion)
+    // en vez de releer el anio entero (hasta 4 paginas de 500) por segunda vez. El anio solo se relee si hubo choque.
+    const iguales = await estado.cliente.renglones(estado.siteId, lst(), `fields/${campo} eq '${String(renglon[campo]).replace(/'/g, "''")}'`, avisar);
     if (iguales.length <= 1) return renglon[campo];
     const masNuevo = iguales.reduce((a, b) => (a.id > b.id ? a : b));
     if (masNuevo.id !== renglon.id) return renglon[campo];
+    const todos = await releer(avisar);   // el folio lleva el anio: el resto no puede chocar
     const nuevoFolio = siguienteFolio(tipo, todos.map(x => x[campo]));
     await estado.cliente.actualizarRenglon(estado.siteId, lst(), renglon.id, { [campo]: nuevoFolio });
     renglon[campo] = nuevoFolio;
@@ -797,7 +825,7 @@ function pintarBascula() {
         lista2.appendChild(renglon(`${e.Title || '(sin folio)'} · ${e.PlacaTractor}${e.Manifiesto ? ' · ' + e.Manifiesto : ''}`,
             faseBruto ? `Pasó la compuerta ${horaCorta(e.Arribo)} · falta el BRUTO` : `Bruto ${e.BrutoKg} kg ${horaCorta(e.BrutoHora)} · falta la TARA`,
             PUEDE.puerta(estado.rol) ? (faseBruto ? 'Pesar bruto' : 'Pesar tara') : null,
-            () => abrirPesaje(e, faseBruto ? 'bruto' : 'tara'),
+            () => abrirPesaje(vivo('embarques', e), faseBruto ? 'bruto' : 'tara'),
             botonCorreccion(e)));
     }
     $('baPesar').classList.add('oculto');
@@ -844,8 +872,8 @@ function pintarCerrados() {
 function botonCorreccion(e) {
     if (!PUEDE.corregir(estado.rol)) return [];
     const a = accionCorreccion(e);
-    if (a === 'eliminar') return [{ texto: 'Eliminar', accion: 'eliminar', clase: 'peligro', alClic: () => eliminarEmbarque(e) }];
-    if (a === 'anular') return [{ texto: 'Anular', accion: 'anular', clase: 'peligro', alClic: () => anularEmbarque(e) }];
+    if (a === 'eliminar') return [{ texto: 'Eliminar', accion: 'eliminar', clase: 'peligro', alClic: () => eliminarEmbarque(vivo('embarques', e)) }];
+    if (a === 'anular') return [{ texto: 'Anular', accion: 'anular', clase: 'peligro', alClic: () => anularEmbarque(vivo('embarques', e)) }];
     return [];
 }
 
@@ -869,7 +897,7 @@ async function eliminarEmbarque(e) {
         await estado.cliente.borrarRenglon(estado.siteId, L.embarques, e.id);
         estado.embarques = estado.embarques.filter(x => x.id !== e.id);
         avisar(`Captura eliminada${motivo ? ' (' + motivo + ')' : ''}. Si la góndola sigue en la puerta, vuelve a correr la compuerta.`, 'bien');
-        pintarInsignias(); irA(estado.pestana);
+        repintar();   // C-14 (v0.25.0): como trasCambioPrealta. Antes iba a irA, que borraba el aviso «bien» y saltaba al tope
     } catch (err) { avisar('No se pudo eliminar: ' + (err && err.message ? err.message : err), 'error'); }
 }
 async function anularEmbarque(e) {
@@ -896,7 +924,7 @@ async function anularEmbarque(e) {
         }
         Object.assign(e, campos);
         avisar(`${e.Title} anulado. Para repesar la góndola, vuelve a correr la compuerta: saldrá un folio nuevo.`, 'bien');
-        pintarInsignias(); irA(estado.pestana);
+        repintar();   // C-14 (v0.25.0): como trasCambioPrealta. Antes iba a irA, que borraba el aviso «bien» y saltaba al tope
     } catch (err) { avisar('No se pudo anular: ' + (err && err.message ? err.message : err), 'error'); }
 }
 
@@ -919,7 +947,7 @@ async function autorizarExcepcion(e) {
 
 function abrirPesaje(e, fase) {
     estado.pesando = { embarque: e, fase };
-    estado.fotoBytes = null;
+    estado.fotoBytes = null; soltarFotoPrevia();
     $('baPesar').classList.remove('oculto');
     $('baTicketCaja').classList.add('oculto');
     $('baTitulo').textContent = fase === 'bruto' ? `Bruto · ${e.PlacaTractor}` : `Tara · ${e.Title}`;
@@ -944,12 +972,18 @@ function abrirPesaje(e, fase) {
     $('baPesar').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+/** Revoca el blob URL de la vista previa (C-21, v0.25.0): cada foto comprimida quedaba viva hasta recargar la PWA. */
+function soltarFotoPrevia() {
+    if (estado.fotoUrl) { URL.revokeObjectURL(estado.fotoUrl); estado.fotoUrl = null; }
+}
 async function tomarFoto(archivo) {
     try {
         const { bytes } = await comprimir(archivo);
         estado.fotoBytes = bytes;
         const img = $('baFotoPrevia');
-        img.src = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+        soltarFotoPrevia();   // C-21: el JPEG anterior («Repetir») se libera; antes vivia en memoria todo el turno
+        estado.fotoUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+        img.src = estado.fotoUrl;
         img.classList.remove('oculto');
         $('baFotoEstado').textContent = `Lista · tomada ${horaCorta(new Date().toISOString())}`; $('baFotoEstado').classList.add('lista');
         $('btnFoto').textContent = 'Repetir';
@@ -989,14 +1023,14 @@ async function guardarPeso() {
         // Si el PATCH falla despues de subir la foto, el lote se retira del buzon: antes quedaba una
         // carpeta huerfana con _lote.json de un embarque que nunca avanzo (auditoria 2026-09-05).
         const guardarConLote = async (lote, campos) => {
-            try { await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, campos); }
+            try { await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, campos, paso); }
             catch (err) { try { await estado.cliente.borrarItemDrive(estado.siteId, lote.carpetaId); } catch (_) { /* se reporta el error original */ } throw err; }
         };
         if (p.fase === 'bruto') {
             // Aqui nace el folio E-: el ticket se imprime con su numero desde la puerta. Se relee la
             // lista antes de escoger el numero (otro celular pudo tomar uno hace un segundo).
             paso('Asignando folio…');
-            const delAno = await embarquesDelAno();
+            const delAno = await embarquesDelAno(paso);
             // `e` sigue siendo EL objeto del embarque: se le vuelcan los campos frescos y ocupa su
             // lugar en la lista de la ventana (si no, tendria una copia vieja en 'compuerta').
             const fresco = delAno.find(x => x.id === e.id);
@@ -1010,19 +1044,28 @@ async function guardarPeso() {
             // subido y BrutoFoto se quedaban con el folio viejo, que ahora era de otra gondola. Si la subida o el PATCH
             // final fallan, el renglon queda en compuerta CON folio y el reintento lo reusa (no nace otro numero).
             const folio = /^E-/.test(e.Title || '') ? e.Title : siguienteFolio('E', delAno.map(x => x.Title));
-            await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, { Title: folio });
+            await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, { Title: folio }, paso);
             e.Title = folio;
-            await asegurarFolioUnico(e, 'E');
+            await asegurarFolioUnico(e, 'E', paso);
             paso('Subiendo la foto…');
-            const lote = await subirEvidencia(e.Title, 'bruto', kg);
+            const lote = await subirEvidencia(e.Title, 'bruto', kg, paso);
             paso('Guardando…');
             const campos = { Etapa: 'bruto', BrutoKg: kg, BrutoHora: ahora, BrutoFoto: lote.ref };
             await guardarConLote(lote, campos);
             Object.assign(e, campos);
             avisar(`Bruto guardado. Folio ${e.Title}. La góndola puede descargar en la fosa.`, 'bien');
         } else {
+            // C-13 (v0.25.0): la tara relee SU renglon antes de subir la foto, como el bruto relee el anio. Gerencia pudo
+            // anular la gondola desde Hoy mientras el basculista tecleaba: el PATCH de cierre pisaba «anulado» con «cerrado»
+            // (renglon con AnuladoPor Y Etapa cerrado, contado en KPI y CSV). Y se re-ancla por id (C-12), como el bruto.
+            paso('Revisando el embarque…');
+            const vigente = await estado.cliente.renglon(estado.siteId, L.embarques, e.id, paso);
+            Object.assign(e, vigente);
+            const idx = estado.embarques.findIndex(x => x.id === e.id);
+            if (idx >= 0) estado.embarques[idx] = e; else estado.embarques.push(e);
+            if (e.Etapa !== 'bruto') throw new Error(`este embarque ya está en ${e.Etapa} (lo movió otra sesión). Actualiza la lista.`);
             paso('Subiendo la foto…');
-            const lote = await subirEvidencia(e.Title, 'tara', kg);
+            const lote = await subirEvidencia(e.Title, 'tara', kg, paso);
             paso('Cerrando el embarque…');
             const neto = Number(e.BrutoKg) - kg;
             const campos = limpiar({ Etapa: 'cerrado', TaraKg: kg, TaraHora: ahora, TaraFoto: lote.ref, NetoKg: neto,
@@ -1032,7 +1075,7 @@ async function guardarPeso() {
             Object.assign(e, campos);
             avisar(`Embarque ${e.Title} cerrado: neto ${neto} kg.`, 'bien');
         }
-        $('baPesar').classList.add('oculto');
+        $('baPesar').classList.add('oculto'); soltarFotoPrevia();
         pintarTicket(e);
         pintarBascula();
         $('baTicketCaja').classList.remove('oculto');
@@ -1054,15 +1097,15 @@ export function destinoEvidencia(fecha) {
     return `${CONFIG.evidencia.destinoBase}/${fecha.slice(0, 4)}/${fecha.slice(0, 7)}`;
 }
 
-async function subirEvidencia(folio, fase, kg) {
+async function subirEvidencia(folio, fase, kg, avisar) {
     const fecha = fechaMexico();
     const concepto = `${fase} ${folio} ${kg} kg`;
     const s = slug(concepto);
     const carpeta = `${fecha}_${CONFIG.evidencia.etiqueta}_${s}`;
-    const { nombreReal, id: carpetaId } = await estado.cliente.crearCarpeta(estado.siteId, CONFIG.buzon, carpeta);
+    const { nombreReal, id: carpetaId } = await estado.cliente.crearCarpeta(estado.siteId, CONFIG.buzon, carpeta, avisar);
     const ruta = `${CONFIG.buzon}/${nombreReal}`;
     const archivo = `${fecha}_CALYTEK_Foto_${s}-01.jpg`;
-    await estado.cliente.subirPieza(estado.siteId, ruta, archivo, estado.fotoBytes, 'image/jpeg');
+    await estado.cliente.subirPieza(estado.siteId, ruta, archivo, estado.fotoBytes, 'image/jpeg', avisar);
     const manifiesto = {
         app: 'calytek-planta', contrato: 1, app_version: VERSION, unidad: 'CALYTEK',
         etiqueta: CONFIG.evidencia.etiqueta, destino: destinoEvidencia(fecha), tipo: 'foto',
@@ -1070,7 +1113,7 @@ async function subirEvidencia(folio, fase, kg) {
         embarque: folio
     };
     await estado.cliente.subirPieza(estado.siteId, ruta, '_lote.json',
-        new TextEncoder().encode(JSON.stringify(manifiesto, null, 2) + '\n'), 'application/json');
+        new TextEncoder().encode(JSON.stringify(manifiesto, null, 2) + '\n'), 'application/json', avisar);
     return { ref: `${fecha}|${concepto}`, carpetaId };
 }
 
@@ -1161,7 +1204,7 @@ function pintarPrealtas() {
         cont.textContent = '';
         for (const p of ps) {
             const g = gondolasDe(p);
-            const r = renglon(p.Title, `${p.Generador || '?'} · ${p.Pozo || '?'} · ${p.Corriente || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}${grupo === 'borrador' ? ` · 1er envío ${fechaCorta(p.FechaEstimada)}` : ''}`, 'Ver', () => verPrealta(p));
+            const r = renglon(p.Title, `${p.Generador || '?'} · ${p.Pozo || '?'} · ${p.Corriente || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}${grupo === 'borrador' ? ` · 1er envío ${fechaCorta(p.FechaEstimada)}` : ''}`, 'Ver', () => verPrealta(vivo('prealtas', p)));
             r.classList.add('conavance');
             if (p.Campana) r.firstChild.firstChild.appendChild(el('span', 'folio', p.Campana));
             if (p.Estado !== grupo) r.firstChild.firstChild.appendChild(etiqueta(p.Estado || 'sin estado', p.Estado));
@@ -1366,6 +1409,7 @@ function verPrealta(p) {
     const hayLegal = hallazgos.some(h => h.clase === 'legal');
     const porFirmar = p.Estado === 'borrador' || (p.Estado === 'firmada' && !prealtaFirmada(p));   // S-01: el sello sin firma se firma aqui mismo
     $('btnFirmar').classList.toggle('oculto', !(porFirmar && PUEDE.firmarPrealta(estado.rol)));
+    $('btnFirmar').disabled = !!estado.firmasError; $('btnFirmar').title = motivoSinFirmas() || '';   // S-07
     $('btnEditarPrealta').classList.toggle('oculto', !(p.Estado === 'borrador' && PUEDE.capturarPrealta(estado.rol)));
     $('btnFirmar').disabled = hayLegal;
     if (hayLegal && porFirmar) avisar('No se puede firmar con un hallazgo legal abierto: corrige el padrón (con el oficio a la vista) o cambia el carrier.', 'ojo');
@@ -1535,6 +1579,17 @@ function resumenPadron(tipo, items, unidad) {
     return s;
 }
 const normaliza = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+/** Lo que distingue a cada grupo del padron (C-18): contenedor, campos que busca el filtro de texto, si el carrier elegido lo acota, titulo y extra de la ficha. */
+const GRUPOS_PADRON = {
+    carriers: { contenedor: 'pdCarriers', porCarrier: false, busca: c => [c.Title, c.AutorizacionASEA, c.FolioOficio], titulo: c => c.Title, extra: c => () => elegirCarrierPadron(c) },
+    unidades: { contenedor: 'pdUnidades', porCarrier: true, busca: u => [u.Title, u.PlacaPlana, u.NumeroSerie, nombreDe(estado.carriers, u.CarrierId)], titulo: u => `${u.Title}${u.PlacaPlana ? ' / ' + u.PlacaPlana : ''}` },
+    choferes: { contenedor: 'pdChoferes', porCarrier: true, busca: ch => [ch.Title, ch.Licencia, nombreDe(estado.carriers, ch.CarrierId)], titulo: ch => ch.Title }
+};
+/** Etiqueta de estado del renglon: «baja» si esta inactivo, si no la de vigencia (vencida / por vencer), si la hay. */
+function marcaEstado(r, clave, x) {
+    if (x.Activo === false) { r.classList.add('baja'); r.firstChild.firstChild.appendChild(etiqueta('baja', 'baja')); return; }
+    const v = etiquetaVigencia(clave, x); if (v) r.firstChild.firstChild.appendChild(v);
+}
 function pintarPadron() {
     const puede = PUEDE.capturarPrealta(estado.rol);
     for (const id of ['btnNuevoCarrier', 'btnNuevaUnidad', 'btnNuevoChofer']) $(id).classList.toggle('oculto', !puede);
@@ -1548,40 +1603,24 @@ function pintarPadron() {
     $('pdResUnidades').textContent = ''; $('pdResUnidades').appendChild(resumenPadron('unidades', estado.unidades, 'amparada(s)'));
     $('pdResChoferes').textContent = ''; $('pdResChoferes').appendChild(resumenPadron('choferes', estado.choferes, 'con licencia'));
     let encontrados = 0;
-    const c1 = $('pdCarriers'); c1.textContent = '';
-    for (const c of estado.carriers) {
-        if (!pega(c.Title, c.AutorizacionASEA, c.FolioOficio)) continue;
-        encontrados++;
-        const v = etiquetaVigencia('carriers', c);
-        const r = renglon(c.Title, null, null, null, botonesPadron('carriers', c));
-        if (c.Activo === false) { r.classList.add('baja'); r.firstChild.firstChild.appendChild(etiqueta('baja', 'baja')); }
-        else if (v) r.firstChild.firstChild.appendChild(v);
-        if (sel === c.id) r.classList.add('sel');
-        conFicha(r, 'carriers', c, () => elegirCarrierPadron(c));
-        c1.appendChild(r);
+    // C-18 (v0.25.0): un solo bucle sobre GRUPOS_PADRON en vez de tres gemelos; lo que cambia por grupo vive en la tabla.
+    const filtraCarrier = x => sel === null || sel === undefined || Number(x.CarrierId) === Number(sel);
+    const contenedores = {};
+    for (const [clave, g] of Object.entries(GRUPOS_PADRON)) {
+        const cont = $(g.contenedor); cont.textContent = ''; contenedores[clave] = cont;
+        for (const x of estado[clave]) {
+            if (g.porCarrier && !filtraCarrier(x)) continue;
+            if (!pega(...g.busca(x))) continue;
+            encontrados++;
+            const r = renglon(g.titulo(x), null, null, null, botonesPadron(clave, x));
+            marcaEstado(r, clave, x);
+            if (clave === 'carriers' && sel === x.id) r.classList.add('sel');
+            cont.appendChild(conFicha(r, clave, x, g.extra ? g.extra(x) : undefined));
+        }
     }
+    const c1 = contenedores.carriers, c2 = contenedores.unidades, c3 = contenedores.choferes;
     if (sel !== null && sel !== undefined) c1.appendChild(el('p', 'filtro', `Mostrando solo lo de ${nombreDe(estado.carriers, sel)} · toca el carrier otra vez para ver todo`));
     if (!estado.carriers.length) c1.appendChild(el('p', 'pista', 'Sin carriers. La primera pre-alta necesita uno con su oficio ASEA transcrito.'));
-    const c2 = $('pdUnidades'); c2.textContent = '';
-    for (const u of estado.unidades) {
-        if (sel !== null && sel !== undefined && Number(u.CarrierId) !== Number(sel)) continue;
-        if (!pega(u.Title, u.PlacaPlana, u.NumeroSerie, nombreDe(estado.carriers, u.CarrierId))) continue;
-        encontrados++;
-        const r = renglon(`${u.Title}${u.PlacaPlana ? ' / ' + u.PlacaPlana : ''}`, null, null, null, botonesPadron('unidades', u));
-        if (u.Activo === false) { r.classList.add('baja'); r.firstChild.firstChild.appendChild(etiqueta('baja', 'baja')); }
-        else { const v = etiquetaVigencia('unidades', u); if (v) r.firstChild.firstChild.appendChild(v); }
-        c2.appendChild(conFicha(r, 'unidades', u));
-    }
-    const c3 = $('pdChoferes'); c3.textContent = '';
-    for (const ch of estado.choferes) {
-        if (sel !== null && sel !== undefined && Number(ch.CarrierId) !== Number(sel)) continue;
-        if (!pega(ch.Title, ch.Licencia, nombreDe(estado.carriers, ch.CarrierId))) continue;
-        encontrados++;
-        const r = renglon(ch.Title, null, null, null, botonesPadron('choferes', ch));
-        if (ch.Activo === false) { r.classList.add('baja'); r.firstChild.firstChild.appendChild(etiqueta('baja', 'baja')); }
-        else { const v = etiquetaVigencia('choferes', ch); if (v) r.firstChild.firstChild.appendChild(v); }
-        c3.appendChild(conFicha(r, 'choferes', ch));
-    }
     // U-18 (v0.22.0): un grupo sin renglones lo dice, y distinto si el vacio es por el filtro de carrier. Antes solo
     // Carriers tenia estado vacio y «0 unidades» se leia igual que «este carrier no tiene».
     const filtrado = sel !== null && sel !== undefined;
@@ -1633,12 +1672,12 @@ async function referenciasPadronVivas(clave, x) {
     return referenciasSinEmbarques(clave, x) + citas.length;
 }
 function botonesPadron(clave, x) {
-    const editar = x.Activo !== false && PUEDE.capturarPrealta(estado.rol) ? [{ texto: 'Editar', accion: 'editar', clase: 'suave', alClic: () => abrirFormaPadron(clave, x) }] : [];
+    const editar = x.Activo !== false && PUEDE.capturarPrealta(estado.rol) ? [{ texto: 'Editar', accion: 'editar', clase: 'suave', alClic: () => abrirFormaPadron(clave, vivo(clave, x)) }] : [];
     if (!PUEDE.corregir(estado.rol)) return editar;
-    if (x.Activo === false) return [{ texto: 'Reactivar', accion: 'reactivar', clase: 'suave', alClic: () => activarPadron(clave, x, true) }];
+    if (x.Activo === false) return [{ texto: 'Reactivar', accion: 'reactivar', clase: 'suave', alClic: () => activarPadron(clave, vivo(clave, x), true) }];
     return editar.concat(referenciasPadron(clave, x) === 0
-        ? [{ texto: 'Eliminar', accion: 'eliminar', clase: 'peligro', alClic: () => eliminarPadron(clave, x) }]
-        : [{ texto: 'Dar de baja', accion: 'baja', clase: 'peligro', alClic: () => activarPadron(clave, x, false) }]);
+        ? [{ texto: 'Eliminar', accion: 'eliminar', clase: 'peligro', alClic: () => eliminarPadron(clave, vivo(clave, x)) }]
+        : [{ texto: 'Dar de baja', accion: 'baja', clase: 'peligro', alClic: () => activarPadron(clave, vivo(clave, x), false) }]);
 }
 const NOMBRE_PADRON = { carriers: 'carrier', unidades: 'unidad', choferes: 'chofer' };
 function vigenciasDelCarrier(c) { return estado.vigencias.filter(v => v.Rol === 'carrier' && String(v.Title).endsWith(`· ${c.Title}`)); }
@@ -1932,14 +1971,14 @@ function pintarPendientesHoy(borradores, pendientes, botonesExcepcion) {
     const dormidas = estado.prealtas.filter(p => p.Estado === 'firmada').map(p => ({ p, sm: sinMovimientoDe(p) })).filter(x => x.sm);
     // S-01: sellos sin firma en PLANTA_Firmas (la compuerta no los acepta) y la lista misma si no esta provisionada.
     const ssf = sellosSinFirma().prealtas;
-    const nPend = borradores.length + pendientes.length + dormidas.length + ssf.length + (estado.compuertaFirmas ? 0 : 1);
+    const nPend = borradores.length + pendientes.length + dormidas.length + ssf.length + (estado.firmasError ? 1 : 0);
     $('tbPendientesTarjeta').classList.toggle('alerta', nPend > 0);
     $('tbPendientesN').classList.toggle('oculto', !nPend); $('tbPendientesN').textContent = String(nPend);
     if (!nPend) pf.appendChild(el('p', 'vacio', 'Nada pendiente.'));
-    if (!estado.compuertaFirmas) pf.appendChild(renglon('PLANTA_Firmas no existe en el sitio', 'la compuerta de firmas (S-01) está INACTIVA: manda el sello · provisionar la lista y romper su herencia (setup-carlos.md, tarea 11)'));
-    for (const p of ssf) pf.appendChild(renglon(`Firma · ${p.Title}`, `sello de ${p.FirmadaPor || '?'} SIN firma en PLANTA_Firmas · la puerta no la ve · la firma un validador o gerencia desde su detalle`, 'Ver', () => verPrealta(p)));
-    for (const { p, sm } of dormidas) pf.appendChild(renglon(`Programa · ${p.Title}`, `${sm.motivo} · ¿se cierra? Sigue saliendo en la puerta`, 'Ver', () => verPrealta(p)));
-    for (const p of borradores) { const d = diasPara(p.FechaEstimada); pf.appendChild(renglon(`Pre-alta · ${p.Title}`, `firma del validador · 1er envío ${fechaCorta(p.FechaEstimada)}${d !== null ? ` (en ${d} días)` : ''} · capturó ${p.CapturadaPor || '?'}`, 'Ver', () => verPrealta(p))); }
+    if (estado.firmasError) pf.appendChild(renglon('PLANTA_Firmas no se pudo leer', `${estado.firmasError} · la app NO firma ni autoriza y ningún sello vale sin su firma (S-07) · Actualiza; si sigue, revisar la lista y sus permisos (setup-carlos.md, tarea 11)`));
+    for (const p of ssf) pf.appendChild(renglon(`Firma · ${p.Title}`, `sello de ${p.FirmadaPor || '?'} SIN firma en PLANTA_Firmas · la puerta no la ve · la firma un validador o gerencia desde su detalle`, 'Ver', () => verPrealta(vivo('prealtas', p))));
+    for (const { p, sm } of dormidas) pf.appendChild(renglon(`Programa · ${p.Title}`, `${sm.motivo} · ¿se cierra? Sigue saliendo en la puerta`, 'Ver', () => verPrealta(vivo('prealtas', p))));
+    for (const p of borradores) { const d = diasPara(p.FechaEstimada); pf.appendChild(renglon(`Pre-alta · ${p.Title}`, `firma del validador · 1er envío ${fechaCorta(p.FechaEstimada)}${d !== null ? ` (en ${d} días)` : ''} · capturó ${p.CapturadaPor || '?'}`, 'Ver', () => verPrealta(vivo('prealtas', p)))); }
     for (const e of pendientes) pf.appendChild(renglon(`Excepción · ${e.PlacaTractor}`, `${selloSinFirma(e)}autorización de gerencia · «${e.ExcepcionMotivo || 'sin motivo'}» · ${horaCorta(e.Arribo)}`, null, null, botonesExcepcion(e).map(b => ({ ...b, clase: b.accion === 'autorizar' ? '' : 'peligro' }))));
 }
 
@@ -1992,7 +2031,7 @@ function pintarHoy() {
     // revisar», que era la unica entrada de esa tarjeta sin accion; la excepcion se cuenta una sola vez (en la tarjeta).
     const botonesExcepcion = e => {
         const bs = [];
-        if (PUEDE.autorizarExcepcion(estado.rol)) bs.push({ texto: 'Autorizar con motivo', accion: 'autorizar', clase: 'si', alClic: () => autorizarExcepcion(e) });
+        if (PUEDE.autorizarExcepcion(estado.rol)) bs.push({ texto: 'Autorizar con motivo', accion: 'autorizar', clase: 'si', alClic: () => autorizarExcepcion(vivo('embarques', e)), deshabilitado: motivoSinFirmas() });
         for (const b of botonCorreccion(e)) bs.push({ ...b, clase: 'no' });
         return bs;
     };
@@ -2106,7 +2145,7 @@ $('btnFoto').addEventListener('click', () => $('baFotoEntrada').click());
 $('baFotoEntrada').addEventListener('change', e => { if (e.target.files[0]) tomarFoto(e.target.files[0]); e.target.value = ''; });
 $('baKg').addEventListener('input', revisarNeto);
 $('btnGuardarPeso').addEventListener('click', guardarPeso);
-$('btnCancelarPeso').addEventListener('click', () => { estado.pesando = null; $('baPesar').classList.add('oculto'); });
+$('btnCancelarPeso').addEventListener('click', () => { estado.pesando = null; estado.fotoBytes = null; soltarFotoPrevia(); $('baPesar').classList.add('oculto'); repintar(); });   // C-12: la lista se repinta (un refresco con el pesaje abierto la dejaba vieja)
 $('btnImprimir').addEventListener('click', () => window.print());
 // El boton vive dentro del <summary>: sin preventDefault el clic pliega el grupo (igual que en el padron).
 $('btnNuevaPrealta').addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); $('paGrupoBorradores').open = true; nuevaPrealta(); });

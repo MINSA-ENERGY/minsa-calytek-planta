@@ -81,9 +81,17 @@ export function crearCliente(graph, token) {
 
         /** Lista los nombres de listas del sitio (para provisionar y para resolver ids). */
         async listas(siteId) {
-            const r = await pedir(`${graph}/sites/${siteId}/lists?$select=id,name,displayName&$top=200`);
-            if (!r.ok) throw new Error('no se pudieron ver las listas del sitio: ' + await motivo(r));
-            const v = (await r.json()).value;
+            // S-07 (v0.25.0): sigue @odata.nextLink. Antes se quedaba con la primera pagina de 200: en un sitio con mas
+            // listas, PLANTA_Firmas podia caer en la segunda y la app la daba por inexistente.
+            let url = `${graph}/sites/${siteId}/lists?$select=id,name,displayName&$top=200`;
+            const v = [];
+            while (url) {
+                const r = await pedir(url);
+                if (!r.ok) throw new Error('no se pudieron ver las listas del sitio: ' + await motivo(r));
+                const j = await r.json();
+                v.push(...j.value);
+                url = j['@odata.nextLink'] || null;
+            }
             for (const l of v) { listasPorNombre.set(l.displayName, l.id); listasPorNombre.set(l.name, l.id); }
             return v;
         },
@@ -137,6 +145,14 @@ export function crearCliente(graph, token) {
                 url = j['@odata.nextLink'] || null;
             }
             return todos;
+        },
+
+        /** UN renglon por id, aplanado (C-13, v0.25.0): para releer el estado vigente antes de un PATCH que cierra. */
+        async renglon(siteId, nombreLista, id, avisar) {
+            const listaId = await this.idDeLista(siteId, nombreLista);
+            const r = await pedir(`${graph}/sites/${siteId}/lists/${listaId}/items/${id}?expand=fields`, {}, avisar);
+            if (!r.ok) throw new Error(`no se pudo leer el renglón ${id} de ${nombreLista}: ` + await motivo(r));
+            return aplanar(await r.json());
         },
 
         async crearRenglon(siteId, nombreLista, campos, avisar) {
