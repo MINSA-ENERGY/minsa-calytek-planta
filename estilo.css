@@ -809,19 +809,21 @@ button:not(:disabled):active { transform: scale(.98); }
 .ct-prosa { margin: 2px 0 0; font-size: 14px; line-height: 1.5; color: #1e2939; text-align: center; max-width: 880px; position: relative; }
 .ct-prosa b { color: #0833a3; }
 .ct-residuo { font-family: "Saira", sans-serif; font-weight: 600; font-size: 17px; letter-spacing: 1px; padding: 0 40px 3px; position: relative; }
-.ct-regla { width: 100%; height: 3px; background: #0833a3; position: relative; }
+.ct-regla { width: 100%; height: 3px; background: #0833a3; position: relative; margin: -6px 0 -4px; }   /* v0.38.0: sin linea en blanco entre el residuo y VOLUMEN (Carlos) */
+.ct-fila.centrada .ct-inciso { justify-content: center; }   /* v0.38.0: VOLUMEN · EMBARQUES · FECHA centrados en su columna (Carlos) */
+.ct-fila.centrada .ct-val { flex: 0 1 auto; min-width: 110px; text-align: center; }
 .ct-incisos { width: 100%; border-collapse: collapse; font-size: 11px; position: relative; margin-top: 2px; }
 .ct-incisos th { font-family: "Saira", sans-serif; font-weight: 600; font-size: 10px; letter-spacing: 1px; color: #0833a3; text-align: left; border-bottom: 1px solid #0833a3; padding: 2px 6px; }
 .ct-incisos td { padding: 2px 6px; border-bottom: 1px solid #d8dfe9; }
 .ct-incisos td.n { color: #6b7b96; width: 28px; }
 .ct-incisos td.mono { font-family: "IBM Plex Mono", monospace; }
 .ct-incisos td.kg, .ct-incisos th:last-child { text-align: right; }
-.ct-firmas { margin-top: auto; width: 100%; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; position: relative; padding-top: 18px; }
+.ct-firmas { margin-top: auto; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 20px; position: relative; padding-top: 18px; }   /* v0.38.0: la firma al centro; el QR queda a la derecha, absoluto (Carlos) */
 .ct-firma { width: 280px; text-align: center; font-size: 12px; line-height: 1.35; }
 .ct-raya { height: 44px; border-bottom: 1px solid #131c2c; margin-bottom: 5px; }
 .ct-nombre { font-family: "Saira", sans-serif; font-weight: 600; }
 .ct-cargo { color: #4a5a75; }
-.ct-qr { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ct-qr { position: absolute; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .ct-qr .qr { width: 84px; height: 84px; border: 2px solid #131c2c; padding: 4px; box-sizing: border-box; background: #fff; }
 .ct-qr-leyenda { font-size: 10px; color: #6b7b96; text-align: center; line-height: 1.35; white-space: pre-line; }
 .ct-pie { width: 100%; font-size: 10px; line-height: 1.4; color: #6b7b96; text-align: center; border-top: 1px solid #d8dfe9; padding-top: 6px; position: relative; }

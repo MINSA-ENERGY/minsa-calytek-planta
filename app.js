@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, resumenCertificado, urlVerificacion, toneladas } from './reglas.js';
 
-const VERSION = '0.37.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.38.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1773,7 +1773,6 @@ function pintarCertificado(c, t) {
     t.classList.toggle('sustituido', c.Estado === 'sustituido'); t.classList.toggle('cancelado', c.Estado === 'cancelado');
     const marco = el('div', 'ct-marco'); const hoja = el('div', 'ct-hoja'); marco.appendChild(hoja); t.appendChild(marco);
     // v0.37.0: la marca de agua es el SIMBOLO solo, no el lockup (Carlos, 23-sep); gris horneado y 4.3 in contra el lado corto, como las plantillas de la casa (marca_agua.py)
-    // v0.37.0: la marca de agua es el SIMBOLO solo, no el lockup (Carlos, 23-sep); gris horneado y 4.3 in contra el lado corto, como las plantillas de la casa (marca_agua.py)
     const agua = el('img', 'ct-agua'); agua.src = './marca/simbolo-agua.svg'; agua.alt = ''; hoja.appendChild(agua);
     if (c.Estado !== 'vigente') hoja.appendChild(el('div', 'ct-sello', c.Estado === 'cancelado' ? 'CANCELADO' : `SUSTITUIDO POR ${c.SustituidoPor || '—'}`));
     hoja.appendChild(el('div', 'ct-formato', CFG.formato));
@@ -1783,6 +1782,7 @@ function pintarCertificado(c, t) {
     const sub = el('div', 'ct-sub'); sub.appendChild(el('i')); sub.appendChild(el('span', '', 'RECORTES DE PERFORACIÓN · RESIDUO DE MANEJO ESPECIAL')); sub.appendChild(el('i')); hoja.appendChild(sub);
     const inciso = (eti, valor, clase = '') => { const d = el('div', 'ct-inciso'); d.appendChild(el('span', 'ct-eti', eti)); d.appendChild(el('span', 'ct-val ' + clase, valor || '—')); return d; };
     const fila = (...incisos) => { const f = el('div', 'ct-fila'); for (const i of incisos) f.appendChild(i); return f; };
+    const filaCentrada = (...incisos) => { const f = fila(...incisos); f.classList.add('centrada'); return f; };
     hoja.appendChild(fila(inciso('GENERADOR:', c.Generador, 'fuerte')));
     hoja.appendChild(fila(inciso('REGISTRO DE GENERADOR:', c.GeneradorRegistro, 'mono'), inciso('POZO:', c.Pozo, 'fuerte')));
     const prosa = el('p', 'ct-prosa'); prosa.appendChild(el('b', '', 'MATERIAS INDUSTRIALIZADAS CCMV DEL NORTE, S.A. DE C.V.')); prosa.appendChild(document.createTextNode(' — MINSA ENERGY — certifica que ha recibido para su tratamiento en su planta '));
@@ -1790,7 +1790,8 @@ function pintarCertificado(c, t) {
     hoja.appendChild(el('div', 'ct-residuo', residuoDe(c.Corriente)));
     hoja.appendChild(el('div', 'ct-regla'));
     const folios = lista(c.Embarques), manif = lista(c.Manifiestos);
-    hoja.appendChild(fila(inciso('VOLUMEN:', `${toneladas(c.Kg)} TON.`, 'volumen'), inciso('EMBARQUES:', String(folios.length), 'mono'), inciso('FECHA DE RECEPCIÓN:', c.PrimerCierre && c.UltimoCierre && fechaMexico(new Date(c.PrimerCierre)) !== fechaMexico(new Date(c.UltimoCierre)) ? `del ${diaCert(c.PrimerCierre)} al ${diaCert(c.UltimoCierre)}` : diaCert(c.UltimoCierre || c.PrimerCierre), 'fuerte')));
+    // v0.38.0 (Carlos, 23-sep): sin hueco bajo el residuo; VOLUMEN/EMBARQUES/FECHA centrados; firma al centro; leyenda del QR corta; pie sin la linea «Emitido...».
+    hoja.appendChild(filaCentrada(inciso('VOLUMEN:', `${toneladas(c.Kg)} TON.`, 'volumen'), inciso('EMBARQUES:', String(folios.length), 'mono'), inciso('FECHA DE RECEPCIÓN:', c.PrimerCierre && c.UltimoCierre && fechaMexico(new Date(c.PrimerCierre)) !== fechaMexico(new Date(c.UltimoCierre)) ? `del ${diaCert(c.PrimerCierre)} al ${diaCert(c.UltimoCierre)}` : diaCert(c.UltimoCierre || c.PrimerCierre), 'fuerte')));
     hoja.appendChild(fila(inciso('TRANSPORTISTA:', c.Transportista, 'fuerte')));   // renglon entero: un numero de autorizacion no se parte (revisor v0.35.1)
     hoja.appendChild(fila(inciso('AUTORIZACIÓN DE LA PLANTA:', CFG.autorizacionPlanta || 'pendiente (ASEA-03-011-A)', 'mono')));
     // Incisos: un renglon por embarque cerrado — folio · manifiesto · neto. Es lo que sustituye al «ticket de bascula» de un certificado por embarque.
@@ -1803,12 +1804,12 @@ function pintarCertificado(c, t) {
     const firma = el('div', 'ct-firma'); firma.appendChild(el('div', 'ct-raya')); firma.appendChild(el('div', 'ct-nombre', CFG.responsableTecnico || '(nombre pendiente)')); firma.appendChild(el('div', 'ct-cargo', 'Responsable técnico de planta · CALYTEK')); pieFirma.appendChild(firma);
     const url = urlVerificacion(CFG.urlVerificacion, c);
     const qrCaja = el('div', 'ct-qr');
-    if (url) { qrCaja.appendChild(qrSvg(url, 84)); qrCaja.appendChild(el('div', 'ct-qr-leyenda', `Verifique este certificado en\n${CFG.urlVerificacion.replace(/^https?:\/\//, '')}`)); }
+    if (url) { qrCaja.appendChild(qrSvg(url, 84)); qrCaja.appendChild(el('div', 'ct-qr-leyenda', 'Verifique este certificado con el código QR')); }
     else qrCaja.appendChild(el('div', 'ct-qr-leyenda', 'Sin QR: certificado sin sufijo de verificación'));
     pieFirma.appendChild(qrCaja); hoja.appendChild(pieFirma);
     const pie = el('div', 'ct-pie');
     pie.appendChild(el('div', '', `Recibido en las instalaciones de MINSA ENERGY · Planta CALYTEK, ${CFG.domicilioPlanta} · ${CFG.resolutivo} · RFC ${CFG.rfc}`));
-    pie.appendChild(el('div', '', `Este certificado ampara únicamente el residuo y la cantidad aquí descritos. Emitido ${horaCorta(c.EmitidoEl)} por ${quien(c.EmitidoPor) || '—'} · CALYTEK Planta ${c.Version || VERSION}`));
+    pie.appendChild(el('div', '', 'Este certificado ampara únicamente el residuo y la cantidad aquí descritos.'));
     hoja.appendChild(pie);
 }
 function imprimirCertificado() {
