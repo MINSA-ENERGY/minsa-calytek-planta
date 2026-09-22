@@ -808,9 +808,10 @@ button:not(:disabled):active { transform: scale(.98); }
 .ct-val.volumen { font-family: "Saira", sans-serif; font-weight: 600; font-size: 18px; color: #2c8a37; border-bottom-color: #2c8a37; line-height: 1; }
 .ct-prosa { margin: 2px 0 0; font-size: 14px; line-height: 1.5; color: #1e2939; text-align: center; max-width: 880px; position: relative; }
 .ct-prosa b { color: #0833a3; }
-.ct-residuo { font-family: "Saira", sans-serif; font-weight: 600; font-size: 17px; letter-spacing: 1px; padding: 0 40px 3px; margin-bottom: 10px; position: relative; }   /* v0.38.0: sin regla azul debajo y mas aire hacia VOLUMEN (Carlos) */
+.ct-residuo { font-family: "Saira", sans-serif; font-weight: 600; font-size: 17px; letter-spacing: 1px; padding: 0 40px 3px; margin: 8px 0 10px; position: relative; }   /* v0.38.0: sin regla azul debajo; aire arriba y hacia VOLUMEN (Carlos) */
 .ct-fila.centrada .ct-inciso { justify-content: center; }   /* v0.38.0: VOLUMEN · EMBARQUES · FECHA centrados en su columna (Carlos) */
 .ct-fila.centrada .ct-val { flex: 0 1 auto; min-width: 110px; text-align: center; }
+.ct-fila.centrada .ct-inciso:first-child { justify-content: flex-start; }   /* v0.38.0: VOLUMEN pegado a la izquierda, alineado con TRANSPORTISTA (Carlos) */
 .ct-incisos { width: 100%; border-collapse: collapse; font-size: 11px; position: relative; margin-top: 2px; }
 .ct-incisos th { font-family: "Saira", sans-serif; font-weight: 600; font-size: 10px; letter-spacing: 1px; color: #0833a3; text-align: left; border-bottom: 1px solid #0833a3; padding: 2px 6px; }
 .ct-incisos td { padding: 2px 6px; border-bottom: 1px solid #d8dfe9; }
