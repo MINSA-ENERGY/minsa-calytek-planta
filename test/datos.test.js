@@ -14,13 +14,15 @@ const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ESTE = 'test/datos.test.js';
 const rastreados = execSync('git ls-files', { cwd: raiz, encoding: 'utf8' })
     .split(/\r?\n/).filter(Boolean)
-    .filter(f => /\.(js|json|html|css|md|yml|svg|txt)$/.test(f) && f !== ESTE && !f.startsWith('vendor/'));
+    .filter(f => /\.(js|mjs|json|html|css|md|yml|svg|txt)$/.test(f) && f !== ESTE && !f.startsWith('vendor/'));
 assert.ok(rastreados.length > 10, 'git ls-files no devolvio archivos');
 
 const fijas = [
     [/[a-z0-9._-]+@minsaenergy\.[a-z]+/i, 'correo del tenant'],
     [/eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{30,}/, 'token JWT'],
-    [/client_secret|clientSecret/i, 'client secret']
+    // v0.36.1: el VALOR pegado (literal de 20+ tras : o =), no el nombre — el workflow de los QR lo toma de ${{ secrets.* }} y el
+    // script lo manda como campo OAuth `client_secret`, que es como se llama.
+    [/(?:client_secret|clientSecret)\s*[:=]\s*['"]?[A-Za-z0-9~._-]{20,}/i, 'client secret']
 ];
 const escapar = s => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 const privado = resolve(raiz, '..', 'herramientas-dev', 'datos-prohibidos.txt');

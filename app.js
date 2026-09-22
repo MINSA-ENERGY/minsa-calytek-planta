@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, resumenCertificado, urlVerificacion, toneladas } from './reglas.js';
 
-const VERSION = '0.36.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.36.1';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1814,10 +1814,15 @@ function imprimirCertificado() {
     // La hoja de impresion (carta horizontal, solo el formato) se enciende SOLO mientras dura el print: @page no admite clase
     // y el ticket termico / Reportes no deben salir en carta horizontal.  La CSP no deja un <style> inline; un <link> propio si.
     document.body.classList.add('imprimiendo-certificado'); $('cssImpresionCert').disabled = false;
-    const quitar = () => { document.body.classList.remove('imprimiendo-certificado'); $('cssImpresionCert').disabled = true; window.removeEventListener('afterprint', quitar); };
+    // v0.36.1: «Guardar como PDF» toma el nombre del archivo de document.title — con el folio, cada certificado sale con el suyo (pedido de Carlos).
+    const tituloApp = document.title; const c = estado.certificadoAbierto; if (c && c.Title) document.title = `Certificado de tratamiento ${c.Title}`;
+    // quitar corre UNA vez: por afterprint o por el respaldo de 60 s (algun WebView no manda afterprint). El respaldo se cancela al
+    // salir por afterprint — si sobreviviera, pisaria document.title un minuto despues (lo cazo la E2E en tiempo virtual).
+    let respaldo = 0;
+    const quitar = () => { clearTimeout(respaldo); document.body.classList.remove('imprimiendo-certificado'); $('cssImpresionCert').disabled = true; document.title = tituloApp; window.removeEventListener('afterprint', quitar); };
     window.addEventListener('afterprint', quitar);
     window.print();
-    setTimeout(quitar, 60000);   // por si afterprint no llega (algun WebView)
+    respaldo = setTimeout(quitar, 60000);
 }
 
 // ================================================================ PADRON
