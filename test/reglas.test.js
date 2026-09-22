@@ -1,6 +1,6 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, resumenCertificado, urlVerificacion, toneladas } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -198,4 +198,39 @@ console.log('reglas: ok');
     assert.equal(esLoteDeLaApp('2026-09-20_Embarque_bruto-e-26-00012-44600-kg 2', 'Embarque'), true);   // el «2» que Graph agrega al chocar
     assert.equal(esLoteDeLaApp('2026-09-18_MINSA_Contrato_Transportes-Demo.pdf', 'Embarque'), false);
     assert.equal(esLoteDeLaApp('Embarque_sin-fecha', 'Embarque'), false); assert.equal(esLoteDeLaApp('', 'Embarque'), false);
+}
+
+// v0.35.0: certificado de tratamiento (CT-AA-NNNN, un certificado por programa).
+assert.equal(siguienteFolio('C', [], hoy), 'CT-26-0001');
+assert.equal(siguienteFolio('C', ['CT-26-0003', 'E-26-00009', 'CT-25-0040'], hoy), 'CT-26-0004');
+assert.equal(siguienteFolio('E', ['CT-26-0003', 'E-26-00009'], hoy), 'E-26-00010', 'el CT no contamina el consecutivo E');
+assert.equal(residuoDe('base-aceite'), 'RECORTES DE PERFORACIÓN · BASE ACEITE');
+assert.equal(residuoDe('fluidos-base-agua'), 'RECORTES DE PERFORACIÓN · BASE AGUA (FLUIDOS)');
+assert.equal(residuoDe(''), 'RECORTES DE PERFORACIÓN');
+{
+    const suf = sufijoVerificacion(a => { for (let i = 0; i < a.length; i++) a[i] = (i * 37 + 5) % 256; return a; });
+    assert.match(suf, /^[a-z2-9]{8}$/, 'sufijo de 8 sin ambiguos: ' + suf);
+    assert.equal(sufijoVerificacion(a => a.fill(0)), 'aaaaaaaa', 'determinista con el aleatorio inyectado');
+    assert.doesNotMatch(sufijoVerificacion(a => a.fill(255)), /[01lIO]/);
+    assert.equal(urlVerificacion('https://planta.minsaenergy.com/certificado/', { Title: 'CT-26-0001', Sufijo: suf }), `https://planta.minsaenergy.com/certificado/?f=CT-26-0001-${suf}`);
+    assert.equal(urlVerificacion('https://planta.minsaenergy.com/certificado', { Title: 'CT-26-0001', Sufijo: suf }).startsWith('https://planta.minsaenergy.com/certificado/?f='), true, 'agrega la barra');
+    assert.equal(urlVerificacion('https://x/', { Title: 'CT-26-0001' }), null, 'sin sufijo no hay URL (no se pinta QR)');
+}
+{
+    const p5 = { id: 5 };
+    const embs = [
+        { id: 1, PreAltaId: 5, Etapa: 'cerrado', NetoKg: 21220, TaraHora: '2026-09-02T15:00:00Z', Title: 'E-26-00002', Manifiesto: 'MINSA/RME/002/2026' },
+        { id: 2, PreAltaId: 5, Etapa: 'cerrado', NetoKg: 19800, TaraHora: '2026-09-01T15:00:00Z', Title: 'E-26-00001', Manifiesto: 'MINSA/RME/001/2026' },
+        { id: 3, PreAltaId: 5, Etapa: 'anulado', NetoKg: 50000, TaraHora: '2026-09-03T15:00:00Z', Title: 'E-26-00003' },
+        { id: 4, PreAltaId: 5, Etapa: 'bruto', BrutoKg: 40000, Title: 'E-26-00004' },
+        { id: 6, PreAltaId: 7, Etapa: 'cerrado', NetoKg: 1000, TaraHora: '2026-09-01T10:00:00Z', Title: 'E-26-00005' },
+        { id: 7, PreAltaId: '5', Etapa: 'cerrado', NetoKg: 0, TaraHora: '2026-09-04T10:00:00Z', Title: 'E-26-00006' }
+    ];
+    const r = resumenCertificado(p5, embs);
+    assert.deepEqual(r.folios, ['E-26-00001', 'E-26-00002'], 'solo cerrados con neto, del programa, en orden de cierre');
+    assert.equal(r.kg, 41020);
+    assert.deepEqual(r.manifiestos, ['MINSA/RME/001/2026', 'MINSA/RME/002/2026']);
+    assert.equal(r.primerCierre, '2026-09-01T15:00:00Z'); assert.equal(r.ultimoCierre, '2026-09-02T15:00:00Z');
+    assert.deepEqual(resumenCertificado({ id: 99 }, embs), { embarques: [], kg: 0, primerCierre: null, ultimoCierre: null, folios: [], manifiestos: [] });
+    assert.equal(toneladas(41020), '41.02'); assert.equal(toneladas(1234567), '1,234.57'); assert.equal(toneladas(0), '0.00');
 }

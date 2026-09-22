@@ -772,4 +772,56 @@ button:not(:disabled):active { transform: scale(.98); }
     body.imprimiendo-reportes .contenido { padding: 0; }
     .dlg-ticket[open] { position: static; border: 0; box-shadow: none; width: 100%; padding: 0; }
     .dlg-ticket::backdrop { display: none; }
+    /* v0.35.0: la impresion del certificado vive en impresion-certificado.css (hoja aparte, encendida solo al imprimirlo: @page no admite clase) */
 }
+
+/* ================================================================ Certificado de tratamiento (v0.35.0, FO-CT-01) */
+/* La hoja mide carta horizontal en px de CSS (1056 x 816 a 96 dpi) y en pantalla se ESCALA para caber en el dialogo:
+   asi lo que se ve es lo que se imprime. Colores fijos (papel blanco), no tokens del tema: el papel no tiene modo oscuro. */
+.dlg-cert { width: min(96vw, 1120px); padding: var(--sp-3); display: none; flex-direction: column; gap: var(--sp-2); }
+.dlg-cert[open] { display: flex; }
+.dlg-cert .ct-nav { font-family: var(--mono); font-size: .78rem; color: var(--mute); }
+.dlg-cert .ct-vista { overflow: auto; max-height: 70dvh; background: var(--bg); padding: var(--sp-2); }
+.dlg-cert .dlg-botones button { flex: 1; }
+.cert { width: 1056px; min-height: 816px; box-sizing: border-box; padding: 28px; background: #fff; color: #131c2c; font-family: "Barlow", system-ui, sans-serif; font-size: 13px; line-height: 1.35; transform-origin: top left; }
+.ct-vista .cert { zoom: .92; }
+@media (max-width: 1100px) { .ct-vista .cert { zoom: .6; } }
+@media (max-width: 720px) { .ct-vista .cert { zoom: .34; } }
+.ct-marco { border: 1px solid #0833a3; padding: 6px; min-height: 760px; box-sizing: border-box; }
+.ct-hoja { border: 4px solid #0833a3; padding: 22px 56px 20px; min-height: 746px; box-sizing: border-box; position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; background: #fff; }
+.ct-agua { position: absolute; left: 50%; top: 50%; width: 520px; transform: translate(-50%, -50%); opacity: .05; pointer-events: none; }
+.ct-sello { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%) rotate(-18deg); font-family: "Saira", sans-serif; font-weight: 600; font-size: 64px; letter-spacing: 6px; color: rgba(190, 30, 30, .55); border: 6px solid rgba(190, 30, 30, .55); padding: 6px 28px; white-space: nowrap; pointer-events: none; }
+.ct-formato { position: absolute; top: 18px; left: 26px; font-family: "IBM Plex Mono", monospace; font-size: 11px; color: #6b7b96; }
+.ct-folio { position: absolute; top: 18px; right: 26px; text-align: right; }
+.ct-folio .ct-eti { display: block; font-family: "Saira", sans-serif; font-weight: 600; font-size: 10px; letter-spacing: 2px; color: #4a5a75; }
+.ct-folio-num { font-family: "IBM Plex Mono", monospace; font-weight: 500; font-size: 20px; color: #0833a3; }
+.ct-logo { width: 190px; height: 67px; object-fit: contain; position: relative; }
+.ct-titulo { margin: 0; font-family: "Saira", sans-serif; font-weight: 600; font-size: 36px; line-height: 1; letter-spacing: 1px; color: #0833a3; text-align: center; text-transform: none; position: relative; }
+.ct-sub { display: flex; align-items: center; gap: 12px; font-family: "Saira", sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 3px; color: #2c8a37; position: relative; }
+.ct-sub i { width: 60px; height: 2px; background: #2c8a37; }
+.ct-fila { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 24px; position: relative; }
+.ct-inciso { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ct-inciso .ct-eti { font-family: "Saira", sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 1px; color: #0833a3; white-space: nowrap; }
+.ct-inciso .ct-val { flex: 1 1 auto; min-width: 0; border-bottom: 1px solid #8a97ad; padding: 0 6px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-val.fuerte { font-weight: 600; }
+.ct-val.mono { font-family: "IBM Plex Mono", monospace; }
+.ct-val.volumen { font-family: "Saira", sans-serif; font-weight: 600; font-size: 18px; color: #2c8a37; border-bottom-color: #2c8a37; line-height: 1; }
+.ct-prosa { margin: 2px 0 0; font-size: 14px; line-height: 1.5; color: #1e2939; text-align: center; max-width: 880px; position: relative; }
+.ct-prosa b { color: #0833a3; }
+.ct-residuo { font-family: "Saira", sans-serif; font-weight: 600; font-size: 17px; letter-spacing: 1px; padding: 0 40px 3px; position: relative; }
+.ct-regla { width: 100%; height: 3px; background: #0833a3; position: relative; }
+.ct-incisos { width: 100%; border-collapse: collapse; font-size: 11px; position: relative; margin-top: 2px; }
+.ct-incisos th { font-family: "Saira", sans-serif; font-weight: 600; font-size: 10px; letter-spacing: 1px; color: #0833a3; text-align: left; border-bottom: 1px solid #0833a3; padding: 2px 6px; }
+.ct-incisos td { padding: 2px 6px; border-bottom: 1px solid #d8dfe9; }
+.ct-incisos td.n { color: #6b7b96; width: 28px; }
+.ct-incisos td.mono { font-family: "IBM Plex Mono", monospace; }
+.ct-incisos td.kg, .ct-incisos th:last-child { text-align: right; }
+.ct-firmas { margin-top: auto; width: 100%; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; position: relative; padding-top: 18px; }
+.ct-firma { width: 280px; text-align: center; font-size: 12px; line-height: 1.35; }
+.ct-raya { height: 44px; border-bottom: 1px solid #131c2c; margin-bottom: 5px; }
+.ct-nombre { font-family: "Saira", sans-serif; font-weight: 600; }
+.ct-cargo { color: #4a5a75; }
+.ct-qr { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ct-qr .qr { width: 84px; height: 84px; border: 2px solid #131c2c; padding: 4px; box-sizing: border-box; background: #fff; }
+.ct-qr-leyenda { font-size: 10px; color: #6b7b96; text-align: center; line-height: 1.35; white-space: pre-line; }
+.ct-pie { width: 100%; font-size: 10px; line-height: 1.4; color: #6b7b96; text-align: center; border-top: 1px solid #d8dfe9; padding-top: 6px; position: relative; }

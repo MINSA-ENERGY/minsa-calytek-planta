@@ -1,0 +1,18 @@
+/* Impresion del certificado de tratamiento (v0.35.0, FO-CT-01). Hoja aparte y DESHABILITADA por omision
+   (<link disabled> en index.html): app.js la enciende solo mientras dura window.print() del certificado y la vuelve
+   a apagar en afterprint. Va aparte porque @page no admite condicion por clase y esta app imprime tres cosas mas
+   (ticket termico de 80 mm, Reportes) que no deben salir en carta horizontal. La CSP (style-src 'self') no deja un
+   <style> inline: encender un <link> del mismo origen si esta permitido. */
+@page { size: letter landscape; margin: 0; }
+@media print {
+    html, body { margin: 0; padding: 0; background: #fff; }
+    body * { visibility: hidden; }
+    .cert, .cert * { visibility: visible; }
+    /* fixed escapa el overflow del dialogo y de .ct-vista; el dialogo modal sigue en la capa superior y se imprime */
+    .cert { zoom: 1; position: fixed; left: 0; top: 0; width: 11in; height: 8.5in; min-height: 0; margin: 0; padding: 28px; box-sizing: border-box; }
+    .ct-marco { min-height: 0; height: 100%; }
+    .ct-hoja { min-height: 0; height: 100%; }
+    .dlg-cert[open] { position: static; border: 0; box-shadow: none; width: auto; max-height: none; padding: 0; overflow: visible; }
+    .dlg-cert::backdrop { display: none; }
+    .ct-vista { overflow: visible; max-height: none; padding: 0; }
+}

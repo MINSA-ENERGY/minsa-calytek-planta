@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<!-- Pagina PUBLICA de verificacion del certificado de tratamiento (v0.35.0). Sin login y sin Graph: lee
+     ./datos/<folio>-<sufijo>.json, que regenera docs/exportar-planta.ps1 -PublicarCertificados. Muestra SOLO lo
+     impreso en el papel (FO-CT-01) y el ESTADO (vigente / sustituido / cancelado). Sin PDF descargable a proposito. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self';
+  style-src 'self';
+  img-src 'self';
+  font-src 'self';
+  connect-src 'self';
+  frame-src 'none';
+  form-action 'none';
+  base-uri 'none';
+  object-src 'none';
+  upgrade-insecure-requests">
+<title>Verificación de certificado · MINSA ENERGY</title>
+<link rel="icon" href="../iconos/icono-192.png">
+<link rel="stylesheet" href="./estilo.css">
+</head>
+<body>
+<main class="tarjeta">
+  <img class="logo" src="../marca/lockup.svg" alt="MINSA ENERGY">
+  <h1>Verificación de certificado de tratamiento</h1>
+  <p class="sub">Planta CALYTEK · recortes de perforación (residuo de manejo especial)</p>
+  <div id="estado" class="estado buscando" role="status" aria-live="polite">Buscando el certificado…</div>
+  <dl id="datos" class="datos oculto"></dl>
+  <p id="nota" class="nota oculto"></p>
+  <p class="pie">Esta página confirma que el certificado con este folio fue emitido por MINSA ENERGY y su estado al día de la última publicación. Si el papel en su mano dice otra cosa, el papel es el que no vale. Dudas: <span class="mono">contacto@minsaenergy.com</span></p>
+</main>
+<script src="./verificar.js"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+/* Verificacion publica del certificado (v0.35.0). Autonoma a proposito: no carga la piel de la app (esta pagina
+   la abre un tercero desde el celular, sin login) — solo las fuentes vendorizadas y la paleta de la marca. */
+@font-face { font-family: "Saira"; font-weight: 600; font-display: swap; src: url("../vendor/fuentes/Saira-600.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 400; font-display: swap; src: url("../vendor/fuentes/Barlow-400.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 600; font-display: swap; src: url("../vendor/fuentes/Barlow-600.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; font-display: swap; src: url("../vendor/fuentes/IBMPlexMono-500.woff2") format("woff2"); }
+:root { --azul: #0833a3; --verde: #2c8a37; --tinta: #131c2c; --gris: #4a5a75; --linea: #d8dfe9; --fondo: #f4f6fa; --ok: #e6f4ea; --ok-fg: #1e6b2a; --ojo: #fff4d6; --ojo-fg: #7a5200; --mal: #fde8e8; --mal-fg: #9b1c1c; }
+@media (prefers-color-scheme: dark) { :root { --tinta: #e8edf5; --gris: #a9b6cc; --linea: #2b3648; --fondo: #0f1622; --ok: #143a1d; --ok-fg: #9fe0ad; --ojo: #4a3600; --ojo-fg: #ffd98a; --mal: #4a1414; --mal-fg: #ffb3b3; } }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 16px; background: var(--fondo); color: var(--tinta); font-family: "Barlow", system-ui, sans-serif; font-size: 16px; line-height: 1.45; }
+.tarjeta { max-width: 640px; margin: 0 auto; background: color-mix(in srgb, var(--fondo) 60%, #fff 40%); border: 1px solid var(--linea); border-radius: 12px; padding: 24px 20px; }
+@media (prefers-color-scheme: dark) { .tarjeta { background: #16202f; } }
+.logo { width: 180px; height: auto; display: block; margin: 0 auto 12px; }
+h1 { margin: 0; font-family: "Saira", sans-serif; font-weight: 600; font-size: 1.35rem; color: var(--azul); text-align: center; line-height: 1.2; }
+@media (prefers-color-scheme: dark) { h1 { color: #9fb6ff; } }
+.sub { margin: 4px 0 18px; text-align: center; color: var(--gris); font-size: .9rem; }
+.estado { padding: 12px 14px; border-radius: 8px; font-weight: 600; border: 1px solid transparent; }
+.estado.buscando { background: transparent; border-color: var(--linea); color: var(--gris); font-weight: 400; }
+.estado.ok { background: var(--ok); color: var(--ok-fg); border-color: color-mix(in srgb, var(--ok-fg) 30%, transparent); }
+.estado.ojo { background: var(--ojo); color: var(--ojo-fg); }
+.estado.mal { background: var(--mal); color: var(--mal-fg); }
+.datos { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 18px 0 0; font-size: .95rem; }
+.datos dt { color: var(--gris); font-size: .8rem; letter-spacing: .5px; text-transform: uppercase; font-family: "Saira", sans-serif; font-weight: 600; padding-top: 2px; }
+.datos dd { margin: 0; overflow-wrap: anywhere; }
+.mono { font-family: "IBM Plex Mono", monospace; font-weight: 500; }
+.nota { margin: 12px 0 0; color: var(--gris); font-size: .9rem; }
+.pie { margin: 22px 0 0; padding-top: 12px; border-top: 1px solid var(--linea); color: var(--gris); font-size: .8rem; }
+.oculto { display: none; }
+@media (max-width: 480px) { .datos { grid-template-columns: 1fr; gap: 2px; } .datos dd { margin-bottom: 8px; } }

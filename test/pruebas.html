@@ -28,6 +28,7 @@
 <pre id="resultados">arrancando…</pre>
 <div id="app-real"></div>
 
+<script src="./vendor/qrcode.js"></script>   <!-- v0.35.0: el QR del certificado; la app lo toma de window.qrcode -->
 <script>
 // ------------------------------------------------------------------ MSAL falso
 (function () {
@@ -1351,6 +1352,76 @@ try {
             R.ok('C-24: un doble toque en Guardar crea UN solo carrier y el botón vuelve a habilitarse', filas('carriers').filter(c => c.fields.Title === 'CARRIER DOBLE TOQUE').length === 1 && !$('btnGuardarCarrier').disabled, `${filas('carriers').filter(c => c.fields.Title === 'CARRIER DOBLE TOQUE').length} renglón(es)`);
         }
 
+        // 16. CERTIFICADO DE TRATAMIENTO (v0.35.0): un certificado por programa cerrado; solo gerencia emite, sustituye o
+        // cancela; firma en PLANTA_Firmas (Tipo certificado); folio CT-AA-NNNN; QR con ?f=<folio>-<sufijo>; sin firma valida no
+        // se imprime. Se cierra CLIENTE DEMO (todas sus gondolas ya salieron de planta) y se emite sobre sus cerrados.
+        {
+            document.querySelector('#pestanas button[data-p="prealtas"]').click();
+            const rDemo = await esperar(() => [...document.querySelectorAll('#paFirmadas .renglon')].find(r => r.textContent.includes('CLIENTE DEMO')), 'renglón CLIENTE DEMO en firmadas');
+            rDemo.querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle de CLIENTE DEMO');
+            R.ok('v0.35.0: un programa FIRMADO no ofrece emitir certificado (solo cerrado)', !visible('btnEmitirCertificado') && !visible('btnVerCertificado'));
+            clic('btnCerrarPrealta'); await confirmar();
+            await esperar(() => filas('prealtas').some(x => x.fields.Title === 'CLIENTE DEMO-POZO 1-2026' && x.fields.Estado === 'cerrada'), 'programa cerrado');
+            const pDemo = filas('prealtas').find(x => x.fields.Title === 'CLIENTE DEMO-POZO 1-2026');
+            const cerrados = filas('embarques').filter(e => Number(e.fields.PreAltaId) === pDemo.id && e.fields.Etapa === 'cerrado' && Number(e.fields.NetoKg) > 0);
+            const kgEsperados = cerrados.reduce((a, e) => a + Number(e.fields.NetoKg), 0);
+            $('paGrupoCerradas').open = true;
+            const rCerr = await esperar(() => [...document.querySelectorAll('#paCerradas .renglon')].find(r => r.textContent.includes('CLIENTE DEMO')), 'renglón en cerradas');
+            rCerr.querySelector('button').click(); await esperar(() => visible('paDetalle') && $('paDetalleTitulo').textContent.includes('cerrada'), 'detalle del programa cerrado');
+            R.ok('v0.35.0: el detalle del programa cerrado dice «sin emitir»', $('paDetalleCertificado').textContent.includes('sin emitir'), $('paDetalleCertificado').textContent.slice(0, 80));
+            if (ROL === 'gerencia') {
+                R.ok('v0.35.0: gerencia ve «Emitir certificado de tratamiento» y no Sustituir/Cancelar (aún no hay)', visible('btnEmitirCertificado') && !$('btnEmitirCertificado').disabled && !visible('btnSustituirCertificado') && !visible('btnCancelarCertificado'));
+                clic('btnEmitirCertificado'); await confirmar();
+                await esperar(() => filas('certificados').length === 1, 'certificado creado');
+                const c1 = filas('certificados')[0];
+                await esperar(() => $('dlgCertificado').open, 'vista del certificado');
+                const firmaC = filas('firmas').find(f => f.fields.Tipo === 'certificado' && Number(f.fields.ObjetoId) === c1.id);
+                R.ok('v0.35.0: el renglón nace vigente con folio CT-AA-NNNN, la suma de netos, los folios de embarque y sufijo de 8', /^CT-\d\d-0001$/.test(c1.fields.Title) && c1.fields.Estado === 'vigente' && c1.fields.Kg === kgEsperados && c1.fields.Embarques.split(';').length === cerrados.length && /^[a-z2-9]{8}$/.test(c1.fields.Sufijo) && c1.fields.EmitidoPor === window.__CUENTA.username && c1.fields.Generador === pDemo.fields.Generador, `${c1.fields.Title} · ${c1.fields.Kg} kg (esperados ${kgEsperados}) · ${c1.fields.Embarques}`);
+                R.ok('v0.35.0: la emisión deja su firma en PLANTA_Firmas (Tipo certificado, mismo firmante)', !!firmaC && firmaC.fields.Firmante === window.__CUENTA.username);
+                const cert = $('certificado');
+                const qr = cert.querySelector('svg.qr');
+                R.ok('v0.35.0: el formato pinta folio, generador, volumen en toneladas, los incisos y el QR con la URL de verificación', cert.textContent.includes(c1.fields.Title) && cert.textContent.includes(pDemo.fields.Generador) && cert.textContent.includes((kgEsperados / 1000).toLocaleString('es-MX', { minimumFractionDigits: 2 })) && cert.querySelectorAll('.ct-incisos tr').length === cerrados.length + 1 && !!qr && !qr.dataset.sinLibreria && qr.querySelector('title').textContent === `https://planta.minsaenergy.com/certificado/?f=${c1.fields.Title}-${c1.fields.Sufijo}` && cert.textContent.includes('pendiente'), `incisos ${cert.querySelectorAll('.ct-incisos tr').length - 1} · qr ${!!qr}`);
+                R.ok('v0.35.0: vigente y firmado → Imprimir habilitado', !$('ctImprimir').disabled && $('ctEstado').textContent.includes('firmado'));
+                clic('ctCerrar'); await dormir(20);
+                R.ok('v0.35.0: con uno vigente, Emitir se esconde y aparecen Ver / Sustituir / Cancelar', !visible('btnEmitirCertificado') && visible('btnVerCertificado') && visible('btnSustituirCertificado') && visible('btnCancelarCertificado') && $('paDetalleCertificado').textContent.includes(c1.fields.Title));
+                // S-11 sobre el certificado: si la firma desaparece (o la creo alguien sin rol), se ve pero no se imprime.
+                const idxF = filas('firmas').indexOf(firmaC); filas('firmas').splice(idxF, 1);
+                clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga sin la firma');
+                rCerr.querySelector('button').click(); await dormir(20);
+                clic('btnVerCertificado'); await esperar(() => $('dlgCertificado').open, 'vista sin firma');
+                R.ok('v0.35.0 / S-11: sin firma en PLANTA_Firmas el certificado se ve pero Imprimir queda deshabilitado y el detalle marca «sin firma»', $('ctImprimir').disabled && $('ctEstado').textContent.includes('SIN FIRMA') && $('paDetalleCertificado').textContent.includes('sin firma'));
+                clic('ctCerrar'); filas('firmas').push(firmaC);
+                // Sustituir: nace CT-..-0002 con firma; el 0001 queda sustituido con SustituidoPor y motivo.
+                clic('btnSustituirCertificado'); await confirmar('Generador mal escrito');
+                await esperar(() => filas('certificados').length === 2, 'certificado sustituto');
+                const c2 = filas('certificados')[1];
+                await esperar(() => $('dlgCertificado').open, 'vista del sustituto'); clic('ctCerrar');
+                R.ok('v0.35.0: Sustituir crea CT-..-0002 vigente y firmado y deja 0001 como «sustituido» con SustituidoPor y el motivo', /-0002$/.test(c2.fields.Title) && c2.fields.Estado === 'vigente' && c1.fields.Estado === 'sustituido' && c1.fields.SustituidoPor === c2.fields.Title && c1.fields.Motivo === 'Generador mal escrito' && c2.fields.Motivo.includes(c1.fields.Title) && !!filas('firmas').find(f => f.fields.Tipo === 'certificado' && Number(f.fields.ObjetoId) === c2.id), `${c1.fields.Estado} → ${c2.fields.Title}`);
+                // Cancelar: pide motivo obligatorio; el vigente queda cancelado y vuelve a ofrecerse Emitir.
+                clic('btnCancelarCertificado'); await esperar(() => $('dlg').open, 'confirm de cancelar');
+                clic('dlgOk'); await dormir(30);
+                R.ok('v0.35.0: cancelar sin motivo no procede (el motivo es obligatorio)', $('dlg').open && c2.fields.Estado === 'vigente');
+                poner('dlgMotivo', 'Emitido por error'); clic('dlgOk');
+                await esperar(() => c2.fields.Estado === 'cancelado', 'cancelado');
+                R.ok('v0.35.0: Cancelar deja el renglón cancelado con quién, cuándo y motivo, y el programa vuelve a ofrecer Emitir', c2.fields.CanceladoPor === window.__CUENTA.username && !!c2.fields.CanceladoEl && c2.fields.Motivo === 'Emitido por error' && visible('btnEmitirCertificado') && !visible('btnSustituirCertificado'), `${c2.fields.Estado} · ${c2.fields.Motivo}`);
+                clic('btnVerCertificado'); await esperar(() => $('dlgCertificado').open, 'vista del cancelado');
+                R.ok('v0.35.0: un certificado cancelado se ve con el sello CANCELADO y no se imprime', $('certificado').classList.contains('cancelado') && $('certificado').textContent.includes('CANCELADO') && $('ctImprimir').disabled);
+                clic('ctCerrar');
+                // Un programa cerrado SIN cerrados con neto no emite nada.
+                const kgAntes = cerrados.map(e => e.fields.NetoKg); cerrados.forEach(e => { e.fields.NetoKg = 0; });
+                clic('btnEmitirCertificado'); await esperar(() => avisoCon('nada que certificar'), 'sin cerrados con neto');
+                R.ok('v0.35.0: sin embarques cerrados con neto no se emite y lo dice', filas('certificados').length === 2 && !!avisoCon('nada que certificar'));
+                cerrados.forEach((e, i) => { e.fields.NetoKg = kgAntes[i]; });
+                clic('btnEmitirCertificado'); await confirmar();
+                await esperar(() => filas('certificados').length === 3, 'tercer certificado');
+                await esperar(() => $('dlgCertificado').open, 'vista del tercero'); clic('ctCerrar');
+                R.ok('v0.35.0: tras cancelar se puede emitir otro y el folio sigue (CT-..-0003, nunca se reutiliza)', /-0003$/.test(filas('certificados')[2].fields.Title) && filas('certificados')[2].fields.Estado === 'vigente' && c2.fields.Estado === 'cancelado');
+            } else {
+                R.ok(`v0.35.0: el rol ${ROL} NO ve Emitir / Sustituir / Cancelar certificado (solo gerencia)`, !visible('btnEmitirCertificado') && !visible('btnSustituirCertificado') && !visible('btnCancelarCertificado'));
+            }
+            clic('btnVolverPrealtas'); await dormir(20);
+        }
+
         // 14. Sesion caducada: acquireTokenSilent pide interaccion -> la app manda al login, no un error mudo.
         const pcaFalso = window.msal;
         let redirigio = false;
@@ -1366,6 +1437,7 @@ try {
         R.ok('U-50: el texto de la Puerta nombra el rol real (validador ≠ lectura)', ROL === 'validador' ? $('puSoloLectura').textContent.includes('validador') && $('puSoloLectura').textContent.includes('Pre-altas') : $('puSoloLectura').textContent.includes('lectura'), $('puSoloLectura').textContent);
         document.querySelector('#pestanas button[data-p="padron"]').click();
         R.ok('rol de lectura: sin botones de alta en el padrón', !visible('btnNuevoCarrier') && !visible('btnNuevaUnidad'));
+        R.ok('v0.35.0: los botones del certificado existen y están ocultos para un rol que no captura', !!$('btnEmitirCertificado') && !visible('btnEmitirCertificado') && !visible('btnVerCertificado') && !visible('btnCancelarCertificado'));
         await probarArchivos(null);   // v0.33.0: Archivos la ven todos los roles
     }
 } catch (e) {
@@ -1377,7 +1449,13 @@ try {
     await R.cerrar();
     // ?vista=padron oculta la bitacora y deja esa pestana abierta: para una captura de pantalla.
     // Los <dialog> que la corrida dejo abiertos (el detalle de la firmada del paso 12c) taparian la captura.
-    if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); document.querySelector(`#pestanas button[data-p="${params.get('vista')}"], #pestanasExtra button[data-p="${params.get('vista')}"]`).click(); }
+    if (params.get('vista') === 'certificado') {
+        // v0.35.0: para la captura y el print-to-pdf del formato FO-CT-01 — el detalle del programa cerrado con su certificado vigente abierto.
+        $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close();
+        document.querySelector('#pestanas button[data-p="prealtas"]').click(); $('paGrupoCerradas').open = true;
+        const r = [...document.querySelectorAll('#paCerradas .renglon')].find(x => x.textContent.includes('CLIENTE DEMO'));
+        if (r) { r.querySelector('button').click(); await dormir(30); clic('btnVerCertificado'); await dormir(30); if (params.get('imprimir')) { document.body.classList.add('imprimiendo-certificado'); $('cssImpresionCert').disabled = false; } }
+    } else if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); document.querySelector(`#pestanas button[data-p="${params.get('vista')}"], #pestanasExtra button[data-p="${params.get('vista')}"]`).click(); }
 }
 </script>
 </body>

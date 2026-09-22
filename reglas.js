@@ -142,14 +142,15 @@ export function compuerta(p) {
  */
 export function siguienteFolio(tipo, existentes, hoy = new Date()) {
     const aa = String(hoy.getFullYear()).slice(-2);
-    const ancho = { E: 5, R: 4, L: 3 }[tipo] || 4;
-    const re = new RegExp(`^${tipo}-${aa}-(\\d+)$`);
+    const ancho = { E: 5, R: 4, L: 3, C: 4 }[tipo] || 4;   // C (v0.35.0): certificado de tratamiento CT-AA-NNNN
+    const prefijo = tipo === 'C' ? 'CT' : tipo;   // v0.35.0: el certificado se lee CT-AA-NNNN
+    const re = new RegExp(`^${prefijo}-${aa}-(\\d+)$`);
     let max = 0;
     for (const f of existentes || []) {
         const m = re.exec(String(f || '').trim());
         if (m) max = Math.max(max, Number(m[1]));
     }
-    return `${tipo}-${aa}-${String(max + 1).padStart(ancho, '0')}`;
+    return `${prefijo}-${aa}-${String(max + 1).padStart(ancho, '0')}`;
 }
 
 /**
@@ -240,6 +241,7 @@ export const PUEDE = {
     firmarPrealta: rol => ['validador', 'gerencia'].includes(rol),
     puerta: rol => ['trazabilidad', 'gerencia'].includes(rol),
     autorizarExcepcion: rol => rol === 'gerencia',
+    emitirCertificado: rol => rol === 'gerencia',   // v0.35.0 (Carlos, 2026-09-22): solo gerencia emite, sustituye o cancela
     // Deshacer una captura equivocada (pedido de Carlos, 2026-09-05). Quien captura puede corregir
     // lo suyo en el momento: la gondola esta esperando. La traza queda en el renglon y en el
     // historial de versiones de SharePoint.
@@ -334,3 +336,52 @@ export function esLoteDeLaApp(nombre, etiqueta) {
 }
 
 export function paraPatch(campos) { const o = {}; for (const k in campos) o[k] = campos[k] === '' || campos[k] === undefined ? null : campos[k]; return o; }
+
+// ================================================================ CERTIFICADO DE TRATAMIENTO (v0.35.0)
+
+/** Texto del residuo en el certificado a partir de la corriente del programa (Tabla 8 del Resolutivo 1536/2025). */
+export function residuoDe(corriente) {
+    const c = String(corriente || '').toLowerCase();
+    const base = c.includes('aceite') ? 'BASE ACEITE' : c.includes('agua') ? 'BASE AGUA' : '';
+    return `RECORTES DE PERFORACIÓN${base ? ' · ' + base : ''}${c.startsWith('fluidos') ? ' (FLUIDOS)' : ''}`;
+}
+
+/**
+ * Sufijo aleatorio de verificacion: va solo en el QR (la URL publica es ?f=<folio>-<sufijo>), para que nadie recorra
+ * 0001, 0002… y lea la lista de clientes y volumenes. 8 caracteres de un alfabeto sin ambiguos (sin 0/O, 1/l/I): el
+ * humano lee el folio, no esto. `aleatorio` se inyecta en pruebas.
+ */
+export function sufijoVerificacion(aleatorio = crypto.getRandomValues.bind(crypto)) {
+    const ALFABETO = 'abcdefghjkmnpqrstuvwxyz23456789';
+    const bytes = aleatorio(new Uint8Array(8));
+    return [...bytes].map(b => ALFABETO[b % ALFABETO.length]).join('');
+}
+
+/**
+ * Lo que el certificado congela de un programa: los embarques CERRADOS (con neto), en orden de cierre, su suma y
+ * el rango de fechas. Puro: sin red y sin estado. `embarques` es la lista entera; aqui se filtra por el programa.
+ * @returns {{ embarques: object[], kg: number, primerCierre: string|null, ultimoCierre: string|null, folios: string[], manifiestos: string[] }}
+ */
+export function resumenCertificado(prealta, embarques) {
+    const cerrados = (embarques || [])
+        .filter(e => Number(e.PreAltaId) === Number(prealta.id) && e.Etapa === 'cerrado' && Number(e.NetoKg) > 0)
+        .sort((a, b) => String(a.TaraHora || '').localeCompare(String(b.TaraHora || '')) || a.id - b.id);
+    const kg = cerrados.reduce((s, e) => s + (Number(e.NetoKg) || 0), 0);
+    return {
+        embarques: cerrados, kg,
+        primerCierre: cerrados.length ? (cerrados[0].TaraHora || null) : null,
+        ultimoCierre: cerrados.length ? (cerrados[cerrados.length - 1].TaraHora || null) : null,
+        folios: cerrados.map(e => e.Title || `#${e.id}`),
+        manifiestos: cerrados.map(e => e.Manifiesto || '—')
+    };
+}
+
+/** URL que lleva el QR: base + ?f=<folio>-<sufijo>. Sin sufijo (certificado viejo o sembrado a mano) no hay URL: el QR no se pinta. */
+export function urlVerificacion(base, cert) {
+    if (!cert || !cert.Title || !cert.Sufijo) return null;
+    const b = String(base || '');
+    return `${b.endsWith('/') ? b : b + '/'}?f=${encodeURIComponent(cert.Title + '-' + cert.Sufijo)}`;
+}
+
+/** Toneladas con dos decimales y separador de miles (es-MX): 21220 -> «21.22». */
+export function toneladas(kg) { return (Number(kg || 0) / 1000).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }

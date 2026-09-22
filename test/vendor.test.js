@@ -49,3 +49,26 @@ for (const f of enCss) {
     assert.equal(h, filasFuentes.get(f), `vendor/fuentes/${f}: sha256 del archivo ≠ INTEGRIDAD.md (¿se sustituyó la fuente sin anotarlo?)`);
 }
 console.log(`vendor: ok (msal-browser ${version}, sha256 ${sha256.slice(0, 12)}…, integrity cotejado, API de app.js presente; ${enCss.length} fuentes con hash cotejado)`);
+
+// v0.35.0: qrcode.js (qrcode-generator, MIT) genera el QR del certificado: fila en INTEGRIDAD.md, sha256 del archivo,
+// integrity= en index.html, y la API que app.js usa (qrcode(typeNumber, nivel) -> addData/make/getModuleCount/isDark).
+{
+    const qrBytes = readFileSync(join(raiz, 'vendor', 'qrcode.js'));
+    const qrSha256 = createHash('sha256').update(qrBytes).digest('hex');
+    const qrSha384 = 'sha384-' + createHash('sha384').update(qrBytes).digest('base64');
+    const filasQr = [...integridad.matchAll(/^\| `qrcode\.js` \|[^\n]*`([0-9a-f]{64})`/gm)].map(m => m[1]);
+    assert.ok(filasQr.length > 0, 'INTEGRIDAD.md no trae fila de qrcode.js');
+    assert.equal(filasQr[filasQr.length - 1], qrSha256, 'el sha256 de vendor/qrcode.js no es el de la ÚLTIMA fila de INTEGRIDAD.md');
+    const mQr = html.match(/<script src="\.\/vendor\/qrcode\.js" integrity="([^"]+)"/);
+    assert.ok(mQr, 'index.html carga qrcode.js sin integrity=');
+    assert.equal(mQr[1], qrSha384, `integrity= de qrcode.js en index.html (${mQr[1]}) ≠ sha384 del archivo`);
+    assert.ok(integridad.includes(qrSha384), 'INTEGRIDAD.md no anota el sha384 (integrity=) de qrcode.js');
+    const mod = { exports: {} };
+    new Function('exports', 'module', 'define', 'window', qrBytes.toString('utf8'))(mod.exports, mod, undefined, {});
+    const qrcode = mod.exports;
+    assert.equal(typeof qrcode, 'function', 'el UMD de qrcode.js no exporta la función qrcode');
+    const q = qrcode(0, 'M'); q.addData('https://planta.minsaenergy.com/certificado/?f=CT-26-0001-abcdefgh'); q.make();
+    assert.ok(q.getModuleCount() >= 21 && typeof q.isDark(0, 0) === 'boolean', 'qrcode.js no expone getModuleCount/isDark como app.js los usa');
+    assert.equal(q.isDark(0, 0), true, 'el patrón de posición arranca en oscuro');
+    console.log(`vendor: qrcode.js ok (sha256 ${qrSha256.slice(0, 12)}…, integrity cotejado, ${q.getModuleCount()}×${q.getModuleCount()} módulos)`);
+}

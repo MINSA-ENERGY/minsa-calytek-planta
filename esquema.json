@@ -1,6 +1,6 @@
 {
   "_que_es": "Esquema de las listas de SharePoint de la app de control de planta CALYTEK. Es la UNICA fuente: la lee herramientas-dev/provisionar.html para crearlas y app/graph.js para leerlas/escribirlas. Los nombres de columna son los INTERNOS (sin espacios ni acentos); el titulo visible va en 'titulo'. Las relaciones van por ID de renglon (numero), no por columna de busqueda: mas simple de leer por Graph y no obliga a crear las listas en orden. Los campos citan los 24 de minsa-energy/ambiental/calytek/registro-prestador-servicios.md seccion 4.1 (c1..c24) y el padron (padron-transportistas-y-vigencias.md).",
-  "version": 4,
+  "version": 5,
   "listas": [
     {
       "nombre": "PLANTA_Carriers",
@@ -159,11 +159,40 @@
       "regla": "S-01, mitad del tenant (v0.24.0): la firma de la pre-alta y la autorizacion de la excepcion viven AQUI, en una lista SIN herencia donde solo el grupo Planta-Firmantes (validador + gerencia) tiene Colaborar; los demas miembros, Leer (setup-carlos.md, tarea 11). El sello en PreAltas/Embarques (FirmadaPor, ExcepcionAutorizo) es informativo; la COMPUERTA MANDA: sin renglon aqui la pre-alta no sale en la puerta y la excepcion no pasa a bascula. La app escribe este renglon PRIMERO: para quien no es firmante es un 403 y ahi termina.",
       "columnas": [
         { "nombre": "Title", "titulo": "Referencia", "tipo": "text", "obligatorio": true, "nota": "tipo + titulo del objeto, solo para leerse" },
-        { "nombre": "Tipo", "titulo": "Tipo", "tipo": "choice", "opciones": ["prealta", "excepcion"], "obligatorio": true },
+        { "nombre": "Tipo", "titulo": "Tipo", "tipo": "choice", "opciones": ["prealta", "excepcion", "certificado"], "obligatorio": true, "nota": "certificado (v0.35.0): la emision de un certificado de tratamiento la firma gerencia" },
         { "nombre": "ObjetoId", "titulo": "ID del renglon firmado", "tipo": "number", "obligatorio": true, "indexada": true },
         { "nombre": "Firmante", "titulo": "Firmante (correo)", "tipo": "text", "obligatorio": true },
         { "nombre": "FirmadoEl", "titulo": "Firmado el", "tipo": "dateTime", "obligatorio": true },
         { "nombre": "Motivo", "titulo": "Motivo (excepcion)", "tipo": "text" }
+      ]
+    },
+    {
+      "nombre": "PLANTA_Certificados",
+      "titulo": "Certificados de tratamiento",
+      "clave": "certificados",
+      "regla": "v0.35.0 (decision de Carlos 2026-09-22): UN certificado por PROGRAMA (pre-alta cerrada), lo emite SOLO gerencia y lo firma en PLANTA_Firmas (Tipo certificado; sin esa firma la app no lo imprime). El folio CT-AA-NNNN es unico y no se reutiliza (asegurarFolioUnico, como E-/R-/L-). Un certificado no se edita: se SUSTITUYE (nace otro y este queda sustituido, con SustituidoPor) o se CANCELA (Estado cancelado + Motivo). El Sufijo va solo en el QR: la URL publica es <urlVerificacion>?f=<Title>-<Sufijo>, y la pagina publica muestra solo lo impreso (FO-CT-01). Lo que dice el papel se congela aqui al emitir (Kg, Embarques, fechas, generador): si el programa cambia despues, el certificado NO cambia — se sustituye.",
+      "columnas": [
+        { "nombre": "Title", "titulo": "Folio (CT-AA-NNNN)", "tipo": "text", "obligatorio": true, "indexada": true },
+        { "nombre": "PreAltaId", "titulo": "ID de la pre-alta (programa)", "tipo": "number", "obligatorio": true, "indexada": true },
+        { "nombre": "Estado", "titulo": "Estado", "tipo": "choice", "opciones": ["vigente", "sustituido", "cancelado"], "obligatorio": true },
+        { "nombre": "Kg", "titulo": "Kg netos tratados", "tipo": "number", "nota": "suma de NetoKg de los embarques cerrados del programa al emitir" },
+        { "nombre": "Embarques", "titulo": "Folios de embarque", "tipo": "note", "nota": "E-AA-NNNNN separados por ; en el orden de cierre; los incisos del certificado" },
+        { "nombre": "Manifiestos", "titulo": "Manifiestos", "tipo": "note", "nota": "separados por ; en el mismo orden que Embarques" },
+        { "nombre": "PrimerCierre", "titulo": "Primer embarque cerrado", "tipo": "dateTime" },
+        { "nombre": "UltimoCierre", "titulo": "Ultimo embarque cerrado", "tipo": "dateTime" },
+        { "nombre": "Generador", "titulo": "Generador (copia)", "tipo": "text", "nota": "copia del programa al emitir: el papel no cambia si la pre-alta se edita" },
+        { "nombre": "GeneradorRegistro", "titulo": "Registro del generador (copia)", "tipo": "text" },
+        { "nombre": "Pozo", "titulo": "Pozo (copia)", "tipo": "text" },
+        { "nombre": "Corriente", "titulo": "Corriente (copia)", "tipo": "text" },
+        { "nombre": "Transportista", "titulo": "Transportista y autorizacion (copia)", "tipo": "text" },
+        { "nombre": "Sufijo", "titulo": "Sufijo de verificacion", "tipo": "text", "nota": "aleatorio, solo en el QR; el humano lee el folio" },
+        { "nombre": "EmitidoPor", "titulo": "Emitido por (correo)", "tipo": "text" },
+        { "nombre": "EmitidoEl", "titulo": "Emitido el", "tipo": "dateTime" },
+        { "nombre": "SustituidoPor", "titulo": "Sustituido por (folio)", "tipo": "text" },
+        { "nombre": "CanceladoPor", "titulo": "Cancelado por (correo)", "tipo": "text" },
+        { "nombre": "CanceladoEl", "titulo": "Cancelado el", "tipo": "dateTime" },
+        { "nombre": "Motivo", "titulo": "Motivo (sustitucion o cancelacion)", "tipo": "text" },
+        { "nombre": "Version", "titulo": "Version de la app que lo emitio", "tipo": "text" }
       ]
     }
   ]
