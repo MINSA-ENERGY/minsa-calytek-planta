@@ -65,8 +65,7 @@ let escritos = 0, sinSufijo = 0, iguales = 0;
 for (const f of renglones) {
     const nombre = `${f.Title || ''}-${f.Sufijo || ''}`;
     if (!RE_NOMBRE.test(nombre)) { sinSufijo++; continue; }
-    const corr = String(f.Corriente || '').toLowerCase();
-    const residuo = 'RECORTES DE PERFORACION' + (corr.includes('aceite') ? ' - BASE ACEITE' : corr.includes('agua') ? ' - BASE AGUA' : '');
+    const residuo = 'RECORTES DE PERFORACION';   // v0.38.0: sin la base, como el papel (Carlos, 23-sep)
     const emb = String(f.Embarques || '').split(';').map(s => s.trim()).filter(Boolean);
     let fechas = null;
     if (f.PrimerCierre && f.UltimoCierre) { const d1 = dia(f.PrimerCierre), d2 = dia(f.UltimoCierre); fechas = d1 === d2 ? d1 : `del ${d1} al ${d2}`; }

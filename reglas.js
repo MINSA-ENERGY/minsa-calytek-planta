@@ -339,11 +339,10 @@ export function paraPatch(campos) { const o = {}; for (const k in campos) o[k] =
 
 // ================================================================ CERTIFICADO DE TRATAMIENTO (v0.35.0)
 
-/** Texto del residuo en el certificado a partir de la corriente del programa (Tabla 8 del Resolutivo 1536/2025). */
-export function residuoDe(corriente) {
-    const c = String(corriente || '').toLowerCase();
-    const base = c.includes('aceite') ? 'BASE ACEITE' : c.includes('agua') ? 'BASE AGUA' : '';
-    return `RECORTES DE PERFORACIÓN${base ? ' · ' + base : ''}${c.startsWith('fluidos') ? ' (FLUIDOS)' : ''}`;
+/** Texto del residuo en el certificado. v0.38.0 (Carlos, 23-sep): solo «RECORTES DE PERFORACIÓN», sin la base ni (FLUIDOS)
+ *  — la corriente sigue congelada en el renglón (Corriente), solo deja de imprimirse. Se conserva el parámetro por los llamadores. */
+export function residuoDe(_corriente) {
+    return 'RECORTES DE PERFORACIÓN';
 }
 
 /**

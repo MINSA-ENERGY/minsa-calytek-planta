@@ -204,8 +204,8 @@ console.log('reglas: ok');
 assert.equal(siguienteFolio('C', [], hoy), 'CT-26-0001');
 assert.equal(siguienteFolio('C', ['CT-26-0003', 'E-26-00009', 'CT-25-0040'], hoy), 'CT-26-0004');
 assert.equal(siguienteFolio('E', ['CT-26-0003', 'E-26-00009'], hoy), 'E-26-00010', 'el CT no contamina el consecutivo E');
-assert.equal(residuoDe('base-aceite'), 'RECORTES DE PERFORACIÓN · BASE ACEITE');
-assert.equal(residuoDe('fluidos-base-agua'), 'RECORTES DE PERFORACIÓN · BASE AGUA (FLUIDOS)');
+assert.equal(residuoDe('base-aceite'), 'RECORTES DE PERFORACIÓN');   // v0.38.0: sin la base (Carlos)
+assert.equal(residuoDe('fluidos-base-agua'), 'RECORTES DE PERFORACIÓN');
 assert.equal(residuoDe(''), 'RECORTES DE PERFORACIÓN');
 {
     const suf = sufijoVerificacion(a => { for (let i = 0; i < a.length; i++) a[i] = (i * 37 + 5) % 256; return a; });
