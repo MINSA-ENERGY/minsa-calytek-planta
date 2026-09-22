@@ -4,7 +4,10 @@ const certs = [
   { _i: 11, Title: 'CT-26-0001', Sufijo: 'abcdefghjkmn', Estado: 'vigente', EmbarqueId: 5, EmitidoPor: 'G@minsa.mx', FechaRecepcion: '2026-09-23T02:30:00Z', Kg: 1000 },
   { _i: 12, Title: 'CT-26-0002', Sufijo: 'bcdefghjkmnp', Estado: 'vigente', EmbarqueId: 5, EmitidoPor: 'g@minsa.mx', FechaRecepcion: '2026-09-23T02:30:00Z', Kg: 1000 },
   { _i: 13, Title: 'CT-26-0003', Sufijo: 'cdefghjkmnpq', Estado: 'vigente', EmbarqueId: 6, EmitidoPor: 'v@minsa.mx', FechaRecepcion: '2026-09-22T15:00:00Z', Kg: 1000 },
-  { _i: 14, Title: 'CT-26-0004', Sufijo: 'defghjkmnpqr', Estado: 'vigente', EmbarqueId: 7, EmitidoPor: 'g@minsa.mx', Kg: 1000 }
+  { _i: 14, Title: 'CT-26-0004', Sufijo: 'defghjkmnpqr', Estado: 'vigente', EmbarqueId: 7, EmitidoPor: 'g@minsa.mx', Kg: 1000 },
+  // v0.41.0 (S-22): una cancelacion automatica con el error crudo de Graph, y una cancelacion a mano
+  { _i: 15, Title: 'CT-26-0005', Sufijo: 'efghjkmnpqrs', Estado: 'cancelado', EmbarqueId: 8, EmitidoPor: 'g@minsa.mx', Kg: 1000, Motivo: 'Emisión fallida al firmar: accessDenied para g@minsa.mx en el sitio 1234' },
+  { _i: 16, Title: 'CT-26-0006', Sufijo: 'fghjkmnpqrst', Estado: 'cancelado', EmbarqueId: 9, EmitidoPor: 'g@minsa.mx', Kg: 1000, Motivo: 'El generador pidió otra razón social' }
 ];
 const firmas = [
   { _i: 1, Tipo: 'certificado', ObjetoId: 11, Firmante: 'g@minsa.mx' },

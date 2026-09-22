@@ -74,6 +74,9 @@ const firmado = f => firmas.some(x => x.Tipo === 'certificado' && Number(x.Objet
 // El vigente que manda por gondola: el firmado de id mas alto. Los certificados de programa (v0.35-v0.38) no traen EmbarqueId.
 const mandaPorGondola = new Map();
 for (const f of renglones) if (f.Estado === 'vigente' && f.EmbarqueId != null && firmado(f)) { const k = Number(f.EmbarqueId), a = mandaPorGondola.get(k); if (!a || f._id > a._id) mandaPorGondola.set(k, f); }
+// S-22 (v0.41.0): una cancelacion automatica ("Emision fallida al <paso>: <error de Graph>") publica solo un motivo fijo;
+// las anteriores a la v0.41.0 traen el texto crudo del error en la lista y aqui se tapan sin tocar el tenant.
+const motivoPublico = m => m == null ? null : (/^Emisi[oó]n fallida/i.test(String(m)) ? 'Emisión fallida' : m);
 function estadoPublico(f) {
     if (f.Estado !== 'vigente') return { estado: f.Estado, sustituidoPor: f.SustituidoPor ?? null };
     if (!firmado(f)) return { estado: 'sin-firma', sustituidoPor: null };
@@ -105,7 +108,7 @@ for (const f of renglones) {
     const doc = {
         folio: f.Title, estado: pub.estado, generador: f.Generador ?? null, registro: f.GeneradorRegistro ?? null, direccion: f.GeneradorDireccion ?? null, pozo: f.Pozo ?? null,
         residuo, kg: f.Kg ?? null, manifiesto, ticket: f.TicketBascula ?? null, embarques: emb, fechas, transportista: f.Transportista ?? null,
-        emitidoEl: f.EmitidoEl ?? null, sustituidoPor: pub.sustituidoPor, motivo: f.Estado === 'cancelado' ? (f.Motivo ?? null) : null, publicadoEl: ahora
+        emitidoEl: f.EmitidoEl ?? null, sustituidoPor: pub.sustituidoPor, motivo: f.Estado === 'cancelado' ? motivoPublico(f.Motivo) : null, publicadoEl: ahora
     };
     const archivo = createHash('sha256').update(nombre, 'utf8').digest('hex') + '.json';
     const ruta = join(CARPETA, archivo);

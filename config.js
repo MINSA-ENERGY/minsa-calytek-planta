@@ -67,8 +67,9 @@ export const CONFIG = {
         domicilioPlanta: 'km 2 carretera Piedras Negras – Mata Espino, Tlalixcoyan, Veracruz',
         rfc: 'MIC200817HF0',
         // Pagina publica de verificacion (sin login). El QR lleva <urlVerificacion>?f=<folio>-<sufijo>. La pagina vive en
-        // certificado/ de este mismo repo y lee certificado/datos/<folio>-<sufijo>.json, que REGENERA docs/exportar-planta.ps1
-        // -PublicarCertificados (la app no puede escribir en el repo: es GitHub Pages).
+        // certificado/ de este mismo repo y lee certificado/datos/<sha256(folio-sufijo)>.json (cifrado con el sufijo), que
+        // REGENERA cada hora el Action publicar-certificados (respaldo: docs/exportar-planta.ps1 -PublicarCertificados;
+        // la app no puede escribir en el repo: es GitHub Pages).
         urlVerificacion: 'https://planta.minsaenergy.com/certificado/'
     },
 

@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas } from './reglas.js';
 
-const VERSION = '0.40.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.41.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1819,7 +1819,7 @@ async function emitirCertificado(sustituye = null, motivoSust = '', corr = null)
                 aplicar('certificados', sustituye, campos);
             }
         } catch (err) {
-            const cancel = camposCancelacion(`Emisión fallida al ${paso}: ${err.message}`);
+            const cancel = camposCancelacion(`Emisión fallida al ${paso}`);   // S-22 (v0.41.0): el motivo sale en la verificación pública; el error de Graph solo en el aviso
             const sinCompensar = await segundoPaso(() => estado.cliente.actualizarRenglon(estado.siteId, L.certificados, nuevo.id, cancel));
             if (!sinCompensar) Object.assign(nuevo, cancel);
             estado.certificados.push(nuevo);
@@ -1856,7 +1856,7 @@ async function confirmarSustitucion() {
 async function cancelarCertificado() {
     const e = estado.certificadoEmbarque; const vig = e && certificadoVigente(e); if (!vig || !PUEDE.emitirCertificado(estado.rol)) return;
     await escribiendo('btnCancelarCertificado', async () => {
-    const { ok, motivo } = await confirmar({ titulo: 'Cancelar el certificado', ok: 'Cancelar el certificado', peligro: true, motivo: true, etiquetaMotivo: 'Por qué se cancela',
+    const { ok, motivo } = await confirmar({ titulo: 'Cancelar el certificado', ok: 'Cancelar el certificado', peligro: true, motivo: true, etiquetaMotivo: 'Por qué se cancela (sale en la verificación pública del QR)',
         texto: `${vig.Title} deja de valer: su QR dirá «cancelado». No se borra: queda como historial. Si hace falta uno bueno, después se emite otro.` });
     if (!ok) return;
     try {

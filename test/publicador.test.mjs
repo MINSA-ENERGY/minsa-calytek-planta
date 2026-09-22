@@ -30,9 +30,11 @@ try {
     assert.equal(c3.estado, 'sin-firma', 'S-18: firma de un validador no vale para un certificado');
     assert.equal(c4.estado, 'sin-firma', 'S-18: sin renglon en PLANTA_Firmas no es vigente');
     assert.equal(c1.fechas, '22/09/2026', 'C-40: 02:30Z del 23 es el 22 en Mexico (TZ=UTC como el runner)');
+    assert.equal(leer('CT-26-0005', 'efghjkmnpqrs').motivo, 'Emisión fallida', 'S-22: la cancelacion automatica no publica el error de Graph');
+    assert.equal(leer('CT-26-0006', 'fghjkmnpqrst').motivo, 'El generador pidió otra razón social', 'S-22: el motivo tecleado por gerencia si se publica');
     // Si el publicador no ve PLANTA_Firmas (llega vacia con vigentes) aborta: no pone NO VALIDO a los buenos.
     const dir2 = mkdtempSync(join(tmpdir(), 'publicador-'));
     try { const r2 = correr(dir2, { FALSO_SIN_FIRMAS: '1' }); assert.equal(r2.status, 4, 'sin firmas legibles el publicador aborta con 4'); }
     finally { rmSync(dir2, { recursive: true, force: true }); }
 } finally { rmSync(dir, { recursive: true, force: true }); }
-console.log('publicador: ok (vigente / sustituido / sin-firma x2, fecha en hora de Mexico, aborta sin firmas)');
+console.log('publicador: ok (vigente / sustituido / sin-firma x2, fecha en hora de Mexico, aborta sin firmas, motivo publico fijo en cancelacion automatica)');

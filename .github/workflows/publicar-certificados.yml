@@ -7,6 +7,9 @@ on:
   schedule:
     - cron: '7 * * * *'      # cada hora, minuto 7 (UTC)
   workflow_dispatch: {}
+# S-20 (v0.41.0): las actions de terceros van fijas por SHA (una etiqueta movil reescrita correria con el token de
+# escritura sobre el repo que Pages sirve como la app) y checkout NO deja el token en .git/config: solo el paso final,
+# que es codigo nuestro, lo recibe para el push. Al subir de version: git ls-remote https://github.com/actions/<x> refs/tags/v4
 permissions:
   contents: write
 concurrency:
@@ -17,8 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
         with:
           node-version: '22'
       - name: Leer, cifrar y escribir certificado/datos
@@ -28,10 +33,12 @@ jobs:
           CLIENT_SECRET: ${{ secrets.PUBLICADOR_CLIENT_SECRET }}
         run: node .github/scripts/publicar-certificados.mjs
       - name: Commit y push si cambio algo
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name 'CALYTEK Planta Publicador'
           git config user.email 'publicador@users.noreply.github.com'
           git add -- certificado/datos
           if git diff --cached --quiet; then echo 'sin cambios'; exit 0; fi
           git commit -m "certificados: verificacion publicada $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF_NAME}"
