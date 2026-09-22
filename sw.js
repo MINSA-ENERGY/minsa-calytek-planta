@@ -8,7 +8,7 @@
 // eso el service worker nuevo se llena con los archivos VIEJOS (medido en captura, 2026-08-17).
 
 // La cache lleva la MISMA cadena que VERSION (app.js) y package.json: test/version.test.js falla si difieren (C-09, v0.21.0).
-const CACHE = 'calytek-planta-v0.39.0';
+const CACHE = 'calytek-planta-v0.40.0';
 
 function traerDeLaRed(recurso) {
     return fetch(new Request(recurso, { cache: 'reload', credentials: 'same-origin' }));
@@ -68,10 +68,15 @@ self.addEventListener('activate', evento => {
     );
 });
 
+// C-44 (v0.40.0): el fetch solo intercepta el ARMAZON, como dice la regla de arriba. Antes guardaba todo GET del origen,
+// incluida la verificacion publica (certificado/ y sus datos/), y sin red devolvia un estado viejo o la app en su lugar.
+const RUTAS_ARMAZON = new Set(ARMAZON.map(r => new URL(r, self.location).pathname));
+
 self.addEventListener('fetch', evento => {
     const url = new URL(evento.request.url);
     if (url.origin !== self.location.origin) return;
     if (evento.request.method !== 'GET') return;
+    if (!RUTAS_ARMAZON.has(url.pathname)) return;
     evento.respondWith(
         traerDeLaRed(evento.request.url)
             .then(respuesta => {

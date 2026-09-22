@@ -18,4 +18,7 @@ assert.ok(/addEventListener\('message'/.test(sw) && /skipWaiting\(\)/.test(sw), 
 assert.ok(!/\.addAll\s*\(/.test(sw), 'sin addAll: pasa por la caché HTTP');
 assert.ok(/cache:\s*'reload'/.test(sw), 'cada petición del armazón lleva cache: reload');
 assert.ok(!/graph\.microsoft\.com|login\.microsoftonline\.com/.test(sw), 'el sw no menciona Graph ni login');
+// C-44 (v0.40.0): el fetch solo intercepta el armazón; la verificación pública (certificado/) nunca pasa por la caché.
+assert.ok(/if \(!RUTAS_ARMAZON\.has\(url\.pathname\)\) return;/.test(sw), 'el fetch sale temprano fuera del armazón');
+assert.ok(!/'\.\/certificado\//.test(sw), 'certificado/ no está en el armazón');
 console.log('sw: ok');

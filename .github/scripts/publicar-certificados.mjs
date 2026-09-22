@@ -5,6 +5,11 @@
 //   blob     = { v:1, iv, ct, mac }  con mac = HMAC(iv || ct), todo en base64
 //   contenido = solo lo impreso + estado + publicadoEl; publicadoEl no fuerza reescritura (se descifra el existente y se compara)
 // Sin dependencias: fetch y crypto de Node 22. Solo lee del tenant; escribe solo en certificado/datos/.
+// S-18 (app v0.40.0): «vigente» se publica SOLO con la firma que la app exige (certificadoFirmado): un renglon de
+// PLANTA_Firmas Tipo=certificado, ObjetoId = el certificado, Firmante = EmitidoPor, y ese Firmante con rol gerencia
+// ACTIVO en PLANTA_Roles. Sin eso sale «sin-firma» (la pagina dice NO VALIDO). Y una gondola tiene UN vigente: si una
+// sustitucion quedo a medias (C-39) el mas nuevo firmado manda y los otros salen «sustituido» por el.
+// C-40 (v0.40.0): las fechas en hora de Mexico, como el papel — el runner de Actions corre en UTC.
 import { createHash, pbkdf2Sync, randomBytes, createCipheriv, createDecipheriv, createHmac, timingSafeEqual } from 'node:crypto';
 import { readFileSync, writeFileSync, readdirSync, unlinkSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -47,16 +52,39 @@ function descifrar(json, folio, sufijo) {
     const d = createDecipheriv('aes-256-cbc', k.aes, iv);
     return JSON.parse(Buffer.concat([d.update(ct), d.final()]).toString('utf8'));
 }
-const dia = iso => { const d = new Date(iso); return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`; };
+const FMT_DIA = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit', year: 'numeric' });
+const dia = iso => FMT_DIA.format(new Date(iso));   // dd/mm/aaaa en hora de Mexico (C-40)
 
 const tk = await token();
 const site = await graph(`https://graph.microsoft.com/v1.0/sites/${HOST}:${RUTA_SITIO}`, tk);
 const listas = await graph(`https://graph.microsoft.com/v1.0/sites/${site.id}/lists?$select=id,name,displayName&$top=200`, tk);
-const lista = listas.value.find(l => l.name === LISTA || l.displayName === LISTA);
-if (!lista) { console.error(`la lista ${LISTA} no existe en el sitio (provisionar.html, tarea 15)`); process.exit(3); }
-let url = `https://graph.microsoft.com/v1.0/sites/${site.id}/lists/${lista.id}/items?expand=fields&$top=500`;
-const renglones = [];
-while (url) { const p = await graph(url, tk); renglones.push(...p.value.map(it => it.fields)); url = p['@odata.nextLink']; }
+async function leerLista(nombre) {
+    const l = listas.value.find(x => x.name === nombre || x.displayName === nombre);
+    if (!l) { console.error(`la lista ${nombre} no existe en el sitio`); process.exit(3); }
+    let url = `https://graph.microsoft.com/v1.0/sites/${site.id}/lists/${l.id}/items?expand=fields&$top=500`;
+    const out = [];
+    while (url) { const p = await graph(url, tk); out.push(...p.value.map(it => ({ ...it.fields, _id: Number(it.id) }))); url = p['@odata.nextLink']; }
+    return out;
+}
+const renglones = await leerLista(LISTA);
+const firmas = await leerLista('PLANTA_Firmas'), roles = await leerLista('PLANTA_Roles');
+const minus = s => String(s || '').trim().toLowerCase();
+const esGerencia = correo => roles.some(r => minus(r.Title) === minus(correo) && r.Activo !== false && r.Rol === 'gerencia');
+const firmado = f => firmas.some(x => x.Tipo === 'certificado' && Number(x.ObjetoId) === f._id && minus(x.Firmante) === minus(f.EmitidoPor) && esGerencia(x.Firmante));
+// El vigente que manda por gondola: el firmado de id mas alto. Los certificados de programa (v0.35-v0.38) no traen EmbarqueId.
+const mandaPorGondola = new Map();
+for (const f of renglones) if (f.Estado === 'vigente' && f.EmbarqueId != null && firmado(f)) { const k = Number(f.EmbarqueId), a = mandaPorGondola.get(k); if (!a || f._id > a._id) mandaPorGondola.set(k, f); }
+function estadoPublico(f) {
+    if (f.Estado !== 'vigente') return { estado: f.Estado, sustituidoPor: f.SustituidoPor ?? null };
+    if (!firmado(f)) return { estado: 'sin-firma', sustituidoPor: null };
+    const m = f.EmbarqueId != null ? mandaPorGondola.get(Number(f.EmbarqueId)) : null;
+    if (m && m._id !== f._id) return { estado: 'sustituido', sustituidoPor: m.Title };
+    return { estado: 'vigente', sustituidoPor: null };
+}
+// Si PLANTA_Firmas llega VACIA habiendo vigentes, el permiso del publicador no alcanza la lista (tiene la herencia rota):
+// publicar asi pondria NO VALIDO a todos los certificados buenos. Se aborta y el Action queda en rojo; lo publicado no cambia.
+if (!firmas.length && renglones.some(f => f.Estado === 'vigente')) { console.error('PLANTA_Firmas se leyo vacia con certificados vigentes: el publicador no ve las firmas. No se publica.'); process.exit(4); }
+let sinFirma = 0;
 
 mkdirSync(CARPETA, { recursive: true });
 const ahora = new Date().toISOString();
@@ -73,10 +101,11 @@ for (const f of renglones) {
     let fechas = null;
     if (f.FechaRecepcion) fechas = dia(f.FechaRecepcion);
     else if (f.PrimerCierre && f.UltimoCierre) { const d1 = dia(f.PrimerCierre), d2 = dia(f.UltimoCierre); fechas = d1 === d2 ? d1 : `del ${d1} al ${d2}`; }
+    const pub = estadoPublico(f); if (pub.estado === 'sin-firma') sinFirma++;
     const doc = {
-        folio: f.Title, estado: f.Estado, generador: f.Generador ?? null, registro: f.GeneradorRegistro ?? null, direccion: f.GeneradorDireccion ?? null, pozo: f.Pozo ?? null,
+        folio: f.Title, estado: pub.estado, generador: f.Generador ?? null, registro: f.GeneradorRegistro ?? null, direccion: f.GeneradorDireccion ?? null, pozo: f.Pozo ?? null,
         residuo, kg: f.Kg ?? null, manifiesto, ticket: f.TicketBascula ?? null, embarques: emb, fechas, transportista: f.Transportista ?? null,
-        emitidoEl: f.EmitidoEl ?? null, sustituidoPor: f.SustituidoPor ?? null, motivo: f.Estado === 'cancelado' ? (f.Motivo ?? null) : null, publicadoEl: ahora
+        emitidoEl: f.EmitidoEl ?? null, sustituidoPor: pub.sustituidoPor, motivo: f.Estado === 'cancelado' ? (f.Motivo ?? null) : null, publicadoEl: ahora
     };
     const archivo = createHash('sha256').update(nombre, 'utf8').digest('hex') + '.json';
     const ruta = join(CARPETA, archivo);
@@ -92,4 +121,4 @@ for (const f of renglones) {
 }
 let borrados = 0;
 for (const a of readdirSync(CARPETA)) if (a.endsWith('.json') && !esperados.has(a)) { unlinkSync(join(CARPETA, a)); borrados++; }
-console.log(`certificados: ${renglones.length} renglones · ${esperados.size} publicables · ${escritos} escritos · ${iguales} sin cambio · ${borrados} borrados · ${sinSufijo} sin sufijo valido`);
+console.log(`certificados: ${renglones.length} renglones · ${esperados.size} publicables · ${escritos} escritos · ${iguales} sin cambio · ${borrados} borrados · ${sinSufijo} sin sufijo valido · ${sinFirma} vigentes SIN FIRMA publicados como no validos`);

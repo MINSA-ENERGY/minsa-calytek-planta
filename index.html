@@ -498,10 +498,31 @@
      formato (body.imprimiendo-certificado). Sin firma valida de gerencia o si no esta vigente, Imprimir queda deshabilitado.
      v0.39.0: este dialogo es el de UNA GONDOLA (un embarque cerrado) — se abre desde Bascula > Cerrados y es la unica
      puerta de emision, sustitucion y cancelacion. Antes colgaba del detalle del programa. -->
-<dialog id="dlgCertificado" class="dlg dlg-cert" aria-label="Certificado de tratamiento">
+<dialog id="dlgCertificado" class="dlg dlg-cert con-avisos" aria-label="Certificado de tratamiento">
   <div class="ct-nav"><span id="ctEstado" class="tk-pos"></span></div>
+  <div class="dlg-avisos" aria-live="polite"></div><!-- U-71 (v0.40.0): «emitido» / «No se pudo emitir» se pintan aqui, no detras del modal -->
   <div class="ct-vista"><div id="certificado" class="cert"></div></div>
-  <div class="dlg-botones envuelve">
+  <!-- U-69 (v0.40.0): Sustituir abre estos campos precargados con lo que la gondola y el programa dicen HOY. Lo que se
+       corrija entra al certificado nuevo; ticket y manifiesto se corrigen ademas en la gondola. El programa firmado no se toca. -->
+  <div id="ctCorregir" class="ct-corregir oculto">
+    <p class="pista">Corrige lo que estaba mal. El neto no se corrige aquí: si el peso está mal, se anula la góndola y se repesa.</p>
+    <div class="dos">
+      <div class="campo"><label for="ctTicket">Ticket de báscula</label><input type="text" id="ctTicket" class="mono"></div>
+      <div class="campo"><label for="ctManifiesto">Manifiesto</label><input type="text" id="ctManifiesto" class="mono"></div>
+    </div>
+    <div class="campo"><label for="ctGenerador">Generador (razón social)</label><input type="text" id="ctGenerador"></div>
+    <div class="campo"><label for="ctGeneradorDireccion">Dirección del generador</label><input type="text" id="ctGeneradorDireccion"></div>
+    <div class="dos">
+      <div class="campo"><label for="ctGeneradorRegistro">Registro de generador</label><input type="text" id="ctGeneradorRegistro" class="mono"></div>
+      <div class="campo"><label for="ctPozo">Pozo</label><input type="text" id="ctPozo"></div>
+    </div>
+    <div class="campo"><label for="ctMotivo">Qué estaba mal · obligatorio</label><input type="text" id="ctMotivo" maxlength="200"></div>
+    <div class="dlg-botones envuelve">
+      <button id="ctCorregirVolver" class="secundario" type="button">Volver</button>
+      <button id="ctCorregirOk" class="principal" type="button">Sustituir con estos datos</button>
+    </div>
+  </div>
+  <div class="dlg-botones envuelve" id="ctBotones">
     <button id="ctCerrar" class="secundario" type="button">Cerrar</button>
     <button id="btnEmitirCertificado" class="principal enviar oculto" type="button">Emitir certificado de tratamiento</button>
     <button id="btnSustituirCertificado" class="secundario oculto" type="button">Sustituir certificado</button>

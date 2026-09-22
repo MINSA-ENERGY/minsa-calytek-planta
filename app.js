@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas } from './reglas.js';
 
-const VERSION = '0.39.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.40.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -69,7 +69,8 @@ function avisar(texto, clase = '') {
     $('avisos').appendChild(d);
     // U-10 (v0.23.0): con dos formas abiertas (la del carrier encima de la pre-alta) el aviso va a la de ENCIMA, que es la
     // ultima abierta y, en el DOM, la ultima de las abiertas (las del padron van despues de #paForma).
-    const abiertas = document.querySelectorAll('dialog.dlg-forma[open]');
+    // U-71 (v0.40.0): .con-avisos suma los modales que no son forma pero tienen su zona de avisos (el del certificado).
+    const abiertas = document.querySelectorAll('dialog.dlg-forma[open], dialog.con-avisos[open]');
     const dlg = abiertas[abiertas.length - 1];
     if (dlg) { const z = dlg.querySelector('.dlg-avisos'); z.textContent = ''; z.appendChild(d.cloneNode(true)); dlg.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     // U-39 (v0.29.0): el veredicto es una <section> fija a pantalla completa (z-index 30) y tapa #avisos: «lleva motivo escrito»
@@ -513,6 +514,7 @@ function reanclar() {
     estado.prealtaAbierta = fresco(estado.prealtas, estado.prealtaAbierta);
     estado.prealtaEdit = fresco(estado.prealtas, estado.prealtaEdit);
     if (estado.padronEdit) estado.padronEdit.x = fresco(estado[estado.padronEdit.clave], estado.padronEdit.x);
+    estado.certificadoEmbarque = fresco(estado.embarques, estado.certificadoEmbarque);   // C-38 (v0.40.0)
 }
 
 /**
@@ -539,7 +541,8 @@ async function recargar(silencioso = false) {
     // C-23 (v0.28.0): con una escritura en vuelo o un confirm abierto NO se sustituyen las listas: el Object.assign que sigue
     // al await caeria sobre un objeto huerfano (la gondola anulada seguia «En planta», gerencia autorizaba dos veces). Antes
     // solo se frenaba el REPINTADO (capturaAMedias); cargarTodo() corria igual. El timer lo vuelve a intentar al minuto.
-    if (escrituras > 0 || $('dlg').open) { if (!silencioso && escrituras > 0) avisar('Espera a que termine de guardar y vuelve a actualizar.', 'ojo'); return; }
+    // C-38 (v0.40.0): tambien con el certificado abierto — gerencia esta leyendo un papel que el refresco repintaria debajo.
+    if (escrituras > 0 || $('dlg').open || $('dlgCertificado').open) { if (!silencioso && escrituras > 0) avisar('Espera a que termine de guardar y vuelve a actualizar.', 'ojo'); return; }
     recargando = true;
     for (const id of ['btnActualizar', 'btnActualizarMovil']) $(id).disabled = true;
     pintarSync(true);
@@ -975,16 +978,18 @@ function pintarCerrados() {
         visibles.push(e);
         const i = visibles.length - 1;
         // v0.39.0: el certificado de tratamiento es de ESTA gondola y se emite desde aqui, que es donde vive cerrada.
-        const certs = e.Etapa === 'cerrado' ? certificadosDe(e) : [];
+        // U-70 (v0.40.0): una gondola ANULADA con certificado tambien lo muestra: si quedo uno vigente de antes de esta
+        // version, gerencia tiene por donde llegar a cancelarlo. Emitir sigue siendo solo para cerradas (datosCertificado).
+        const certs = certificadosDe(e);
         const vigC = certs.find(x => x.Estado === 'vigente') || null;
         const extras = [];
-        if (e.Etapa === 'cerrado' && (PUEDE.emitirCertificado(estado.rol) || certs.length)) {
-            extras.push({ texto: vigC ? 'Certificado' : 'Certificar', accion: 'certificado',
+        if ((e.Etapa === 'cerrado' && PUEDE.emitirCertificado(estado.rol)) || certs.length) {
+            extras.push({ texto: vigC || e.Etapa !== 'cerrado' ? 'Certificado' : 'Certificar', accion: 'certificado',
                 alClic: () => abrirCertificadoDeEmbarque(vivo('embarques', e)) });
         }
         const r = renglon(`${e.Title} · ${e.PlacaTractor || ''}${e.Manifiesto ? ' · ' + e.Manifiesto : ''}`, null, 'Ticket',
             () => abrirTicketPop(visibles, i), extras);
-        if (e.Etapa !== 'cerrado') { r.classList.add(e.Etapa); r.firstChild.firstChild.appendChild(etiqueta(e.Etapa, e.Etapa)); }
+        if (e.Etapa !== 'cerrado') { r.classList.add(e.Etapa); r.firstChild.firstChild.appendChild(etiqueta(e.Etapa, e.Etapa)); if (vigC) r.firstChild.firstChild.appendChild(etiqueta(`${vigC.Title} vigente`, 'aviso')); }
         else if (vigC) r.firstChild.firstChild.appendChild(etiqueta(vigC.Title, 'ok'));
         caja.appendChild(r);
     }
@@ -1028,15 +1033,26 @@ async function eliminarEmbarque(e, btn) {
 }
 async function anularEmbarque(e, btn) {
     if (accionCorreccion(e) !== 'anular') return;
+    // U-70 (v0.40.0): una gondola con certificado vigente no se anula dejandolo vivo. Solo gerencia cancela certificados,
+    // asi que solo gerencia puede anularla; y el certificado se cancela PRIMERO con el mismo motivo: si luego falla la
+    // anulacion, queda una gondola cerrada sin certificado (se vuelve a emitir), nunca uno vigente sobre una anulada.
+    const vigC = certificadoVigente(e);
+    if (vigC && !PUEDE.emitirCertificado(estado.rol)) { avisar(`${e.Title} tiene el certificado ${vigC.Title} vigente: solo gerencia puede anular esta góndola (el certificado se cancela con ella).`, 'error'); return; }
     await escribiendo(btn, async () => {   // C-24 / C-23: boton deshabilitado y sin refresco mientras el confirm esta abierto
     const { ok, motivo } = await confirmar({
         titulo: `Anular ${e.Title}`, peligro: true, ok: 'Anular con este motivo', motivo: true,
-        texto: `${e.PlacaTractor} · etapa ${e.Etapa}${e.NetoKg ? ` · neto ${e.NetoKg} kg` : e.BrutoKg ? ` · bruto ${e.BrutoKg} kg` : ''}. El folio ${e.Title} queda anulado y NO se vuelve a usar; el siguiente pesaje nace con folio nuevo. Las fotos ya subidas se conservan.`,
+        texto: `${e.PlacaTractor} · etapa ${e.Etapa}${e.NetoKg ? ` · neto ${e.NetoKg} kg` : e.BrutoKg ? ` · bruto ${e.BrutoKg} kg` : ''}. El folio ${e.Title} queda anulado y NO se vuelve a usar; el siguiente pesaje nace con folio nuevo. Las fotos ya subidas se conservan.${vigC ? ` Su certificado de tratamiento ${vigC.Title} se CANCELA con el mismo motivo: su QR dirá «cancelado».` : ''}`,
         etiquetaMotivo: 'Motivo de la anulación'
     });
     if (!ok) return;
     try {
         await refrescarCliente();
+        if (vigC) {
+            const cc = camposCancelacion(`Góndola ${e.Title} anulada: ${motivo}`);
+            try { await estado.cliente.actualizarRenglon(estado.siteId, L.certificados, vigC.id, cc); }
+            catch (err) { throw new Error(`no se canceló el certificado ${vigC.Title} (${err.message}); la góndola NO se anuló`); }
+            aplicar('certificados', vigC, cc);
+        }
         const ahora = new Date().toISOString();
         const sello = `ANULADO por ${estado.cuenta.username} el ${horaCorta(ahora)} (estaba en ${e.Etapa}): ${motivo}`;
         const campos = { Etapa: 'anulado', AnuladoPor: estado.cuenta.username, AnuladoEl: ahora, AnuladoMotivo: motivo,
@@ -1683,6 +1699,7 @@ function pintarCertificadoEnDetalle(p) {
 /** Abre el certificado de UNA gondola (o el hueco donde iria). Es la unica puerta de emision desde la v0.39.0. */
 function abrirCertificadoDeEmbarque(e) {
     estado.certificadoEmbarque = e;
+    limpiarAvisos(); mostrarCorreccion(false);
     pintarCertificadoDeEmbarque();
     const d = $('dlgCertificado'); if (!d.open) d.showModal();
 }
@@ -1715,64 +1732,103 @@ function pintarCertificadoDeEmbarque() {
         ? `${cert.Title} · ${imprimible ? 'vigente y firmado' : cert.Estado + (cert.Estado === 'vigente' ? ' · SIN FIRMA' : '')}`
         : `Góndola ${e.Title || '(sin folio)'} · sin certificado`)
         + ` · góndola ${e.Title || '—'}${e.Manifiesto ? ' · manifiesto ' + e.Manifiesto : ''}`
-        + (certs.length > 1 ? ` · ${certs.length} emitidos para esta góndola` : '');
+        + (certs.length > 1 ? ` · ${certs.length} emitidos para esta góndola` : '')
+        + (vig && e.Etapa === 'anulado' ? ' · ⚠ LA GÓNDOLA ESTÁ ANULADA: cancela este certificado' : '')   // U-70 (v0.40.0)
+        + (certs.filter(c => c.Estado === 'vigente').length > 1 ? ' · ⚠ HAY MÁS DE UNO VIGENTE: vale el más nuevo; cancela los otros' : '');   // C-39 (v0.40.0)
 }
+/** U-69 (v0.40.0): el panel de correccion de Sustituir, precargado con lo que la gondola y su programa dicen HOY. */
+function mostrarCorreccion(si) {
+    $('ctCorregir').classList.toggle('oculto', !si); $('ctBotones').classList.toggle('oculto', si);
+    if (!si) return;
+    const e = estado.certificadoEmbarque; const p = e && porId(estado.prealtas, e.PreAltaId);
+    $('ctTicket').value = textoDe(e && e.TicketBascula); $('ctManifiesto').value = textoDe(e && e.Manifiesto);
+    $('ctGenerador').value = textoDe(p && p.Generador); $('ctGeneradorDireccion').value = textoDe(p && p.GeneradorDireccion);
+    $('ctGeneradorRegistro').value = textoDe(p && p.GeneradorRegistro); $('ctPozo').value = textoDe(p && p.Pozo); $('ctMotivo').value = '';
+    $('ctTicket').focus();
+}
+/** Los campos de una cancelacion de certificado (C-50: uno solo para cancelar, compensar una emision y anular la gondola). */
+const camposCancelacion = motivo => ({ Estado: 'cancelado', CanceladoPor: estado.cuenta.username, CanceladoEl: new Date().toISOString(), Motivo: String(motivo).slice(0, 255) });
 
 /**
  * Emite el certificado de la gondola abierta en el dialogo. Con `sustituye`, es una SUSTITUCION: el nuevo nace y el
  * viejo queda «sustituido» con SustituidoPor. El embarque se RELEE en vivo antes de congelar nada (gerencia pudo
  * anularlo, o el basculista corregir el neto, mientras el dialogo estaba abierto). Orden de escritura: renglon del
- * certificado -> folio unico -> FIRMA (403 si no eres gerencia: entonces el renglon recien creado se cancela con ese
- * motivo, para que no quede un certificado sin firma que parezca vigente) -> el viejo, si sustituye.
+ * certificado -> folio unico -> FIRMA (403 si no eres gerencia) -> el viejo, si sustituye.
+ * C-39 (v0.40.0): CUALQUIER falla despues de crear el renglon lo cancela —no solo la de la firma—, asi un fallo a medias
+ * deja lo que habia antes (el viejo vigente, o nada) y el aviso nombra el paso. Si la compensacion tambien falla, el
+ * aviso lo dice con el folio, y el dialogo marca «mas de uno vigente».
+ * C-38 (v0.40.0): la lista de certificados se relee y MANDA: si otro toque u otra sesion ya emitio, no nace un segundo.
+ * U-69 (v0.40.0): `corr` son los datos del panel de Sustituir. Ticket y manifiesto se corrigen en la GONDOLA (son su
+ * dato) antes de congelar; generador, registro, direccion y pozo entran solo al certificado — el programa firmado no se toca.
  */
-async function emitirCertificado(sustituye = null, motivoSust = '') {
+async function emitirCertificado(sustituye = null, motivoSust = '', corr = null) {
     const e = estado.certificadoEmbarque; if (!e || !PUEDE.emitirCertificado(estado.rol)) return;
-    const btn = sustituye ? 'btnSustituirCertificado' : 'btnEmitirCertificado';
+    const btn = sustituye ? 'ctCorregirOk' : 'btnEmitirCertificado';
     await escribiendo(btn, async () => {
     try { await refrescarCliente(); Object.assign(e, await estado.cliente.renglon(estado.siteId, L.embarques, e.id)); anclar('embarques', e); }
     catch (err) { avisar('No pude releer la góndola (' + err.message + '). No se emite.', 'error'); return; }
+    if (corr) {
+        const cambios = {};
+        if (corr.TicketBascula !== textoDe(e.TicketBascula)) cambios.TicketBascula = corr.TicketBascula || null;
+        if (corr.Manifiesto !== textoDe(e.Manifiesto)) cambios.Manifiesto = corr.Manifiesto || null;
+        if (Object.keys(cambios).length) {
+            try { await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, cambios); aplicar('embarques', e, cambios); }
+            catch (err) { avisar('No pude corregir la góndola (' + err.message + '). No se sustituye.', 'error'); return; }
+        }
+    }
     const p = porId(estado.prealtas, e.PreAltaId);
     const d = datosCertificado(p, e);
     if (!d.ok) { avisar('No se puede certificar: ' + d.motivo + '.', 'error'); pintarCertificadoDeEmbarque(); return; }
+    const gen = { Generador: p.Generador || null, GeneradorRegistro: p.GeneradorRegistro || null, GeneradorDireccion: p.GeneradorDireccion || null, Pozo: p.Pozo || null };
+    if (corr) for (const k of Object.keys(gen)) gen[k] = corr[k] || null;
     // Una gondola cerrada ANTES de la v0.39.0 no trae ticket de bascula: el papel sale sin ese dato y se avisa.
     if (!d.ticket) {
         const { ok } = await confirmar({ titulo: 'Sin ticket de báscula', ok: 'Emitir sin ticket',
-            texto: `La góndola ${d.folio} no trae número de ticket de báscula (se cerró antes de que la app lo pidiera). El certificado saldrá con ese renglón vacío.` });
+            texto: `La góndola ${d.folio} no trae número de ticket de báscula. El certificado saldrá con ese renglón vacío.` });
         if (!ok) return;
     }
     if (!sustituye) {
         const { ok } = await confirmar({ titulo: 'Emitir el certificado de tratamiento', ok: 'Emitir',
-            texto: `Góndola ${d.folio}${d.manifiesto ? `, manifiesto ${d.manifiesto}` : ''}: ${toneladas(d.kg)} t netas (${d.kg.toLocaleString('es-MX')} kg), recibida el ${diaCert(d.fechaRecepcion)}. Con tu firma queda emitido a nombre de ${(p && p.Generador) || '(sin generador)'}; lo que diga el papel no cambia después: si algo está mal, se sustituye.` });
+            texto: `Góndola ${d.folio}${d.manifiesto ? `, manifiesto ${d.manifiesto}` : ''}: ${toneladas(d.kg)} t netas (${d.kg.toLocaleString('es-MX')} kg), recibida el ${diaCert(d.fechaRecepcion)}. Con tu firma queda emitido a nombre de ${gen.Generador || '(sin generador)'}; lo que diga el papel no cambia después: si algo está mal, se sustituye.` });
         if (!ok) return;
     }
     const carrier = porId(estado.carriers, e.CarrierId || (p && p.CarrierId));
-    let nuevo = null;
+    let nuevo = null, paso = '';
     try {
         const certsDelAno = await estado.cliente.renglones(estado.siteId, L.certificados, null);
+        const otro = certsDelAno.find(x => Number(x.EmbarqueId) === Number(e.id) && x.Estado === 'vigente' && (!sustituye || x.id !== sustituye.id));
+        if (otro) throw new Error(`la góndola ya tiene el certificado ${otro.Title} vigente (${quien(otro.EmitidoPor)}). Actualiza antes de emitir otro`);
+        if (sustituye && !certsDelAno.some(x => x.id === sustituye.id && x.Estado === 'vigente')) throw new Error(`${sustituye.Title} ya no está vigente. Actualiza`);
         const folio = siguienteFolio('C', certsDelAno.map(x => x.Title));
         const ahora = new Date().toISOString();
         nuevo = await estado.cliente.crearRenglon(estado.siteId, L.certificados, limpiar({
             Title: folio, PreAltaId: p.id, EmbarqueId: e.id, Estado: 'vigente', Kg: d.kg,
             Manifiesto: d.manifiesto, TicketBascula: d.ticket, FechaRecepcion: d.fechaRecepcion, TipoBulto: d.tipoBulto,
-            Generador: p.Generador || null, GeneradorRegistro: p.GeneradorRegistro || null, GeneradorDireccion: p.GeneradorDireccion || null, Pozo: p.Pozo || null, Corriente: p.Corriente || null,
+            ...gen, Corriente: p.Corriente || null,
             Transportista: carrier ? `${carrier.Title} · autorización ${carrier.AutorizacionASEA || 'sin número'}` : null,
             Sufijo: sufijoVerificacion(), EmitidoPor: estado.cuenta.username, EmitidoEl: ahora, Version: VERSION,
             Motivo: sustituye ? `Sustituye a ${sustituye.Title}: ${motivoSust}`.slice(0, 255) : null
         }));
-        await asegurarFolioUnico(nuevo, 'C');
-        try { await firmar('certificado', nuevo); }
-        catch (err) {
-            const cancel = { Estado: 'cancelado', CanceladoPor: estado.cuenta.username, CanceladoEl: new Date().toISOString(), Motivo: ('Sin firma: ' + err.message).slice(0, 255) };
-            try { await estado.cliente.actualizarRenglon(estado.siteId, L.certificados, nuevo.id, cancel); } catch (_) { /* queda sin firma: la app no lo imprime (certificadoFirmado) */ }
-            Object.assign(nuevo, cancel); estado.certificados.push(nuevo);
-            throw err;
+        try {
+            paso = 'asegurar el folio'; await asegurarFolioUnico(nuevo, 'C');
+            paso = 'firmar'; await firmar('certificado', nuevo);
+            if (sustituye) {
+                paso = `marcar ${sustituye.Title} como sustituido`;
+                const campos = { Estado: 'sustituido', SustituidoPor: nuevo.Title, Motivo: String(motivoSust).slice(0, 255) };
+                await estado.cliente.actualizarRenglon(estado.siteId, L.certificados, sustituye.id, campos);
+                aplicar('certificados', sustituye, campos);
+            }
+        } catch (err) {
+            const cancel = camposCancelacion(`Emisión fallida al ${paso}: ${err.message}`);
+            const sinCompensar = await segundoPaso(() => estado.cliente.actualizarRenglon(estado.siteId, L.certificados, nuevo.id, cancel));
+            if (!sinCompensar) Object.assign(nuevo, cancel);
+            estado.certificados.push(nuevo);
+            throw new Error(`falló al ${paso} (${err.message}). ` + (sinCompensar
+                ? `OJO: ${nuevo.Title} quedó creado y no se pudo cancelar (${sinCompensar}): cancélalo desde aquí.`
+                : `${nuevo.Title} quedó cancelado${sustituye ? ` y ${sustituye.Title} sigue vigente` : ''}.`));
         }
         estado.certificados.push(nuevo);
-        if (sustituye) {
-            const campos = { Estado: 'sustituido', SustituidoPor: nuevo.Title, Motivo: String(motivoSust).slice(0, 255) };
-            await estado.cliente.actualizarRenglon(estado.siteId, L.certificados, sustituye.id, campos);
-            aplicar('certificados', sustituye, campos);
-        }
+        if (corr) mostrarCorreccion(false);
         avisar(`Certificado ${nuevo.Title} emitido${sustituye ? ` en sustitución de ${sustituye.Title}` : ''}. Publica la verificación con el exporte (-PublicarCertificados) para que el QR conteste.`, 'bien');
     } catch (err) { avisar('No se pudo emitir: ' + err.message, 'error'); }
     pintarCertificadoDeEmbarque();
@@ -1780,12 +1836,22 @@ async function emitirCertificado(sustituye = null, motivoSust = '') {
     if (estado.prealtaAbierta) pintarCertificadoEnDetalle(estado.prealtaAbierta);
     });
 }
-async function sustituirCertificado() {
+/** U-69 (v0.40.0): Sustituir ya no es un confirm con motivo: abre el panel de correccion precargado. */
+function sustituirCertificado() {
     const e = estado.certificadoEmbarque; const vig = e && certificadoVigente(e); if (!vig || !PUEDE.emitirCertificado(estado.rol)) return;
-    const { ok, motivo } = await confirmar({ titulo: 'Sustituir el certificado', ok: 'Sustituir', motivo: true, etiquetaMotivo: 'Qué estaba mal',
-        texto: `${vig.Title} queda como «sustituido» (su QR lo dirá) y nace uno nuevo con lo que la góndola ${e.Title} dice HOY. El motivo queda registrado en los dos.` });
+    limpiarAvisos(); mostrarCorreccion(true);
+}
+async function confirmarSustitucion() {
+    const e = estado.certificadoEmbarque; const vig = e && certificadoVigente(e); if (!vig || !PUEDE.emitirCertificado(estado.rol)) return;
+    const motivo = $('ctMotivo').value.trim();
+    if (!motivo) { avisar('Escribe qué estaba mal: queda registrado en los dos certificados.', 'error'); $('ctMotivo').focus(); return; }
+    const corr = { TicketBascula: $('ctTicket').value.trim(), Manifiesto: $('ctManifiesto').value.trim(), Generador: $('ctGenerador').value.trim(),
+        GeneradorDireccion: $('ctGeneradorDireccion').value.trim(), GeneradorRegistro: $('ctGeneradorRegistro').value.trim(), Pozo: $('ctPozo').value.trim() };
+    const tocaGondola = corr.TicketBascula !== textoDe(e.TicketBascula) || corr.Manifiesto !== textoDe(e.Manifiesto);
+    const { ok } = await confirmar({ titulo: 'Sustituir el certificado', ok: 'Sustituir',
+        texto: `${vig.Title} queda como «sustituido» (su QR lo dirá) y nace uno nuevo con los datos del panel${tocaGondola ? '; el ticket y el manifiesto se corrigen también en la góndola' : ''}. «${motivo}» queda registrado en los dos.` });
     if (!ok) return;
-    await emitirCertificado(vig, motivo);
+    await emitirCertificado(vig, motivo, corr);
 }
 async function cancelarCertificado() {
     const e = estado.certificadoEmbarque; const vig = e && certificadoVigente(e); if (!vig || !PUEDE.emitirCertificado(estado.rol)) return;
@@ -1795,7 +1861,7 @@ async function cancelarCertificado() {
     if (!ok) return;
     try {
         await refrescarCliente();
-        const campos = { Estado: 'cancelado', CanceladoPor: estado.cuenta.username, CanceladoEl: new Date().toISOString(), Motivo: String(motivo).slice(0, 255) };
+        const campos = camposCancelacion(motivo);
         await estado.cliente.actualizarRenglon(estado.siteId, L.certificados, vig.id, campos);
         aplicar('certificados', vig, campos);
         avisar(`Certificado ${vig.Title} cancelado.`, 'bien');
@@ -2857,7 +2923,13 @@ $('btnCerrarPrealta').addEventListener('click', cerrarPrealta);
 $('btnEmitirCertificado').addEventListener('click', () => emitirCertificado());   // v0.39.0: sobre la gondola abierta
 $('btnSustituirCertificado').addEventListener('click', sustituirCertificado);
 $('btnCancelarCertificado').addEventListener('click', cancelarCertificado);
-$('ctCerrar').addEventListener('click', () => { $('dlgCertificado').close(); estado.certificadoAbierto = null; estado.certificadoEmbarque = null; });
+$('ctCorregirOk').addEventListener('click', confirmarSustitucion);   // U-69 (v0.40.0)
+$('ctCorregirVolver').addEventListener('click', () => { limpiarAvisos(); mostrarCorreccion(false); });
+$('ctCerrar').addEventListener('click', () => $('dlgCertificado').close());
+// C-38 (v0.40.0): el estado se suelta en el evento close, no en el boton: Escape cerraba sin soltarlo. Solo si el dialogo
+// SIGUE cerrado: el close llega encolado y, si se reabrio en ese hueco, vaciaba la gondola recien abierta (lo cazo la E2E;
+// es la misma carrera que obs. 603 midio en confirmar()).
+$('dlgCertificado').addEventListener('close', () => { if ($('dlgCertificado').open) return; estado.certificadoAbierto = null; estado.certificadoEmbarque = null; mostrarCorreccion(false); });
 $('ctImprimir').addEventListener('click', imprimirCertificado);
 $('btnEliminarPrealta').addEventListener('click', eliminarPrealta);
 $('btnEditarPrealta').addEventListener('click', editarPrealta);

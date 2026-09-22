@@ -21,7 +21,9 @@
     const ESTADO = {
         vigente: ['ok', 'VIGENTE — este certificado fue emitido por MINSA ENERGY y sigue válido.'],
         sustituido: ['ojo', 'SUSTITUIDO — este certificado fue reemplazado por otro. El papel con este folio ya no vale.'],
-        cancelado: ['mal', 'CANCELADO — este certificado fue cancelado por MINSA ENERGY. El papel con este folio no vale.']
+        cancelado: ['mal', 'CANCELADO — este certificado fue cancelado por MINSA ENERGY. El papel con este folio no vale.'],
+        // S-18 (v0.40.0): el renglon existe pero sin la firma de gerencia que la app exige; los publicadores ya no lo dan por vigente.
+        'sin-firma': ['mal', 'NO VÁLIDO — este folio no tiene la firma de gerencia de MINSA ENERGY registrada. El papel con este folio no vale.']
     };
     const enc = new TextEncoder();
     const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');

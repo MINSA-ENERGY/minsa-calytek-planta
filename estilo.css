@@ -783,6 +783,9 @@ button:not(:disabled):active { transform: scale(.98); }
 .dlg-cert .ct-nav { font-family: var(--mono); font-size: .78rem; color: var(--mute); }
 .dlg-cert .ct-vista { overflow: auto; max-height: 70dvh; background: var(--bg); padding: var(--sp-2); }
 .dlg-cert .dlg-botones button { flex: 1; }
+.dlg-cert .dlg-avisos .mensaje { margin: 0; }   /* U-71 (v0.40.0) */
+.dlg-cert .ct-corregir { border: 1px solid var(--line); padding: var(--sp-3); background: var(--surf); }   /* U-69 (v0.40.0) */
+.dlg-cert .ct-corregir .dlg-botones { margin-top: var(--sp-3); }
 .cert { width: 1056px; min-height: 816px; box-sizing: border-box; padding: 28px; background: #fff; color: #131c2c; font-family: "Barlow", system-ui, sans-serif; font-size: 13px; line-height: 1.35; transform-origin: top left; }
 .ct-vista .cert { zoom: .92; }
 @media (max-width: 1100px) { .ct-vista .cert { zoom: .6; } }
