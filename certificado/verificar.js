@@ -11,7 +11,7 @@
     const RE_F = /^(CT-\d{2}-\d{4})-([a-z2-9]{12})$/;   // folio + sufijo, tal cual lo pinta la app (reglas.sufijoVerificacion)
     const ITERACIONES = 100000;
     const ETIQUETAS = [
-        ['folio', 'Folio'], ['estado', 'Estado'], ['generador', 'Generador'], ['registro', 'Registro de generador'], ['pozo', 'Pozo'],
+        ['folio', 'Folio'], ['estado', 'Estado'], ['generador', 'Generador'], ['registro', 'Registro de generador'], ['direccion', 'Dirección del generador'], ['pozo', 'Pozo'],
         ['residuo', 'Residuo'], ['toneladas', 'Volumen tratado'], ['embarques', 'Embarques'], ['fechas', 'Fecha de recepción'],
         ['transportista', 'Transportista'], ['emitido', 'Emitido']
     ];

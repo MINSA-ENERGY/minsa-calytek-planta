@@ -71,7 +71,7 @@ for (const f of renglones) {
     let fechas = null;
     if (f.PrimerCierre && f.UltimoCierre) { const d1 = dia(f.PrimerCierre), d2 = dia(f.UltimoCierre); fechas = d1 === d2 ? d1 : `del ${d1} al ${d2}`; }
     const doc = {
-        folio: f.Title, estado: f.Estado, generador: f.Generador ?? null, registro: f.GeneradorRegistro ?? null, pozo: f.Pozo ?? null,
+        folio: f.Title, estado: f.Estado, generador: f.Generador ?? null, registro: f.GeneradorRegistro ?? null, direccion: f.GeneradorDireccion ?? null, pozo: f.Pozo ?? null,
         residuo, kg: f.Kg ?? null, embarques: emb, fechas, transportista: f.Transportista ?? null,
         emitidoEl: f.EmitidoEl ?? null, sustituidoPor: f.SustituidoPor ?? null, motivo: f.Estado === 'cancelado' ? (f.Motivo ?? null) : null, publicadoEl: ahora
     };

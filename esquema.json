@@ -1,6 +1,6 @@
 {
   "_que_es": "Esquema de las listas de SharePoint de la app de control de planta CALYTEK. Es la UNICA fuente: la lee herramientas-dev/provisionar.html para crearlas y app/graph.js para leerlas/escribirlas. Los nombres de columna son los INTERNOS (sin espacios ni acentos); el titulo visible va en 'titulo'. Las relaciones van por ID de renglon (numero), no por columna de busqueda: mas simple de leer por Graph y no obliga a crear las listas en orden. Los campos citan los 24 de minsa-energy/ambiental/calytek/registro-prestador-servicios.md seccion 4.1 (c1..c24) y el padron (padron-transportistas-y-vigencias.md).",
-  "version": 5,
+  "version": 6,
   "listas": [
     {
       "nombre": "PLANTA_Carriers",
@@ -65,6 +65,7 @@
         { "nombre": "Estado", "titulo": "Estado", "tipo": "choice", "opciones": ["borrador", "firmada", "cerrada"], "obligatorio": true, "indexada": true },
         { "nombre": "Generador", "titulo": "Generador (razon social)", "tipo": "text", "nota": "c1" },
         { "nombre": "GeneradorRegistro", "titulo": "No. registro ASEA del generador", "tipo": "text", "nota": "c2" },
+        { "nombre": "GeneradorDireccion", "titulo": "Direccion del generador", "tipo": "text", "nota": "v0.38.0: se imprime bajo GENERADOR en el certificado (Carlos, 23-sep)" },
         { "nombre": "Pozo", "titulo": "Pozo / instalacion de origen", "tipo": "text" },
         { "nombre": "Corriente", "titulo": "Corriente declarada", "tipo": "choice", "opciones": ["base-agua", "base-aceite", "fluidos-base-agua", "fluidos-base-aceite"], "nota": "Tabla 8 del Resolutivo 1536/2025" },
         { "nombre": "Campana", "titulo": "Folio de campana (L-AA-NNN)", "tipo": "text", "nota": "ticket 03; al arranque una sola" },
@@ -182,6 +183,7 @@
         { "nombre": "UltimoCierre", "titulo": "Ultimo embarque cerrado", "tipo": "dateTime" },
         { "nombre": "Generador", "titulo": "Generador (copia)", "tipo": "text", "nota": "copia del programa al emitir: el papel no cambia si la pre-alta se edita" },
         { "nombre": "GeneradorRegistro", "titulo": "Registro del generador (copia)", "tipo": "text" },
+        { "nombre": "GeneradorDireccion", "titulo": "Direccion del generador (copia)", "tipo": "text" },
         { "nombre": "Pozo", "titulo": "Pozo (copia)", "tipo": "text" },
         { "nombre": "Corriente", "titulo": "Corriente (copia)", "tipo": "text" },
         { "nombre": "Transportista", "titulo": "Transportista y autorizacion (copia)", "tipo": "text" },

@@ -1373,7 +1373,7 @@ function nuevaPrealta() {
     opciones($('paCarrier'), estado.carriers.filter(c => c.Activo !== false), c => c.id, c => c.Title);
     $('paCarrier').value = '';   // U-40: opciones() ya conserva el value; una pre-alta nueva empieza sin carrier
     pintarUnidadesChoferesPrealta();
-    for (const id of ['paTitulo', 'paCliente', 'paPozoTitulo', 'paMes', 'paGenerador', 'paGeneradorRegistro', 'paPozo', 'paFecha', 'paGondolas', 'paCorreoFecha', 'paCorreoRemitente', 'paNotas']) $(id).value = '';
+    for (const id of ['paTitulo', 'paCliente', 'paPozoTitulo', 'paMes', 'paGenerador', 'paGeneradorDireccion', 'paGeneradorRegistro', 'paPozo', 'paFecha', 'paGondolas', 'paCorreoFecha', 'paCorreoRemitente', 'paNotas']) $(id).value = '';
     $('paCorriente').value = '';
     $('paMes').value = String(new Date().getFullYear());   // U-54: casi siempre es el año en curso
     armarTituloPrealta();
@@ -1392,7 +1392,7 @@ function editarPrealta() {
     opciones($('paCarrier'), estado.carriers.filter(c => c.Activo !== false || Number(c.id) === Number(p.CarrierId)), c => c.id, c => c.Title);
     const f = textoDe;   // C-26
     partirTituloPrealta(f(p.Title)); $('paCorriente').value = f(p.Corriente); $('paGenerador').value = f(p.Generador);
-    $('paGeneradorRegistro').value = f(p.GeneradorRegistro); $('paPozo').value = f(p.Pozo); $('paCarrier').value = f(p.CarrierId);
+    $('paGeneradorRegistro').value = f(p.GeneradorRegistro); $('paGeneradorDireccion').value = f(p.GeneradorDireccion); $('paPozo').value = f(p.Pozo); $('paCarrier').value = f(p.CarrierId);
     $('paFecha').value = p.FechaEstimada ? fechaCorta(p.FechaEstimada) : ''; $('paGondolas').value = f(p.GondolasEsperadas);
     $('paCorreoFecha').value = p.CorreoFecha ? fechaCorta(p.CorreoFecha) : ''; $('paCorreoRemitente').value = f(p.CorreoRemitente); $('paNotas').value = f(p.Notas);
     pintarUnidadesChoferesPrealta();
@@ -1469,7 +1469,7 @@ async function guardarPrealta() {
         await refrescarCliente();
         if (edit) {
             const cambios = paraPatch({
-                Title: $('paTitulo').value.trim(), Generador: $('paGenerador').value.trim(), GeneradorRegistro: $('paGeneradorRegistro').value.trim(),
+                Title: $('paTitulo').value.trim(), Generador: $('paGenerador').value.trim(), GeneradorRegistro: $('paGeneradorRegistro').value.trim(), GeneradorDireccion: $('paGeneradorDireccion').value.trim(),
                 Pozo: $('paPozo').value.trim(), Corriente: $('paCorriente').value, CarrierId: Number($('paCarrier').value),
                 UnidadesIds: marcados('paUnidades'), ChoferesIds: marcados('paChoferes'),
                 FechaEstimada: aIsoDia($('paFecha').value), GondolasEsperadas: $('paGondolas').value ? Number($('paGondolas').value) : null,
@@ -1490,7 +1490,7 @@ async function guardarPrealta() {
         estado.prealtas = todas; reanclar();
         const campos = limpiar({
             Title: $('paTitulo').value.trim(), Estado: 'borrador', Generador: $('paGenerador').value.trim(),
-            GeneradorRegistro: $('paGeneradorRegistro').value.trim(), Pozo: $('paPozo').value.trim(),
+            GeneradorRegistro: $('paGeneradorRegistro').value.trim(), GeneradorDireccion: $('paGeneradorDireccion').value.trim(), Pozo: $('paPozo').value.trim(),
             Corriente: $('paCorriente').value, CarrierId: Number($('paCarrier').value),
             UnidadesIds: marcados('paUnidades'), ChoferesIds: marcados('paChoferes'),
             FechaEstimada: aIsoDia($('paFecha').value), GondolasEsperadas: $('paGondolas').value ? Number($('paGondolas').value) : null,
@@ -1690,7 +1690,7 @@ async function emitirCertificado(sustituye = null, motivoSust = '') {
             Title: folio, PreAltaId: p.id, Estado: 'vigente', Kg: r.kg,
             Embarques: r.folios.join('; '), Manifiestos: r.manifiestos.join('; '),
             PrimerCierre: r.primerCierre, UltimoCierre: r.ultimoCierre,
-            Generador: p.Generador || null, GeneradorRegistro: p.GeneradorRegistro || null, Pozo: p.Pozo || null, Corriente: p.Corriente || null,
+            Generador: p.Generador || null, GeneradorRegistro: p.GeneradorRegistro || null, GeneradorDireccion: p.GeneradorDireccion || null, Pozo: p.Pozo || null, Corriente: p.Corriente || null,
             Transportista: carrier ? `${carrier.Title} · autorización ${carrier.AutorizacionASEA || 'sin número'}` : null,
             Sufijo: sufijoVerificacion(), EmitidoPor: estado.cuenta.username, EmitidoEl: ahora, Version: VERSION,
             Motivo: sustituye ? `Sustituye a ${sustituye.Title}: ${motivoSust}`.slice(0, 255) : null
@@ -1784,6 +1784,7 @@ function pintarCertificado(c, t) {
     const fila = (...incisos) => { const f = el('div', 'ct-fila'); for (const i of incisos) f.appendChild(i); return f; };
     const filaCentrada = (...incisos) => { const f = fila(...incisos); f.classList.add('centrada'); return f; };
     hoja.appendChild(fila(inciso('GENERADOR:', c.Generador, 'fuerte')));
+    hoja.appendChild(fila(inciso('DIRECCIÓN:', c.GeneradorDireccion)));   // v0.38.0 (Carlos): renglon nuevo bajo GENERADOR; los certificados anteriores no lo traen y sale «—»
     hoja.appendChild(fila(inciso('REGISTRO DE GENERADOR:', c.GeneradorRegistro, 'mono'), inciso('POZO:', c.Pozo, 'fuerte')));
     const prosa = el('p', 'ct-prosa'); prosa.appendChild(el('b', '', 'MATERIAS INDUSTRIALIZADAS CCMV DEL NORTE, S.A. DE C.V.')); prosa.appendChild(document.createTextNode(' — MINSA ENERGY — certifica que ha recibido para su tratamiento en su planta '));
     prosa.appendChild(el('b', '', 'CALYTEK')); prosa.appendChild(document.createTextNode(', de una forma ambientalmente segura y conforme a los términos de su autorización, el residuo de:')); hoja.appendChild(prosa);

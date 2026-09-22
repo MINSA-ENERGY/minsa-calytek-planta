@@ -520,7 +520,7 @@ try {
     document.querySelector('#pestanas button[data-p="prealtas"]').click();
     if (captura) {
         clic('btnNuevaPrealta');
-        poner('paCliente', 'cliente demo'); poner('paPozoTitulo', 'pozo 1'); poner('paMes', '2026'); poner('paGenerador', 'GENERADOR DEMO'); poner('paCorriente', 'base-aceite');
+        poner('paCliente', 'cliente demo'); poner('paPozoTitulo', 'pozo 1'); poner('paMes', '2026'); poner('paGenerador', 'GENERADOR DEMO'); poner('paGeneradorDireccion', 'Calle Demo 123, Col. Centro, Poza Rica, Veracruz'); poner('paCorriente', 'base-aceite');
         R.ok('el nombre del programa se arma CLIENTE-POZO-AÑO en mayúsculas y rellena el pozo', $('paTitulo').value === 'CLIENTE DEMO-POZO 1-2026' && $('paPozo').value === 'POZO 1', $('paTitulo').value);
         poner('paPozo', 'Pozo-1');
         // U-10 (v0.23.0): «+ Alta de carrier» abre la forma del padron ENCIMA de la pre-alta; al guardar, el nuevo queda elegido
@@ -1376,7 +1376,7 @@ try {
                 const c1 = filas('certificados')[0];
                 await esperar(() => $('dlgCertificado').open, 'vista del certificado');
                 const firmaC = filas('firmas').find(f => f.fields.Tipo === 'certificado' && Number(f.fields.ObjetoId) === c1.id);
-                R.ok('v0.35.0: el renglón nace vigente con folio CT-AA-NNNN, la suma de netos, los folios de embarque y sufijo de 12', /^CT-\d\d-0001$/.test(c1.fields.Title) && c1.fields.Estado === 'vigente' && c1.fields.Kg === kgEsperados && c1.fields.Embarques.split(';').length === cerrados.length && /^[a-z2-9]{12}$/.test(c1.fields.Sufijo) && c1.fields.EmitidoPor === window.__CUENTA.username && c1.fields.Generador === pDemo.fields.Generador, `${c1.fields.Title} · ${c1.fields.Kg} kg (esperados ${kgEsperados}) · ${c1.fields.Embarques}`);
+                R.ok('v0.35.0: el renglón nace vigente con folio CT-AA-NNNN, la suma de netos, los folios de embarque y sufijo de 12', /^CT-\d\d-0001$/.test(c1.fields.Title) && c1.fields.Estado === 'vigente' && c1.fields.Kg === kgEsperados && c1.fields.Embarques.split(';').length === cerrados.length && /^[a-z2-9]{12}$/.test(c1.fields.Sufijo) && c1.fields.EmitidoPor === window.__CUENTA.username && c1.fields.Generador === pDemo.fields.Generador && c1.fields.GeneradorDireccion === pDemo.fields.GeneradorDireccion && !!c1.fields.GeneradorDireccion, `${c1.fields.Title} · ${c1.fields.Kg} kg (esperados ${kgEsperados}) · ${c1.fields.Embarques}`);
                 R.ok('v0.35.0: la emisión deja su firma en PLANTA_Firmas (Tipo certificado, mismo firmante)', !!firmaC && firmaC.fields.Firmante === window.__CUENTA.username);
                 const cert = $('certificado');
                 const qr = cert.querySelector('svg.qr');
