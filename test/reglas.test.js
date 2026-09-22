@@ -209,8 +209,8 @@ assert.equal(residuoDe('fluidos-base-agua'), 'RECORTES DE PERFORACIÓN · BASE A
 assert.equal(residuoDe(''), 'RECORTES DE PERFORACIÓN');
 {
     const suf = sufijoVerificacion(a => { for (let i = 0; i < a.length; i++) a[i] = (i * 37 + 5) % 256; return a; });
-    assert.match(suf, /^[a-z2-9]{8}$/, 'sufijo de 8 sin ambiguos: ' + suf);
-    assert.equal(sufijoVerificacion(a => a.fill(0)), 'aaaaaaaa', 'determinista con el aleatorio inyectado');
+    assert.match(suf, /^[a-z2-9]{12}$/, 'sufijo de 12 sin ambiguos: ' + suf);
+    assert.equal(sufijoVerificacion(a => a.fill(0)), 'aaaaaaaaaaaa', 'determinista con el aleatorio inyectado');
     assert.doesNotMatch(sufijoVerificacion(a => a.fill(255)), /[01lIO]/);
     assert.equal(urlVerificacion('https://planta.minsaenergy.com/certificado/', { Title: 'CT-26-0001', Sufijo: suf }), `https://planta.minsaenergy.com/certificado/?f=CT-26-0001-${suf}`);
     assert.equal(urlVerificacion('https://planta.minsaenergy.com/certificado', { Title: 'CT-26-0001', Sufijo: suf }).startsWith('https://planta.minsaenergy.com/certificado/?f='), true, 'agrega la barra');

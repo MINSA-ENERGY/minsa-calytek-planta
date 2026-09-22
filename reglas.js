@@ -348,12 +348,13 @@ export function residuoDe(corriente) {
 
 /**
  * Sufijo aleatorio de verificacion: va solo en el QR (la URL publica es ?f=<folio>-<sufijo>), para que nadie recorra
- * 0001, 0002… y lea la lista de clientes y volumenes. 8 caracteres de un alfabeto sin ambiguos (sin 0/O, 1/l/I): el
+ * 0001, 0002… y lea la lista de clientes y volumenes. 12 caracteres (~59 bits) de un alfabeto sin ambiguos (sin 0/O, 1/l/I):
+ * desde la v0.36.0 es ademas la LLAVE con que se cifra el JSON publico (PBKDF2), por eso no bastan 8. El
  * humano lee el folio, no esto. `aleatorio` se inyecta en pruebas.
  */
 export function sufijoVerificacion(aleatorio = crypto.getRandomValues.bind(crypto)) {
     const ALFABETO = 'abcdefghjkmnpqrstuvwxyz23456789';
-    const bytes = aleatorio(new Uint8Array(8));
+    const bytes = aleatorio(new Uint8Array(12));
     return [...bytes].map(b => ALFABETO[b % ALFABETO.length]).join('');
 }
 

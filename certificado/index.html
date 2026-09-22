@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <!-- Pagina PUBLICA de verificacion del certificado de tratamiento (v0.35.0). Sin login y sin Graph: lee
-     ./datos/<folio>-<sufijo>.json, que regenera docs/exportar-planta.ps1 -PublicarCertificados. Muestra SOLO lo
+     ./datos/<sha256(folio-sufijo)>.json CIFRADO con el sufijo del QR (ver verificar.js), que regenera
+     docs/exportar-planta.ps1 -PublicarCertificados. Muestra SOLO lo
      impreso en el papel (FO-CT-01) y el ESTADO (vigente / sustituido / cancelado). Sin PDF descargable a proposito. -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
