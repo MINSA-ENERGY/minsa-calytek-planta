@@ -519,7 +519,7 @@
 
 <!-- integrity = sha384 del archivo (vendor/INTEGRIDAD.md); test/vendor.test.js lo coteja contra el archivo del repo (S-03). -->
 <script src="./vendor/msal-browser.min.js" integrity="sha384-0xw/kzSK+WLDaLIkXwqFOXYqCnxt2agAhE5d3NN2ynU8GW5pry4+6dDtv4U2Fhkx" crossorigin="anonymous"></script>
-<link id="cssImpresionCert" rel="stylesheet" href="./impresion-certificado.css" disabled>   <!-- v0.35.0: solo mientras se imprime el certificado (carta horizontal) -->
+<link id="cssImpresionCert" rel="stylesheet" href="./impresion-certificado.css" media="not all">   <!-- v0.35.0: solo mientras se imprime el certificado (carta horizontal); v0.37.0: por media, no por disabled -->
 <script src="./vendor/qrcode.js" integrity="sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k" crossorigin="anonymous"></script>
 <script src="./app.js" type="module"></script>
 </body>

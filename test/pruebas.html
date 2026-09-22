@@ -1384,8 +1384,8 @@ try {
                 R.ok('v0.35.0: vigente y firmado → Imprimir habilitado', !$('ctImprimir').disabled && $('ctEstado').textContent.includes('firmado'));
                 // v0.36.1: «Guardar como PDF» nombra el archivo por document.title → el folio va ahi mientras dura el print y vuelve despues.
                 { const printReal = window.print; let tituloEnPrint = ''; window.print = () => { tituloEnPrint = document.title; }; const tituloAntes = document.title;
-                  clic('ctImprimir'); const conHoja = !$('cssImpresionCert').disabled; window.dispatchEvent(new Event('afterprint')); window.print = printReal;
-                  R.ok('v0.36.1: Imprimir pone el folio en document.title durante print() y lo restaura en afterprint', tituloEnPrint === `Certificado de tratamiento ${c1.fields.Title}` && conHoja && document.title === tituloAntes && $('cssImpresionCert').disabled, `en print «${tituloEnPrint}» · despues «${document.title}»`); }
+                  clic('ctImprimir'); const conHoja = $('cssImpresionCert').media === 'print'; window.dispatchEvent(new Event('afterprint')); window.print = printReal;
+                  R.ok('v0.36.1: Imprimir pone el folio en document.title durante print() y lo restaura en afterprint', tituloEnPrint === `Certificado de tratamiento ${c1.fields.Title}` && conHoja && document.title === tituloAntes && $('cssImpresionCert').media === 'not all', `en print «${tituloEnPrint}» · despues «${document.title}»`); }
                 clic('ctCerrar'); await dormir(20);
                 R.ok('v0.35.0: con uno vigente, Emitir se esconde y aparecen Ver / Sustituir / Cancelar', !visible('btnEmitirCertificado') && visible('btnVerCertificado') && visible('btnSustituirCertificado') && visible('btnCancelarCertificado') && $('paDetalleCertificado').textContent.includes(c1.fields.Title));
                 // S-11 sobre el certificado: si la firma desaparece (o la creo alguien sin rol), se ve pero no se imprime.
@@ -1458,7 +1458,7 @@ try {
         $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close();
         document.querySelector('#pestanas button[data-p="prealtas"]').click(); $('paGrupoCerradas').open = true;
         const r = [...document.querySelectorAll('#paCerradas .renglon')].find(x => x.textContent.includes('CLIENTE DEMO'));
-        if (r) { r.querySelector('button').click(); await dormir(30); clic('btnVerCertificado'); await dormir(30); if (params.get('imprimir')) { document.body.classList.add('imprimiendo-certificado'); $('cssImpresionCert').disabled = false; } }
+        if (r) { r.querySelector('button').click(); await dormir(30); clic('btnVerCertificado'); await dormir(30); if (params.get('imprimir')) { document.body.classList.add('imprimiendo-certificado'); $('cssImpresionCert').media = 'print'; } }
     } else if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); document.querySelector(`#pestanas button[data-p="${params.get('vista')}"], #pestanasExtra button[data-p="${params.get('vista')}"]`).click(); }
 }
 </script>

@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, resumenCertificado, urlVerificacion, toneladas } from './reglas.js';
 
-const VERSION = '0.36.1';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.37.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1772,7 +1772,9 @@ function pintarCertificado(c, t) {
     t.textContent = '';
     t.classList.toggle('sustituido', c.Estado === 'sustituido'); t.classList.toggle('cancelado', c.Estado === 'cancelado');
     const marco = el('div', 'ct-marco'); const hoja = el('div', 'ct-hoja'); marco.appendChild(hoja); t.appendChild(marco);
-    const agua = el('img', 'ct-agua'); agua.src = './marca/lockup.svg'; agua.alt = ''; hoja.appendChild(agua);
+    // v0.37.0: la marca de agua es el SIMBOLO solo, no el lockup (Carlos, 23-sep); gris horneado y 4.3 in contra el lado corto, como las plantillas de la casa (marca_agua.py)
+    // v0.37.0: la marca de agua es el SIMBOLO solo, no el lockup (Carlos, 23-sep); gris horneado y 4.3 in contra el lado corto, como las plantillas de la casa (marca_agua.py)
+    const agua = el('img', 'ct-agua'); agua.src = './marca/simbolo-agua.svg'; agua.alt = ''; hoja.appendChild(agua);
     if (c.Estado !== 'vigente') hoja.appendChild(el('div', 'ct-sello', c.Estado === 'cancelado' ? 'CANCELADO' : `SUSTITUIDO POR ${c.SustituidoPor || '—'}`));
     hoja.appendChild(el('div', 'ct-formato', CFG.formato));
     const folioCaja = el('div', 'ct-folio'); folioCaja.appendChild(el('div', 'ct-eti', 'FOLIO')); folioCaja.appendChild(el('div', 'ct-folio-num', c.Title)); hoja.appendChild(folioCaja);
@@ -1813,13 +1815,15 @@ function imprimirCertificado() {
     if ($('ctImprimir').disabled) return;
     // La hoja de impresion (carta horizontal, solo el formato) se enciende SOLO mientras dura el print: @page no admite clase
     // y el ticket termico / Reportes no deben salir en carta horizontal.  La CSP no deja un <style> inline; un <link> propio si.
-    document.body.classList.add('imprimiendo-certificado'); $('cssImpresionCert').disabled = false;
+    // v0.37.0: se enciende por `media` (print / not all), NO por `disabled`: un <link> apagado y vuelto a encender ya no se aplicaba
+    // al imprimir (medido con Edge headless: la SEGUNDA impresion de la sesion salia en blanco y vertical).
+    document.body.classList.add('imprimiendo-certificado'); $('cssImpresionCert').media = 'print';
     // v0.36.1: «Guardar como PDF» toma el nombre del archivo de document.title — con el folio, cada certificado sale con el suyo (pedido de Carlos).
     const tituloApp = document.title; const c = estado.certificadoAbierto; if (c && c.Title) document.title = `Certificado de tratamiento ${c.Title}`;
     // quitar corre UNA vez: por afterprint o por el respaldo de 60 s (algun WebView no manda afterprint). El respaldo se cancela al
     // salir por afterprint — si sobreviviera, pisaria document.title un minuto despues (lo cazo la E2E en tiempo virtual).
     let respaldo = 0;
-    const quitar = () => { clearTimeout(respaldo); document.body.classList.remove('imprimiendo-certificado'); $('cssImpresionCert').disabled = true; document.title = tituloApp; window.removeEventListener('afterprint', quitar); };
+    const quitar = () => { clearTimeout(respaldo); document.body.classList.remove('imprimiendo-certificado'); $('cssImpresionCert').media = 'not all'; document.title = tituloApp; window.removeEventListener('afterprint', quitar); };
     window.addEventListener('afterprint', quitar);
     window.print();
     respaldo = setTimeout(quitar, 60000);
