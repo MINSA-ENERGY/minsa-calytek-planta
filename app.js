@@ -1788,9 +1788,8 @@ function pintarCertificado(c, t) {
     const prosa = el('p', 'ct-prosa'); prosa.appendChild(el('b', '', 'MATERIAS INDUSTRIALIZADAS CCMV DEL NORTE, S.A. DE C.V.')); prosa.appendChild(document.createTextNode(' — MINSA ENERGY — certifica que ha recibido para su tratamiento en su planta '));
     prosa.appendChild(el('b', '', 'CALYTEK')); prosa.appendChild(document.createTextNode(', de una forma ambientalmente segura y conforme a los términos de su autorización, el residuo de:')); hoja.appendChild(prosa);
     hoja.appendChild(el('div', 'ct-residuo', residuoDe(c.Corriente)));
-    hoja.appendChild(el('div', 'ct-regla'));
     const folios = lista(c.Embarques), manif = lista(c.Manifiestos);
-    // v0.38.0 (Carlos, 23-sep): sin hueco bajo el residuo; VOLUMEN/EMBARQUES/FECHA centrados; firma al centro; leyenda del QR corta; pie sin la linea «Emitido...».
+    // v0.38.0 (Carlos, 23-sep): fuera la regla azul bajo el residuo y mas aire debajo; VOLUMEN/EMBARQUES/FECHA centrados; firma al centro; leyenda del QR corta; pie sin la linea «Emitido...».
     hoja.appendChild(filaCentrada(inciso('VOLUMEN:', `${toneladas(c.Kg)} TON.`, 'volumen'), inciso('EMBARQUES:', String(folios.length), 'mono'), inciso('FECHA DE RECEPCIÓN:', c.PrimerCierre && c.UltimoCierre && fechaMexico(new Date(c.PrimerCierre)) !== fechaMexico(new Date(c.UltimoCierre)) ? `del ${diaCert(c.PrimerCierre)} al ${diaCert(c.UltimoCierre)}` : diaCert(c.UltimoCierre || c.PrimerCierre), 'fuerte')));
     hoja.appendChild(fila(inciso('TRANSPORTISTA:', c.Transportista, 'fuerte')));   // renglon entero: un numero de autorizacion no se parte (revisor v0.35.1)
     hoja.appendChild(fila(inciso('AUTORIZACIÓN DE LA PLANTA:', CFG.autorizacionPlanta || 'pendiente (ASEA-03-011-A)', 'mono')));
