@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas } from './reglas.js';
 
-const VERSION = '0.41.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.42.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -967,11 +967,12 @@ function pintarCerrados() {
     const todos = estado.embarques.filter(e => e.Title && !enPlanta(e)).sort((a, b) => momento(b).localeCompare(momento(a)));
     const cerrados = todos.filter(e => e.Etapa === 'cerrado');
     const res = $('baResCerrados'); res.textContent = '';
-    res.appendChild(document.createTextNode(`${cerrados.length} con neto${todos.length - cerrados.length ? ` · ${plural(todos.length - cerrados.length, 'anulado o rechazado', 'anulados o rechazados')}` : ''} · últimos ${CONFIG.ventanaDias} días`));
+    const sinCert = cerrados.filter(e => !certificadoVigente(e)).length;   // U-76 (v0.42.0)
+    res.appendChild(document.createTextNode(`${cerrados.length} con neto${sinCert ? ` · ${sinCert} sin certificado` : ''}${todos.length - cerrados.length ? ` · ${plural(todos.length - cerrados.length, 'anulado o rechazado', 'anulados o rechazados')}` : ''} · últimos ${CONFIG.ventanaDias} días`));
     let n = 0;
     const visibles = [];
     for (const e of todos) {
-        if (!pega(e.Title, e.PlacaTractor, e.PlacaPlana, e.Manifiesto, nombreDe(estado.carriers, e.CarrierId))) continue;
+        if (!pega(e.Title, e.PlacaTractor, e.PlacaPlana, e.Manifiesto, nombreDe(estado.carriers, e.CarrierId), e.TicketBascula, ...certificadosDe(e).map(c => c.Title))) continue;   // U-76 (v0.42.0): también folio CT y ticket
         n++;
         // Solo el titular por hilera (Carlos, 8-sep): el detalle vive en el ticket. Ticket abre la
         // ventana sobre la lista tal como quedó filtrada, para recorrerla con ‹ ›.
@@ -1682,17 +1683,20 @@ function pintarCertificadoEnDetalle(p) {
     const ul = $('paDetalleCertificado'); ul.textContent = '';
     if (p.Estado === 'borrador') return;
     const certs = certificadosDePrograma(p);
+    // U-79 (v0.42.0): ámbar solo si hay góndolas cerradas del programa sin certificado vigente; sin ellas no falta nada.
+    const pendientes = estado.embarques.filter(e => Number(e.PreAltaId) === Number(p.id) && e.Etapa === 'cerrado' && !certificadoVigente(e)).length;
+    const faltan = pendientes ? ` · ${plural(pendientes, 'góndola cerrada', 'góndolas cerradas')} sin certificado` : '';
     if (!certs.length) {
         const li = el('li', '', 'Certificados de tratamiento ');
-        li.appendChild(etiqueta('ninguno', 'aviso'));
-        li.appendChild(el('span', 'd', 'Se emiten por góndola cerrada, desde Báscula › Cerrados.'));
+        li.appendChild(etiqueta('ninguno', pendientes ? 'aviso' : ''));
+        li.appendChild(el('span', 'd', `Se emiten por góndola cerrada, desde Báscula › Cerrados${faltan}.`));
         ul.appendChild(li); return;
     }
     const vigentes = certs.filter(c => c.Estado === 'vigente');
     const kg = vigentes.reduce((s, c) => s + (Number(c.Kg) || 0), 0);
     const li = el('li', '', `Certificados de tratamiento: ${certs.length} `);
-    li.appendChild(etiqueta(plural(vigentes.length, 'vigente'), vigentes.length ? 'ok' : 'aviso'));
-    li.appendChild(el('span', 'd', `${toneladas(kg)} t certificadas · ${certs.map(c => c.Title).join(', ')} · uno por góndola: se emiten y se ven desde Báscula › Cerrados.`));
+    li.appendChild(etiqueta(plural(vigentes.length, 'vigente'), pendientes ? 'aviso' : vigentes.length ? 'ok' : ''));
+    li.appendChild(el('span', 'd', `${toneladas(kg)} t certificadas · ${certs.map(c => c.Title).join(', ')}${faltan} · uno por góndola: se emiten y se ven desde Báscula › Cerrados.`));
     ul.appendChild(li);
 }
 
@@ -1734,7 +1738,8 @@ function pintarCertificadoDeEmbarque() {
         + ` · góndola ${e.Title || '—'}${e.Manifiesto ? ' · manifiesto ' + e.Manifiesto : ''}`
         + (certs.length > 1 ? ` · ${certs.length} emitidos para esta góndola` : '')
         + (vig && e.Etapa === 'anulado' ? ' · ⚠ LA GÓNDOLA ESTÁ ANULADA: cancela este certificado' : '')   // U-70 (v0.40.0)
-        + (certs.filter(c => c.Estado === 'vigente').length > 1 ? ' · ⚠ HAY MÁS DE UNO VIGENTE: vale el más nuevo; cancela los otros' : '');   // C-39 (v0.40.0)
+        + (certs.filter(c => c.Estado === 'vigente').length > 1 ? ' · ⚠ HAY MÁS DE UNO VIGENTE: vale el más nuevo; cancela los otros' : '')   // C-39 (v0.40.0)
+        + (puede && bloqueo ? ` · ${bloqueo}` : '');   // U-73 (v0.42.0): en el celular no hay title; el motivo se lee aquí
 }
 /** U-69 (v0.40.0): el panel de correccion de Sustituir, precargado con lo que la gondola y su programa dicen HOY. */
 function mostrarCorreccion(si) {
@@ -1829,12 +1834,16 @@ async function emitirCertificado(sustituye = null, motivoSust = '', corr = null)
         }
         estado.certificados.push(nuevo);
         if (corr) mostrarCorreccion(false);
-        avisar(`Certificado ${nuevo.Title} emitido${sustituye ? ` en sustitución de ${sustituye.Title}` : ''}. Publica la verificación con el exporte (-PublicarCertificados) para que el QR conteste.`, 'bien');
+        avisar(`Certificado ${nuevo.Title} emitido${sustituye ? ` en sustitución de ${sustituye.Title}` : ''}. El QR contesta después de la próxima publicación (cada hora, al minuto 7).`, 'bien');   // U-77 (v0.42.0)
     } catch (err) { avisar('No se pudo emitir: ' + err.message, 'error'); }
+    repintarTrasCertificado();
+    });
+}
+/** C-50 (v0.42.0): lo que se repinta tras emitir, sustituir o cancelar: el diálogo, Cerrados y, si está abierto, el detalle del programa. */
+function repintarTrasCertificado() {
     pintarCertificadoDeEmbarque();
     pintarCerrados();
     if (estado.prealtaAbierta) pintarCertificadoEnDetalle(estado.prealtaAbierta);
-    });
 }
 /** U-69 (v0.40.0): Sustituir ya no es un confirm con motivo: abre el panel de correccion precargado. */
 function sustituirCertificado() {
@@ -1866,9 +1875,7 @@ async function cancelarCertificado() {
         aplicar('certificados', vig, campos);
         avisar(`Certificado ${vig.Title} cancelado.`, 'bien');
     } catch (err) { avisar('No se pudo cancelar: ' + err.message, 'error'); }
-    pintarCertificadoDeEmbarque();
-    pintarCerrados();
-    if (estado.prealtaAbierta) pintarCertificadoEnDetalle(estado.prealtaAbierta);
+    repintarTrasCertificado();
     });
 }
 /** QR como SVG en el DOM (sin innerHTML): modulos del generador vendorizado (qrcode-generator, MIT). Sin la libreria, un recuadro que lo dice. */
@@ -1898,6 +1905,7 @@ function fechaRecepcionCert(c) {
 }
 /**
  * La tabla de incisos, un renglon por bulto. Hoy NO se pinta (ver pintarCertificado): espera al contenedor de marina.
+ * C-49 (v0.42.0): lee Embarques/Manifiestos, que ninguna emision escribe hoy; al encenderla hay que escribirlos tambien.
  * Se deja tal como estaba en la v0.38.0 a proposito — apagar no es rediseniar: el rotulo de la segunda columna lo
  * decide Carlos el dia que se encienda, con un caso marino real delante (hoy la celda trae el folio del embarque).
  */
@@ -1943,7 +1951,8 @@ function pintarCertificado(c, t) {
     hoja.appendChild(fila(inciso('AUTORIZACIÓN DE LA PLANTA:', CFG.autorizacionPlanta || 'pendiente (ASEA-03-011-A)', 'mono')));
     // Tabla de incisos: APAGADA desde la v0.39.0 — un certificado ampara UNA gondola y un solo manifiesto. No se borra:
     // el dia que llegue residuo de plataforma marina, varios contenedores viajan en un embarque y la tabla es justo lo
-    // que hace falta (decision de Carlos). Se enciende sola con TipoBulto = 'contenedor'.
+    // que hace falta (decision de Carlos). C-49 (v0.42.0): hoy NUNCA se enciende — datosCertificado fija TipoBulto 'gondola'
+    // y la emision no escribe Embarques/Manifiestos. Encenderla pide las dos cosas, no solo un TipoBulto = 'contenedor'.
     if (c.TipoBulto === 'contenedor') hoja.appendChild(tablaIncisosCert(c));
     const pieFirma = el('div', 'ct-firmas');
     const firma = el('div', 'ct-firma'); firma.appendChild(el('div', 'ct-raya')); firma.appendChild(el('div', 'ct-nombre', CFG.responsableTecnico || '(nombre pendiente)')); firma.appendChild(el('div', 'ct-cargo', 'Responsable técnico de planta · CALYTEK')); pieFirma.appendChild(firma);
@@ -1968,11 +1977,12 @@ function imprimirCertificado() {
     const tituloApp = document.title; const c = estado.certificadoAbierto; if (c && c.Title) document.title = `Certificado de tratamiento ${c.Title}`;
     // quitar corre UNA vez: por afterprint o por el respaldo de 60 s (algun WebView no manda afterprint). El respaldo se cancela al
     // salir por afterprint — si sobreviviera, pisaria document.title un minuto despues (lo cazo la E2E en tiempo virtual).
-    let respaldo = 0;
-    const quitar = () => { clearTimeout(respaldo); document.body.classList.remove('imprimiendo-certificado'); $('cssImpresionCert').media = 'not all'; document.title = tituloApp; window.removeEventListener('afterprint', quitar); };
+    // C-46 (v0.42.0): el respaldo se arma ANTES de print() — un afterprint dentro de print() ya lo encuentra — y `hecho` lo vuelve idempotente.
+    let hecho = false;
+    const quitar = () => { if (hecho) return; hecho = true; clearTimeout(respaldo); document.body.classList.remove('imprimiendo-certificado'); $('cssImpresionCert').media = 'not all'; document.title = tituloApp; window.removeEventListener('afterprint', quitar); };
+    const respaldo = setTimeout(quitar, 60000);
     window.addEventListener('afterprint', quitar);
     window.print();
-    respaldo = setTimeout(quitar, 60000);
 }
 
 // ================================================================ PADRON

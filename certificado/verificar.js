@@ -79,7 +79,8 @@
         try {
             const nombre = hex(await crypto.subtle.digest('SHA-256', enc.encode(f)));
             const r = await fetch(`./datos/${nombre}.json`, { cache: 'no-store' });
-            if (r.status === 404) { estado('mal', `No hay ningún certificado publicado con el folio ${folio}. Puede ser un papel falso, un certificado recién emitido que aún no se publica, o un QR dañado.`); return; }
+            // U-78 (v0.42.0): lo mas probable es que sea recien emitido (se publica cada hora): aviso ambar, no rojo.
+            if (r.status === 404) { estado('ojo', `Todavía no hay un certificado publicado con el folio ${folio}. Si se emitió hoy, la verificación se publica cada hora (al minuto 7): intente más tarde. Si el papel tiene más de un día, puede ser un papel falso o un QR dañado.`); return; }
             if (!r.ok) throw new Error('HTTP ' + r.status);
             pintar(await descifrar(await r.json(), folio, sufijo));
         } catch (e) { estado('mal', 'No se pudo verificar (' + e.message + '). Intente de nuevo; si persiste, el QR o el archivo publicado no corresponden.'); }

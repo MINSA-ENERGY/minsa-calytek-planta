@@ -211,7 +211,8 @@ assert.equal(residuoDe(''), 'RECORTES DE PERFORACIÓN');
     const suf = sufijoVerificacion(a => { for (let i = 0; i < a.length; i++) a[i] = (i * 37 + 5) % 256; return a; });
     assert.match(suf, /^[a-z2-9]{12}$/, 'sufijo de 12 sin ambiguos: ' + suf);
     assert.equal(sufijoVerificacion(a => a.fill(0)), 'aaaaaaaaaaaa', 'determinista con el aleatorio inyectado');
-    assert.doesNotMatch(sufijoVerificacion(a => a.fill(255)), /[01lIO]/);
+    { let n = 0; assert.equal(sufijoVerificacion(a => a.fill(n++ ? 0 : 255)), 'aaaaaaaaaaaa', 'C-47: los bytes >= 248 se descartan y se piden otros'); }
+    { let n = 0; assert.equal(sufijoVerificacion(a => a.fill(n++ ? 0 : 247)), '999999999999', 'C-47: 247 aun vale (31*8 = 248)'); }
     assert.equal(urlVerificacion('https://planta.minsaenergy.com/certificado/', { Title: 'CT-26-0001', Sufijo: suf }), `https://planta.minsaenergy.com/certificado/?f=CT-26-0001-${suf}`);
     assert.equal(urlVerificacion('https://planta.minsaenergy.com/certificado', { Title: 'CT-26-0001', Sufijo: suf }).startsWith('https://planta.minsaenergy.com/certificado/?f='), true, 'agrega la barra');
     assert.equal(urlVerificacion('https://x/', { Title: 'CT-26-0001' }), null, 'sin sufijo no hay URL (no se pinta QR)');

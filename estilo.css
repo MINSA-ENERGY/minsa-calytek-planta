@@ -786,6 +786,13 @@ button:not(:disabled):active { transform: scale(.98); }
 .dlg-cert .dlg-avisos .mensaje { margin: 0; }   /* U-71 (v0.40.0) */
 .dlg-cert .ct-corregir { border: 1px solid var(--line); padding: var(--sp-3); background: var(--surf); }   /* U-69 (v0.40.0) */
 .dlg-cert .ct-corregir .dlg-botones { margin-top: var(--sp-3); }
+/* U-74 (v0.42.0): a 390 px los cuatro botones no caben en una fila — el primario va arriba a lo ancho y Cancelar al final, lejos de él */
+@media (max-width: 720px) {
+    .dlg-cert .dlg-botones.envuelve { flex-wrap: wrap; }
+    .dlg-cert .dlg-botones.envuelve button { flex: 1 1 45%; }
+    .dlg-cert .dlg-botones.envuelve .principal:not(:disabled) { flex-basis: 100%; order: -1; }   /* revisor 1c: con uno cancelado hay dos .principal visibles; sube solo el habilitado */
+    .dlg-cert #btnCancelarCertificado { order: 1; }
+}
 .cert { width: 1056px; min-height: 816px; box-sizing: border-box; padding: 28px; background: #fff; color: #131c2c; font-family: "Barlow", system-ui, sans-serif; font-size: 13px; line-height: 1.35; transform-origin: top left; }
 .ct-vista .cert { zoom: .92; }
 @media (max-width: 1100px) { .ct-vista .cert { zoom: .6; } }

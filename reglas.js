@@ -353,8 +353,11 @@ export function residuoDe(_corriente) {
  */
 export function sufijoVerificacion(aleatorio = crypto.getRandomValues.bind(crypto)) {
     const ALFABETO = 'abcdefghjkmnpqrstuvwxyz23456789';
-    const bytes = aleatorio(new Uint8Array(12));
-    return [...bytes].map(b => ALFABETO[b % ALFABETO.length]).join('');
+    // C-47 (v0.42.0): rechazo de muestras — 256 = 8·31 + 8, asi que un byte >= 248 sesgaria las primeras 8 letras; se descarta y se pide otro.
+    const tope = 256 - (256 % ALFABETO.length);
+    let suf = '';
+    while (suf.length < 12) for (const b of aleatorio(new Uint8Array(12))) if (b < tope && suf.length < 12) suf += ALFABETO[b % ALFABETO.length];
+    return suf;
 }
 
 /**

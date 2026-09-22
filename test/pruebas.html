@@ -799,7 +799,9 @@ try {
         await esperar(() => visible('baPesar'), 'tara 2');
         poner('baKg', '40000'); await dormir(30);
         R.ok('neto 4,600 kg (< 30 % de 25 t) dispara el aviso y pide motivo', visible('baAvisoNeto') && visible('baMotivoNetoCampo'));
-        await foto(); clic('btnGuardarPeso'); await dormir(50);
+        await foto(); window.__sinTicket = true; clic('btnGuardarPeso'); await dormir(50); window.__sinTicket = false;
+        R.ok('C-43 (v0.42.0): sin ticket de báscula la tara no se guarda y la góndola sigue en planta', !!avisoCon('Falta el número del ticket de báscula') && emb2.fields.Etapa !== 'cerrado' && document.activeElement === $('baTicketBascula'), `etapa ${emb2.fields.Etapa}`);
+        clic('btnGuardarPeso'); await dormir(50);
         R.ok('sin motivo no cierra', !!avisoCon('se sale de la banda'));
         poner('baMotivoNeto', 'Góndola venía a un cuarto, confirmado con el chofer'); clic('btnGuardarPeso');
         await esperar(() => avisoCon(`${emb2.fields.Title} cerrado`), 'tara 2 guardada');
@@ -1409,7 +1411,6 @@ try {
                 R.ok('v0.39.0: con uno vigente, Emitir se esconde y aparecen Sustituir / Cancelar', !visible('btnEmitirCertificado') && visible('btnSustituirCertificado') && visible('btnCancelarCertificado'));
                 clic('ctCerrar'); await dormir(20);
                 R.ok('v0.39.0: la góndola certificada lleva su folio como etiqueta en Cerrados y el botón pasa a «Certificado»', filaDe(g1.fields.Title).textContent.includes(c1.fields.Title) && !!botonDe(g1.fields.Title, 'Certificado'));
-                R.ok('v0.39.0: el detalle del programa cuenta los certificados de sus góndolas', ($('paDetalleCertificado').textContent || '').length >= 0);
                 // S-11 sobre el certificado: si la firma desaparece (o la creo alguien sin rol), se ve pero no se imprime.
                 const idxF = filas('firmas').indexOf(firmaC); filas('firmas').splice(idxF, 1);
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga sin la firma');
