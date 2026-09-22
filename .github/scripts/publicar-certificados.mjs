@@ -66,12 +66,16 @@ for (const f of renglones) {
     const nombre = `${f.Title || ''}-${f.Sufijo || ''}`;
     if (!RE_NOMBRE.test(nombre)) { sinSufijo++; continue; }
     const residuo = 'RECORTES DE PERFORACION';   // v0.38.0: sin la base, como el papel (Carlos, 23-sep)
+    // v0.39.0: un certificado por GONDOLA trae UN manifiesto y UN ticket de bascula. Los emitidos de la v0.35.0 a la
+    // v0.38.0 (uno por programa) traen la lista de embarques y el rango de fechas: se publican con lo que tengan.
     const emb = String(f.Embarques || '').split(';').map(s => s.trim()).filter(Boolean);
+    const manifiesto = f.Manifiesto || String(f.Manifiestos || '').split(';').map(s => s.trim()).filter(Boolean).join(' / ') || null;
     let fechas = null;
-    if (f.PrimerCierre && f.UltimoCierre) { const d1 = dia(f.PrimerCierre), d2 = dia(f.UltimoCierre); fechas = d1 === d2 ? d1 : `del ${d1} al ${d2}`; }
+    if (f.FechaRecepcion) fechas = dia(f.FechaRecepcion);
+    else if (f.PrimerCierre && f.UltimoCierre) { const d1 = dia(f.PrimerCierre), d2 = dia(f.UltimoCierre); fechas = d1 === d2 ? d1 : `del ${d1} al ${d2}`; }
     const doc = {
         folio: f.Title, estado: f.Estado, generador: f.Generador ?? null, registro: f.GeneradorRegistro ?? null, direccion: f.GeneradorDireccion ?? null, pozo: f.Pozo ?? null,
-        residuo, kg: f.Kg ?? null, embarques: emb, fechas, transportista: f.Transportista ?? null,
+        residuo, kg: f.Kg ?? null, manifiesto, ticket: f.TicketBascula ?? null, embarques: emb, fechas, transportista: f.Transportista ?? null,
         emitidoEl: f.EmitidoEl ?? null, sustituidoPor: f.SustituidoPor ?? null, motivo: f.Estado === 'cancelado' ? (f.Motivo ?? null) : null, publicadoEl: ahora
     };
     const archivo = createHash('sha256').update(nombre, 'utf8').digest('hex') + '.json';

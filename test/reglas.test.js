@@ -1,6 +1,6 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, resumenCertificado, urlVerificacion, toneladas } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -216,21 +216,25 @@ assert.equal(residuoDe(''), 'RECORTES DE PERFORACIÓN');
     assert.equal(urlVerificacion('https://planta.minsaenergy.com/certificado', { Title: 'CT-26-0001', Sufijo: suf }).startsWith('https://planta.minsaenergy.com/certificado/?f='), true, 'agrega la barra');
     assert.equal(urlVerificacion('https://x/', { Title: 'CT-26-0001' }), null, 'sin sufijo no hay URL (no se pinta QR)');
 }
+// v0.39.0: un certificado por GONDOLA. datosCertificado congela UN embarque cerrado, no la suma del programa.
 {
     const p5 = { id: 5 };
-    const embs = [
-        { id: 1, PreAltaId: 5, Etapa: 'cerrado', NetoKg: 21220, TaraHora: '2026-09-02T15:00:00Z', Title: 'E-26-00002', Manifiesto: 'MINSA/RME/002/2026' },
-        { id: 2, PreAltaId: 5, Etapa: 'cerrado', NetoKg: 19800, TaraHora: '2026-09-01T15:00:00Z', Title: 'E-26-00001', Manifiesto: 'MINSA/RME/001/2026' },
-        { id: 3, PreAltaId: 5, Etapa: 'anulado', NetoKg: 50000, TaraHora: '2026-09-03T15:00:00Z', Title: 'E-26-00003' },
-        { id: 4, PreAltaId: 5, Etapa: 'bruto', BrutoKg: 40000, Title: 'E-26-00004' },
-        { id: 6, PreAltaId: 7, Etapa: 'cerrado', NetoKg: 1000, TaraHora: '2026-09-01T10:00:00Z', Title: 'E-26-00005' },
-        { id: 7, PreAltaId: '5', Etapa: 'cerrado', NetoKg: 0, TaraHora: '2026-09-04T10:00:00Z', Title: 'E-26-00006' }
-    ];
-    const r = resumenCertificado(p5, embs);
-    assert.deepEqual(r.folios, ['E-26-00001', 'E-26-00002'], 'solo cerrados con neto, del programa, en orden de cierre');
-    assert.equal(r.kg, 41020);
-    assert.deepEqual(r.manifiestos, ['MINSA/RME/001/2026', 'MINSA/RME/002/2026']);
-    assert.equal(r.primerCierre, '2026-09-01T15:00:00Z'); assert.equal(r.ultimoCierre, '2026-09-02T15:00:00Z');
-    assert.deepEqual(resumenCertificado({ id: 99 }, embs), { embarques: [], kg: 0, primerCierre: null, ultimoCierre: null, folios: [], manifiestos: [] });
+    const cerrado = { id: 1, PreAltaId: 5, Etapa: 'cerrado', NetoKg: 21220, TaraHora: '2026-09-02T15:00:00Z',
+        Title: 'E-26-00002', Manifiesto: 'MINSA/RME/002/2026', TicketBascula: 'B-004512' };
+    const d = datosCertificado(p5, cerrado);
+    assert.equal(d.ok, true); assert.equal(d.motivo, null);
+    assert.equal(d.kg, 21220); assert.equal(d.folio, 'E-26-00002');
+    assert.equal(d.manifiesto, 'MINSA/RME/002/2026'); assert.equal(d.ticket, 'B-004512');
+    assert.equal(d.fechaRecepcion, '2026-09-02T15:00:00Z'); assert.equal(d.tipoBulto, 'gondola');
+    // Sin ticket de bascula SI se puede emitir (el operador pudo no tenerlo): el papel sale sin ese renglon.
+    assert.equal(datosCertificado(p5, { ...cerrado, TicketBascula: null }).ok, true);
+    // Lo que NO se certifica, con su motivo.
+    assert.equal(datosCertificado(p5, { ...cerrado, Etapa: 'anulado' }).motivo, 'la góndola está en anulado, no cerrada');
+    assert.equal(datosCertificado(p5, { ...cerrado, Etapa: 'bruto', NetoKg: null }).motivo, 'la góndola está en bruto, no cerrada');
+    assert.equal(datosCertificado(p5, { ...cerrado, NetoKg: 0 }).motivo, 'la góndola no tiene neto');
+    assert.equal(datosCertificado(p5, { ...cerrado, PreAltaId: 7 }).motivo, 'la góndola es de otro programa');
+    assert.equal(datosCertificado(null, cerrado).motivo, 'la góndola no trae programa');
+    // El PreAltaId puede llegar como cadena desde Graph.
+    assert.equal(datosCertificado(p5, { ...cerrado, PreAltaId: '5' }).ok, true);
     assert.equal(toneladas(41020), '41.02'); assert.equal(toneladas(1234567), '1,234.57'); assert.equal(toneladas(0), '0.00');
 }

@@ -53,14 +53,14 @@ export const CONFIG = {
         vigencias: 'PLANTA_Vigencias',
         roles: 'PLANTA_Roles',
         firmas: 'PLANTA_Firmas',   // S-01 (v0.24.0): sin herencia, solo validador + gerencia escriben; la compuerta manda
-        certificados: 'PLANTA_Certificados'   // v0.35.0: un certificado de tratamiento por programa; lo emite gerencia y lo firma en PLANTA_Firmas
+        certificados: 'PLANTA_Certificados'   // v0.39.0: un certificado de tratamiento por GONDOLA (embarque cerrado); lo emite gerencia y lo firma en PLANTA_Firmas
     },
 
     // Certificado de tratamiento (FO-CT-01, v0.35.0; decision de Carlos 2026-09-22). Lo que va impreso y no vive en
     // ninguna lista. Los dos placeholders siguen SIN DATO (KB: calytek/permisos-arranque.md): el papel los pinta como
     // «pendiente» hasta que alguien los llene aqui.
     certificado: {
-        formato: 'FO-CT-01 · rev. 0',
+        formato: 'FO-CT-01 · rev. 0',   // v0.39.0: YA NO se imprime (Carlos, 22-sep noche); queda como el nombre del formato para la KB
         autorizacionPlanta: '',            // No. de autorizacion ASEA-03-011-A de la planta (tramite no obtenido al 2026-09-22)
         responsableTecnico: '',            // nombre del responsable tecnico de planta (unica firma desde el 2026-09-22)
         resolutivo: 'Resolutivo ASEA/UGI/DGGEERC/1536/2025',

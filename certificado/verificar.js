@@ -1,4 +1,4 @@
-// Verificacion publica del certificado de tratamiento (v0.36.0). Sin dependencias, sin login, sin Graph.
+// Verificacion publica del certificado de tratamiento (v0.39.0). Sin dependencias, sin login, sin Graph.
 //
 // El repo de la app es PUBLICO, asi que lo publicado NO puede ser legible: cada certificado vive en
 // ./datos/<sha256(folio-sufijo)>.json CIFRADO (AES-256-CBC + HMAC-SHA256, llaves derivadas del sufijo del QR con
@@ -10,9 +10,12 @@
     const $ = id => document.getElementById(id);
     const RE_F = /^(CT-\d{2}-\d{4})-([a-z2-9]{12})$/;   // folio + sufijo, tal cual lo pinta la app (reglas.sufijoVerificacion)
     const ITERACIONES = 100000;
+    // v0.39.0: un certificado ampara UNA gondola — manifiesto y ticket de bascula, uno de cada uno. «Embarques» solo
+    // aparece en los emitidos de la v0.35.0 a la v0.38.0 (uno por programa), que se siguen verificando igual.
     const ETIQUETAS = [
         ['folio', 'Folio'], ['estado', 'Estado'], ['generador', 'Generador'], ['registro', 'Registro de generador'], ['direccion', 'Dirección del generador'], ['pozo', 'Pozo'],
-        ['residuo', 'Residuo'], ['toneladas', 'Volumen tratado'], ['embarques', 'Embarques'], ['fechas', 'Fecha de recepción'],
+        ['residuo', 'Residuo'], ['toneladas', 'Volumen tratado'], ['manifiesto', 'Manifiesto'], ['ticket', 'Ticket de báscula'],
+        ['embarques', 'Embarques'], ['fechas', 'Fecha de recepción'],
         ['transportista', 'Transportista'], ['emitido', 'Emitido']
     ];
     const ESTADO = {
@@ -47,9 +50,10 @@
         estado(clase, texto);
         const dl = $('datos'); dl.textContent = '';
         const filas = {
-            folio: d.folio, estado: d.estado, generador: d.generador, registro: d.registro, pozo: d.pozo, residuo: d.residuo,
+            folio: d.folio, estado: d.estado, generador: d.generador, registro: d.registro, direccion: d.direccion, pozo: d.pozo, residuo: d.residuo,
+            manifiesto: d.manifiesto, ticket: d.ticket,
             toneladas: d.kg != null ? `${(Number(d.kg) / 1000).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} t (${Number(d.kg).toLocaleString('es-MX')} kg)` : null,
-            embarques: Array.isArray(d.embarques) ? `${d.embarques.length}: ${d.embarques.join(', ')}` : null,
+            embarques: Array.isArray(d.embarques) && d.embarques.length ? `${d.embarques.length}: ${d.embarques.join(', ')}` : null,
             fechas: d.fechas, transportista: d.transportista, emitido: d.emitidoEl ? new Date(d.emitidoEl).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'long', timeStyle: 'short' }) : null
         };
         for (const [k, eti] of ETIQUETAS) {

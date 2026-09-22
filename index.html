@@ -209,6 +209,12 @@
           <button id="btnFoto" class="secundario" type="button">Tomar foto</button>
           <input type="file" id="baFotoEntrada" accept="image/*" capture="environment" hidden>
         </div>
+        <!-- v0.39.0: el ticket que imprime el indicador de la bascula. Solo en la TARA (cubre tara y destara) y
+             obligatorio: es lo que va impreso en el certificado de esta gondola y despues no hay donde capturarlo. -->
+        <div class="campo oculto" id="baTicketCampo">
+          <label for="baTicketBascula">Ticket de báscula · obligatorio</label>
+          <input type="text" id="baTicketBascula" maxlength="40" autocomplete="off" placeholder="Número del ticket">
+        </div>
         <div id="baAvisoNeto" class="mensaje ojo oculto"></div>
         <div class="campo oculto" id="baMotivoNetoCampo">
           <label for="baMotivoNeto">Si el neto se sale de la banda, di por qué se cierra igual</label>
@@ -482,23 +488,24 @@
         <ul class="hallazgos" id="paDetalleCertificado"></ul>   <!-- v0.35.0: certificado de tratamiento del programa cerrado -->
         <div class="dlg-botones envuelve">
         <button id="btnFirmar" class="principal enviar oculto" type="button">Firmar la pre-alta</button>
-        <button id="btnEmitirCertificado" class="principal enviar oculto" type="button">Emitir certificado de tratamiento</button>
-        <button id="btnVerCertificado" class="secundario oculto" type="button">Ver certificado</button>
-        <button id="btnSustituirCertificado" class="secundario oculto" type="button">Sustituir certificado</button>
-        <button id="btnCancelarCertificado" class="secundario peligro oculto" type="button">Cancelar certificado</button>
         <button id="btnEditarPrealta" class="secundario oculto" type="button">Editar el borrador</button>
         <button id="btnCerrarPrealta" class="secundario peligro oculto" type="button">Cerrar el programa</button>
         <button id="btnEliminarPrealta" class="secundario peligro oculto" type="button" data-accion="eliminar">Eliminar este borrador</button>
         <button id="btnVolverPrealtas" class="secundario" type="button">Volver</button>   <!-- U-45: antes «Cerrar», junto a «Cerrar el programa» -->
         </div>
 </dialog>
-<!-- v0.35.0: certificado de tratamiento (FO-CT-01, carta horizontal). Se ve en pantalla a escala y se imprime solo el
-     formato (body.imprimiendo-certificado). Sin firma valida de gerencia o si no esta vigente, Imprimir queda deshabilitado. -->
+<!-- Certificado de tratamiento (FO-CT-01, carta horizontal). Se ve en pantalla a escala y se imprime solo el
+     formato (body.imprimiendo-certificado). Sin firma valida de gerencia o si no esta vigente, Imprimir queda deshabilitado.
+     v0.39.0: este dialogo es el de UNA GONDOLA (un embarque cerrado) — se abre desde Bascula > Cerrados y es la unica
+     puerta de emision, sustitucion y cancelacion. Antes colgaba del detalle del programa. -->
 <dialog id="dlgCertificado" class="dlg dlg-cert" aria-label="Certificado de tratamiento">
   <div class="ct-nav"><span id="ctEstado" class="tk-pos"></span></div>
   <div class="ct-vista"><div id="certificado" class="cert"></div></div>
-  <div class="dlg-botones">
+  <div class="dlg-botones envuelve">
     <button id="ctCerrar" class="secundario" type="button">Cerrar</button>
+    <button id="btnEmitirCertificado" class="principal enviar oculto" type="button">Emitir certificado de tratamiento</button>
+    <button id="btnSustituirCertificado" class="secundario oculto" type="button">Sustituir certificado</button>
+    <button id="btnCancelarCertificado" class="secundario peligro oculto" type="button">Cancelar certificado</button>
     <button id="ctImprimir" class="principal" type="button">Imprimir / guardar PDF</button>
   </div>
 </dialog>

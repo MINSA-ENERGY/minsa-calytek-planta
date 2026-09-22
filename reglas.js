@@ -358,21 +358,27 @@ export function sufijoVerificacion(aleatorio = crypto.getRandomValues.bind(crypt
 }
 
 /**
- * Lo que el certificado congela de un programa: los embarques CERRADOS (con neto), en orden de cierre, su suma y
- * el rango de fechas. Puro: sin red y sin estado. `embarques` es la lista entera; aqui se filtra por el programa.
- * @returns {{ embarques: object[], kg: number, primerCierre: string|null, ultimoCierre: string|null, folios: string[], manifiestos: string[] }}
+ * Lo que el certificado congela de UNA GONDOLA (v0.39.0, decision de Carlos 2026-09-22: un certificado por gondola,
+ * no por programa). Un renglon de PLANTA_Embarques cerrado ES una gondola: un arribo de una unidad, con su manifiesto,
+ * su ticket de bascula y su neto. Puro: sin red y sin estado. `ok` en false trae el motivo en lenguaje de planta.
+ * @returns {{ ok: boolean, motivo: string|null, kg: number, folio: string|null, manifiesto: string|null,
+ *             ticket: string|null, fechaRecepcion: string|null, tipoBulto: string }}
  */
-export function resumenCertificado(prealta, embarques) {
-    const cerrados = (embarques || [])
-        .filter(e => Number(e.PreAltaId) === Number(prealta.id) && e.Etapa === 'cerrado' && Number(e.NetoKg) > 0)
-        .sort((a, b) => String(a.TaraHora || '').localeCompare(String(b.TaraHora || '')) || a.id - b.id);
-    const kg = cerrados.reduce((s, e) => s + (Number(e.NetoKg) || 0), 0);
+export function datosCertificado(prealta, embarque) {
+    const e = embarque || {};
+    const kg = Number(e.NetoKg) || 0;
+    const mismoPrograma = !!prealta && Number(e.PreAltaId) === Number(prealta.id);
+    const motivo = !prealta ? 'la góndola no trae programa'
+        : !mismoPrograma ? 'la góndola es de otro programa'
+        : e.Etapa !== 'cerrado' ? `la góndola está en ${e.Etapa || 'sin etapa'}, no cerrada`
+        : kg <= 0 ? 'la góndola no tiene neto' : null;
     return {
-        embarques: cerrados, kg,
-        primerCierre: cerrados.length ? (cerrados[0].TaraHora || null) : null,
-        ultimoCierre: cerrados.length ? (cerrados[cerrados.length - 1].TaraHora || null) : null,
-        folios: cerrados.map(e => e.Title || `#${e.id}`),
-        manifiestos: cerrados.map(e => e.Manifiesto || '—')
+        ok: !motivo, motivo, kg,
+        folio: e.Title || null,
+        manifiesto: e.Manifiesto || null,
+        ticket: e.TicketBascula || null,
+        fechaRecepcion: e.TaraHora || null,
+        tipoBulto: 'gondola'   // el contenedor de marina aun no llega; la columna existe desde ya (esquema v7)
     };
 }
 
