@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, resumenCertificado, urlVerificacion, toneladas } from './reglas.js';
 
-const VERSION = '0.35.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.35.1';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1691,7 +1691,7 @@ async function emitirCertificado(sustituye = null, motivoSust = '') {
             Embarques: r.folios.join('; '), Manifiestos: r.manifiestos.join('; '),
             PrimerCierre: r.primerCierre, UltimoCierre: r.ultimoCierre,
             Generador: p.Generador || null, GeneradorRegistro: p.GeneradorRegistro || null, Pozo: p.Pozo || null, Corriente: p.Corriente || null,
-            Transportista: carrier ? `${carrier.Title} · ${carrier.AutorizacionASEA || 'sin autorización'}` : null,
+            Transportista: carrier ? `${carrier.Title} · autorización ${carrier.AutorizacionASEA || 'sin número'}` : null,
             Sufijo: sufijoVerificacion(), EmitidoPor: estado.cuenta.username, EmitidoEl: ahora, Version: VERSION,
             Motivo: sustituye ? `Sustituye a ${sustituye.Title}: ${motivoSust}`.slice(0, 255) : null
         }));
@@ -1789,7 +1789,7 @@ function pintarCertificado(c, t) {
     hoja.appendChild(el('div', 'ct-regla'));
     const folios = lista(c.Embarques), manif = lista(c.Manifiestos);
     hoja.appendChild(fila(inciso('VOLUMEN:', `${toneladas(c.Kg)} TON.`, 'volumen'), inciso('EMBARQUES:', String(folios.length), 'mono'), inciso('FECHA DE RECEPCIÓN:', c.PrimerCierre && c.UltimoCierre && fechaMexico(new Date(c.PrimerCierre)) !== fechaMexico(new Date(c.UltimoCierre)) ? `del ${diaCert(c.PrimerCierre)} al ${diaCert(c.UltimoCierre)}` : diaCert(c.UltimoCierre || c.PrimerCierre), 'fuerte')));
-    hoja.appendChild(fila(inciso('TRANSPORTISTA:', c.Transportista, 'fuerte'), inciso('NO. DE AUTORIZACIÓN:', CFG.autorizacionPlanta || 'pendiente (ASEA-03-011-A)', 'mono')));
+    hoja.appendChild(fila(inciso('TRANSPORTISTA:', c.Transportista, 'fuerte'), inciso('AUTORIZACIÓN DE LA PLANTA:', CFG.autorizacionPlanta || 'pendiente (ASEA-03-011-A)', 'mono')));
     // Incisos: un renglon por embarque cerrado — folio · manifiesto · neto. Es lo que sustituye al «ticket de bascula» de un certificado por embarque.
     const tabla = el('table', 'ct-incisos'); const th = el('tr'); for (const h of ['#', 'FOLIO DE EMBARQUE', 'MANIFIESTO', 'NETO (KG)']) th.appendChild(el('th', '', h)); tabla.appendChild(th);
     folios.forEach((f, i) => { const tr = el('tr'); tr.appendChild(el('td', 'n', String(i + 1))); tr.appendChild(el('td', 'mono', f)); tr.appendChild(el('td', 'mono', manif[i] || '—')); tr.appendChild(el('td', 'mono kg', '')); tabla.appendChild(tr); });

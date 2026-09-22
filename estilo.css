@@ -802,7 +802,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .ct-fila { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 24px; position: relative; }
 .ct-inciso { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .ct-inciso .ct-eti { font-family: "Saira", sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 1px; color: #0833a3; white-space: nowrap; }
-.ct-inciso .ct-val { flex: 1 1 auto; min-width: 0; border-bottom: 1px solid #8a97ad; padding: 0 6px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-inciso .ct-val { flex: 1 1 auto; min-width: 0; border-bottom: 1px solid #8a97ad; padding: 0 6px 2px; overflow-wrap: anywhere; }   /* v0.35.1: NUNCA elipsis en un documento legal (revisor) */
 .ct-val.fuerte { font-weight: 600; }
 .ct-val.mono { font-family: "IBM Plex Mono", monospace; }
 .ct-val.volumen { font-family: "Saira", sans-serif; font-weight: 600; font-size: 18px; color: #2c8a37; border-bottom-color: #2c8a37; line-height: 1; }
