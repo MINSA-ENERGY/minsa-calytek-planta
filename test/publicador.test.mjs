@@ -3,8 +3,9 @@
 // vigente por gondola: el firmado mas nuevo) y C-40 (la fecha en hora de Mexico, aunque el runner corra en UTC).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { createHash, pbkdf2Sync, createDecipheriv } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { material, descifrar } from '../.github/scripts/cifrado-certificado.mjs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -16,14 +17,15 @@ const correr = (cwd, extra = {}) => spawnSync(process.execPath, ['--import', fal
 
 const dir = mkdtempSync(join(tmpdir(), 'publicador-'));
 try {
+    // S-19 (v0.43.0): lo publicado antes con el nombre sha256(folio-sufijo) se borra en la primera corrida (republicar todo una vez).
+    const legado = createHash('sha256').update('CT-26-0001-abcdefghjkmn').digest('hex') + '.json';
+    mkdirSync(join(dir, 'certificado', 'datos'), { recursive: true }); writeFileSync(join(dir, 'certificado', 'datos', legado), '{}');
     const r = correr(dir);
     assert.equal(r.status, 0, 'el publicador termina bien: ' + r.stderr);
-    const leer = (folio, suf) => {
-        const b = JSON.parse(readFileSync(join(dir, 'certificado', 'datos', createHash('sha256').update(folio + '-' + suf).digest('hex') + '.json'), 'utf8'));
-        const m = pbkdf2Sync(suf, 'MINSA-CT:' + folio, 100000, 64, 'sha256');
-        const d = createDecipheriv('aes-256-cbc', m.subarray(0, 32), Buffer.from(b.iv, 'base64'));
-        return JSON.parse(Buffer.concat([d.update(Buffer.from(b.ct, 'base64')), d.final()]).toString());
-    };
+    const publicados = readdirSync(join(dir, 'certificado', 'datos'));
+    assert.ok(!publicados.includes(legado) && publicados.includes(material('CT-26-0001', 'abcdefghjkmn').nombre), 'S-19: el nombre viejo se borra y el nuevo se escribe');
+    // v0.43.0: nombre y llaves por el modulo del esquema (lo coteja test/cifrado.test.mjs contra verificar.js y el .ps1)
+    const leer = (folio, suf) => { const k = material(folio, suf); return descifrar(readFileSync(join(dir, 'certificado', 'datos', k.nombre), 'utf8'), k); };
     const c1 = leer('CT-26-0001', 'abcdefghjkmn'), c2 = leer('CT-26-0002', 'bcdefghjkmnp'), c3 = leer('CT-26-0003', 'cdefghjkmnpq'), c4 = leer('CT-26-0004', 'defghjkmnpqr');
     assert.equal(c2.estado, 'vigente', 'S-18: firmado por gerencia (correo sin distinguir mayusculas) -> vigente');
     assert.deepEqual([c1.estado, c1.sustituidoPor], ['sustituido', 'CT-26-0002'], 'C-39: dos vigentes firmados en la misma gondola -> el mas nuevo manda');

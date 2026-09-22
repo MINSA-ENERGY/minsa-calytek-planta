@@ -1,0 +1,29 @@
+{
+  "generadoPor": "docs/exportar-planta.ps1 via test/cifrado-ps1.ps1",
+  "folio": "CT-26-0042",
+  "sufijo": "k7m2p9q4r8s3",
+  "doc": {
+    "folio": "CT-26-0042",
+    "estado": "vigente",
+    "generador": "Perforadora Ñandú & <b>Hijos</b>",
+    "registro": "GEN-123",
+    "direccion": "Km 12 carr. Poza Rica–Tuxpan",
+    "pozo": "Rabasa-101",
+    "residuo": "RECORTES DE PERFORACION",
+    "kg": 12345,
+    "manifiesto": "M-001",
+    "ticket": "T-77",
+    "embarques": [
+      "E-1",
+      "E-2"
+    ],
+    "fechas": "22/09/2026",
+    "transportista": null,
+    "emitidoEl": "2026-09-22T18:00:00Z",
+    "sustituidoPor": null,
+    "motivo": null,
+    "publicadoEl": "2026-09-22T19:00:00Z"
+  },
+  "nombre": "c72beb0dd4a5ffbefc291c2c43d7a578904842f8533cee7f641642e2f8a36577.json",
+  "blob": "{\"v\":1,\"iv\":\"QlNdiax9EzbudmLfVMUwmg==\",\"ct\":\"aJHk5z5k2JL48fpMwlTVOmLlcupoOXHsWslLsdL3xqgpykPb9LTK3BUcMU+sXLa52NUFN8OHxw7cVq/Q1iq3GPbzbFZvTd9cS8rAkGULhQfrOsCBli1nlrzmUiMmehn6qbQJaG25+ZMXS6eduqCpH0fZhMMOxwmyisw0nOoMhO/hpBAwsbx5SI5SalbnJawoqsFLt+Q+l8xh+89v0RJUevZNXylhBrKUWLpnjAbFnk3eMs4jNUmd00eaLjpevtB3M4Wu2VrfLgCyz7OEwoGs2oKgfmWjRgY6mJ2tPCcphLFVTCw5gNV0D0Qfdxnxrf3QBgA/BGnM+fqafx+avDJEcs0O64gfSOGiHY9Ni9SuOsAIsIgzarJ9R1jLNSpozRYulCfkKBCbG4llp2Dpi9lmI0tTIOA+65RRulc20vIaOvFHVGXB+KACr3bWzJreMbK5MtgFDYcPnNiiDwjL4AMIxTINWPRHT4URergFuxXrcSd+bEahozTkZlQncICfpJaOPtAhVi5nA1XUvHxXQdXP75n50a62O3X38Abc+E3mQdAUoJR7+h4+8+6Ukg7KFTWDnBoe5aNAj3PekZ1WdmFtHpNXed5UT2ynDdAAaDehXPE=\",\"mac\":\"0XquQAmPmv8yfABPwQ0m0JSAdlFc1iJav+aP6nIkoT4=\"}"
+}

@@ -1,8 +1,6 @@
 // Publica la verificacion de los certificados (corre en GitHub Actions; ver ../workflows/publicar-certificados.yml).
-// MISMO esquema que docs/exportar-planta.ps1 v1.10.0 (paso 3c) y que certificado/verificar.js:
-//   archivo  = certificado/datos/<sha256(folio-sufijo)>.json
-//   llaves   = PBKDF2-SHA256(sufijo, sal 'MINSA-CT:<folio>', 100000 it.) -> 32 B AES-256-CBC + 32 B HMAC-SHA256
-//   blob     = { v:1, iv, ct, mac }  con mac = HMAC(iv || ct), todo en base64
+// El esquema (nombre del archivo, llaves, blob) vive en ./cifrado-certificado.mjs (C-41 / S-19, v0.43.0) y
+// test/cifrado.test.mjs lo coteja contra certificado/verificar.js y docs/exportar-planta.ps1.
 //   contenido = solo lo impreso + estado + publicadoEl; publicadoEl no fuerza reescritura (se descifra el existente y se compara)
 // Sin dependencias: fetch y crypto de Node 22. Solo lee del tenant; escribe solo en certificado/datos/.
 // S-18 (app v0.40.0): «vigente» se publica SOLO con la firma que la app exige (certificadoFirmado): un renglon de
@@ -10,7 +8,7 @@
 // ACTIVO en PLANTA_Roles. Sin eso sale «sin-firma» (la pagina dice NO VALIDO). Y una gondola tiene UN vigente: si una
 // sustitucion quedo a medias (C-39) el mas nuevo firmado manda y los otros salen «sustituido» por el.
 // C-40 (v0.40.0): las fechas en hora de Mexico, como el papel — el runner de Actions corre en UTC.
-import { createHash, pbkdf2Sync, randomBytes, createCipheriv, createDecipheriv, createHmac, timingSafeEqual } from 'node:crypto';
+import { material, cifrar, descifrar } from './cifrado-certificado.mjs';
 import { readFileSync, writeFileSync, readdirSync, unlinkSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -32,25 +30,6 @@ async function graph(url, tk) {
     const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tk } });
     if (!r.ok) throw new Error(`graph ${r.status} ${url.slice(0, 120)}: ${(await r.text()).slice(0, 300)}`);
     return r.json();
-}
-function llaves(folio, sufijo) {
-    const m = pbkdf2Sync(sufijo, 'MINSA-CT:' + folio, 100000, 64, 'sha256');
-    return { aes: m.subarray(0, 32), mac: m.subarray(32, 64) };
-}
-function cifrar(doc, folio, sufijo) {
-    const k = llaves(folio, sufijo), iv = randomBytes(16);
-    const c = createCipheriv('aes-256-cbc', k.aes, iv);
-    const ct = Buffer.concat([c.update(Buffer.from(JSON.stringify(doc), 'utf8')), c.final()]);
-    const mac = createHmac('sha256', k.mac).update(Buffer.concat([iv, ct])).digest();
-    return JSON.stringify({ v: 1, iv: iv.toString('base64'), ct: ct.toString('base64'), mac: mac.toString('base64') });
-}
-function descifrar(json, folio, sufijo) {
-    const b = JSON.parse(json); const k = llaves(folio, sufijo);
-    const iv = Buffer.from(b.iv, 'base64'), ct = Buffer.from(b.ct, 'base64'), mac = Buffer.from(b.mac, 'base64');
-    const esperado = createHmac('sha256', k.mac).update(Buffer.concat([iv, ct])).digest();
-    if (mac.length !== esperado.length || !timingSafeEqual(mac, esperado)) throw new Error('mac');
-    const d = createDecipheriv('aes-256-cbc', k.aes, iv);
-    return JSON.parse(Buffer.concat([d.update(ct), d.final()]).toString('utf8'));
 }
 const FMT_DIA = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit', year: 'numeric' });
 const dia = iso => FMT_DIA.format(new Date(iso));   // dd/mm/aaaa en hora de Mexico (C-40)
@@ -110,17 +89,17 @@ for (const f of renglones) {
         residuo, kg: f.Kg ?? null, manifiesto, ticket: f.TicketBascula ?? null, embarques: emb, fechas, transportista: f.Transportista ?? null,
         emitidoEl: f.EmitidoEl ?? null, sustituidoPor: pub.sustituidoPor, motivo: f.Estado === 'cancelado' ? motivoPublico(f.Motivo) : null, publicadoEl: ahora
     };
-    const archivo = createHash('sha256').update(nombre, 'utf8').digest('hex') + '.json';
+    const k = material(f.Title, f.Sufijo), archivo = k.nombre;
     const ruta = join(CARPETA, archivo);
     esperados.add(archivo);
     if (existsSync(ruta)) {
         try {
-            const viejo = descifrar(readFileSync(ruta, 'utf8'), f.Title, f.Sufijo);
+            const viejo = descifrar(readFileSync(ruta, 'utf8'), k);
             const a = { ...doc, publicadoEl: viejo.publicadoEl };
             if (JSON.stringify(a) === JSON.stringify(viejo)) { iguales++; continue; }
         } catch (_) { /* ilegible: se reescribe */ }
     }
-    writeFileSync(ruta, cifrar(doc, f.Title, f.Sufijo), 'utf8'); escritos++;
+    writeFileSync(ruta, cifrar(doc, k), 'utf8'); escritos++;
 }
 let borrados = 0;
 for (const a of readdirSync(CARPETA)) if (a.endsWith('.json') && !esperados.has(a)) { unlinkSync(join(CARPETA, a)); borrados++; }
