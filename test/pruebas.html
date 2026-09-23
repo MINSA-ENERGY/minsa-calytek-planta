@@ -710,6 +710,13 @@ try {
             // El programa ya viene elegido de U-21, así que la llegada arrancó en el vehículo: se regresa a Programa por la fila de subpasos.
             R.ok('tanda 4: con el programa ya elegido la llegada arranca en el vehículo', visible('puBloque2'), $('puPasoK').textContent);
             document.querySelector('#puSubpasos button[data-s="1"]').click();
+            {   // U-83 (v0.51.0): sin programa, «Siguiente» no lleva a una pantalla vacía: se queda y enfoca la lista.
+                const prog0 = $('puPrealta').value; poner('puPrealta', ''); await dormir(20);
+                clic('btnPuSiguiente');
+                R.ok('U-83: sin programa «Siguiente» no avanza y enfoca el primer programa', visible('puBloque1') && !visible('puBloque2') && !!document.activeElement && document.activeElement.closest('#puProgramas') !== null && !!avisoCon('Falta el programa'), document.activeElement && document.activeElement.textContent.slice(0, 40));
+                R.ok('U-85: el estado del subpaso lleva el detalle en su propio span (en celular se esconde)', $('puEst1').textContent === 'Falta 1 · programa' && !!$('puEst1').querySelector('.det') && (window.matchMedia('(max-width: 720px)').matches ? getComputedStyle($('puEst1').querySelector('.det')).display === 'none' : true), $('puEst1').textContent);
+                poner('puPrealta', prog0); await dormir(20);
+            }
             const firmadasN = $('puPrealta').options.length - 1;
             R.ok('tanda 4: un renglón por programa firmado (el select queda oculto como fuente de verdad)', document.querySelectorAll('#puProgramas .o').length === firmadasN && !visible('puBloque2') && visible('puBloque1') && $('puPrealta').classList.contains('oculto'), `${document.querySelectorAll('#puProgramas .o').length} renglones · ${firmadasN} firmadas`);
             const rProg = [...document.querySelectorAll('#puProgramas .o')].find(b => b.textContent.includes('CLIENTE DEMO'));
@@ -801,6 +808,11 @@ try {
         await esperar(() => visible('baPesar'), 'pesaje abierto');
         // Tanda 5 (v0.50.0): el pesaje es el paso 3 del asistente; la lista se esconde y el bruto no muestra la resta (M7).
         R.ok('tanda 5: el bruto abre el asistente en «Paso 3 de 5 · Bruto», con la lista escondida y sin la resta', $('p-bascula').classList.contains('asistiendo') && getComputedStyle($('gTabs')).display === 'none' && $('baPasoK').textContent === 'Paso 3 de 5 · Bruto' && $('baEcuacion').classList.contains('solo') && $('baPasos').querySelectorAll('.hecho').length === 2, $('baPasoK').textContent);
+        {
+            const conTeclado = !window.matchMedia('(min-width: 900px)').matches;
+            const antes = $('baFotoFila').compareDocumentPosition($('teclado')) & Node.DOCUMENT_POSITION_FOLLOWING;
+            R.ok('U-80: la foto va antes del teclado y, con teclado a la vista, Guardar no va pegado encima de las teclas', !!antes && (!conTeclado || getComputedStyle($('btnGuardarPeso')).position !== 'sticky'), `${window.innerWidth}px · ${getComputedStyle($('btnGuardarPeso')).position}`);
+        }
         poner('baKg', '44600');
         // U-24 (v0.26.0): Cancelar con peso tecleado (o foto) pregunta antes de tirarlo; al no confirmar, el pesaje sigue con su peso.
         clic('btnCancelarPeso'); await esperar(() => $('dlg').open, 'confirmación de cancelar pesaje');
@@ -835,7 +847,7 @@ try {
             const iCarpeta = ll.findIndex(x => x.startsWith('POST') && x.includes('/drive/root:') && x.endsWith(':/children'));
             R.ok('C-03: el folio se reserva (PATCH Title) ANTES de crear la carpeta del lote', iReserva >= 0 && iCarpeta > iReserva, `reserva #${iReserva} · carpeta #${iCarpeta}`);
         }
-        R.ok('ticket con folio y bruto', $('ticket').textContent.includes(emb1.fields.Title) && $('ticket').textContent.includes('44600'));
+        R.ok('ticket con folio y bruto', $('ticket').textContent.includes(emb1.fields.Title) && $('ticket').textContent.includes('44,600 kg'));
         R.ok('«Capturó» muestra el Nombre de PLANTA_Roles, no el correo', $('ticket').textContent.includes('Prueba') && !$('ticket').textContent.includes(window.__CUENTA.username), $('ticket').textContent.slice(-160));
         // M5: tras el bruto, la pausa «A descargar»: el folio ya nació, la góndola se retoma desde la lista.
         R.ok('M5: tras el bruto sale «A descargar» con el folio y el bruto', visible('baPausa') && !visible('baPesar') && !visible('baTicketCaja') && $('baPausaDatos').textContent.includes(emb1.fields.Title) && $('baPausaDatos').textContent.includes('44,600'), $('baPausaDatos').textContent);
@@ -846,9 +858,16 @@ try {
             clic('btnLoCapturado');
             const cs = getComputedStyle($('baCapturado'));
             R.ok('M6/M7: «Ver lo capturado» abre la hoja en celular; en escritorio es la columna derecha', cs.display !== 'none' && (movil ? cs.position === 'fixed' && $('btnLoCapturado').getAttribute('aria-expanded') === 'true' : cs.position === 'static'), `${window.innerWidth}px · ${cs.display} · ${cs.position}`);
+            if (movil) {
+                R.ok('U-81: con la hoja abierta hay un velo real (elemento) que tapa lo de atrás', visible('baVelo') && getComputedStyle($('baVelo')).position === 'fixed');
+                $('baVelo').click();
+                R.ok('U-81: tocar el velo cierra la hoja y el foco vuelve a «Ver lo capturado»', !$('baCapturado').classList.contains('abierta') && !visible('baVelo') && document.activeElement === $('btnLoCapturado'));
+                clic('btnLoCapturado');
+            }
             clic('btnCerrarCapturado');
             R.ok('M6: cerrar la hoja la esconde (en escritorio la columna se queda)', movil ? getComputedStyle($('baCapturado')).display === 'none' : getComputedStyle($('baCapturado')).display !== 'none');
         }
+        R.ok('U-86: la miga «Góndolas» mide al menos 36 px de alto (y «Ver lo capturado» en celular)', $('btnBaGondolas').getBoundingClientRect().height >= 36 && (window.matchMedia('(min-width: 900px)').matches || $('btnLoCapturado').getBoundingClientRect().height >= 36), `${$('btnBaGondolas').getBoundingClientRect().height} · ${$('btnLoCapturado').getBoundingClientRect().height}`);
         clic('btnPausaLista');
         R.ok('M5: «Volver a la lista» cierra el asistente y la góndola dice «falta tara»', !visible('baAsis') && !$('p-bascula').classList.contains('asistiendo') && filaG('baLista', emb1.fields.Title).textContent.includes('falta tara'));
 
@@ -875,9 +894,10 @@ try {
         clic('btnGuardarPeso');
         const dijoReintento = await esperar(() => /reintentando/.test($('textoAvance').textContent) && $('textoAvance').textContent, 'aviso de reintento', 3000).catch(() => '');
         R.ok('C-17: un 429 en el guardado se ve en pantalla («reintentando»), no como pausa muda', !!dijoReintento, dijoReintento || $('textoAvance').textContent);
-        await esperar(() => avisoCon('cerrado: neto 21220'), 'tara guardada');
+        await esperar(() => avisoCon('Góndola') && avisoCon('cerrada: neto 21,220 kg'), 'tara guardada');   // U-87
         R.ok('neto = bruto − tara, etapa cerrado, InicioAlmacen = hora del bruto', emb1.fields.NetoKg === 21220 && emb1.fields.Etapa === 'cerrado' && emb1.fields.InicioAlmacen === emb1.fields.BrutoHora);
-        R.ok('ticket final con NETO', $('ticket').textContent.includes('21220'));
+        R.ok('ticket final con NETO', $('ticket').textContent.includes('21,220 kg'));
+        R.ok('U-88: en el paso 5 el encabezado del asistente dice el NETO, no el bruto', $('baQuienSub').textContent.includes('neto 21,220 kg') && !$('baQuienSub').textContent.includes('bruto'), $('baQuienSub').textContent);
         R.ok('M8: tras la tara sale el ticket como paso 5, con «Terminar»', visible('baTicketCaja') && !visible('baPesar') && visible('btnTerminar') && $('baPasoK').textContent === 'Paso 5 de 5 · Ticket' && $('baPasos').querySelectorAll('.hecho').length === 4, $('baPasoK').textContent);
         clic('btnTerminar');
         R.ok('M8: «Terminar» regresa a la lista y dice qué se cerró', !visible('baAsis') && !!avisoCon(`${emb1.fields.Title} cerrada · neto 21,220 kg`));
@@ -889,13 +909,30 @@ try {
         poner('puManifiesto', 'MINSA/RME/106/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite');
         clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 2');
         R.ok('sin art. 79 marcado sale como aviso, no bloquea', $('vkW').textContent === 'Pasa' && $('puHallazgos').textContent.includes('Art. 79'));
+        {   // C-52 (v0.51.0): con el veredicto abierto, otra sesión da de baja la unidad y el refresco trae el padrón nuevo.
+            const u55 = filas('unidades').find(u => String(u.fields.Title).replace(/\W/g, '').toUpperCase() === '55XY9K');
+            const n0 = filas('embarques').length;
+            u55.fields.Activo = false;
+            clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con el veredicto abierto');
+            clic('btnRegistrarPuerta'); await dormir(30);
+            R.ok('C-52: si el padrón cambió con el veredicto abierto, NO registra: repinta el veredicto nuevo y lo dice', filas('embarques').length === n0 && visible('veredicto') && $('vkW').textContent !== 'Pasa' && !!avisoCon('cambiaron mientras el veredicto'), `${$('vkW').textContent} · ${filas('embarques').length - n0} nuevos`);
+            u55.fields.Activo = true;
+            clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con la unidad de vuelta');
+            clic('btnRegistrarPuerta'); await dormir(30);
+            R.ok('C-52: de vuelta al padrón de antes, el veredicto vuelve a «Pasa» y tampoco registra en ese toque', filas('embarques').length === n0 && $('vkW').textContent === 'Pasa', $('vkW').textContent);
+        }
         clic('btnRegistrarPuerta'); await esperar(() => filas('embarques').length === 3, 'segundo embarque');
         const emb2 = filas('embarques')[2];
         irGondolas();
         filaG('baLista', 'falta peso bruto').querySelector('button').click();
         await esperar(() => visible('baPesar'), 'pesaje 2'); poner('baKg', '44600'); await foto(); clic('btnGuardarPeso');
         await esperar(() => avisoCon(`Folio E-${aa}-00003`), 'bruto 2');
+        R.ok('(pausa del bruto 2 a la vista)', visible('baPausa'));
+        document.querySelector('#pestanas button[data-p="hoy"]').click();
+        R.ok('C-51: salir por el rail desde la pausa «A descargar» cierra el asistente (antes quedaba abierto y congelaba el refresco)', !visible('baAsis') && !$('p-bascula').classList.contains('asistiendo') && visible('p-hoy'));
+        clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga en Hoy tras la pausa');
         irGondolas();
+        R.ok('C-51: al volver, Góndolas abre en la lista, no en la pausa vieja', !visible('baAsis') && !!filaG('baLista', emb2.fields.Title));
         filaG('baLista', emb2.fields.Title).querySelector('button').click();
         await esperar(() => visible('baPesar'), 'tara 2');
         poner('baKg', '40000'); await dormir(30);
@@ -905,7 +942,7 @@ try {
         clic('btnGuardarPeso'); await dormir(50);
         R.ok('sin motivo no cierra', !!avisoCon('se sale de la banda'));
         poner('baMotivoNeto', 'Góndola venía a un cuarto, confirmado con el chofer'); clic('btnGuardarPeso');
-        await esperar(() => avisoCon(`${emb2.fields.Title} cerrado`), 'tara 2 guardada');
+        await esperar(() => avisoCon(`${emb2.fields.Title} cerrada`), 'tara 2 guardada');
         R.ok('motivo del neto queda en Notas', String(emb2.fields.Notas).includes('fuera de banda') && String(emb2.fields.Notas).includes('un cuarto'));
 
         // 9. Caso 4 del plan: placa no transcrita -> rechazo legal R-, sin consumir E-.
@@ -924,6 +961,8 @@ try {
         const rech = filas('embarques').find(e => e.fields.Etapa === 'rechazado');
         R.ok('folio R- asignado y E- no consumido', rech && rech.fields.Title === `R-${aa}-0001` && !filas('embarques').some(e => e.fields.Title === `E-${aa}-00004`), rech && rech.fields.Title);
         R.ok('M4: tras registrar el rechazo se ve Góndolas › Rechazos con su folio', visible('p-bascula') && visible('gpRechazos') && !visible('gpPlanta') && !!filaG('gRechazos', rech.fields.Title));
+        {   const causa = filaG('gRechazos', rech.fields.Title).querySelector('.causa');
+            R.ok('U-89: la causa del rechazo trae el nombre de la regla y, debajo, qué le pasó', !!causa && causa.querySelector('.paso').textContent.includes('Placa') && !!causa.querySelector('small') && causa.querySelector('small').textContent.length > 5, causa ? causa.textContent : 'sin causa'); }
 
         // 10. Caso 5: poliza vencida -> excepcion comercial -> autorizar desde Hoy.
         filas('unidades')[0].fields.PolizaVigencia = '2026-01-01T12:00:00Z';
@@ -1167,13 +1206,22 @@ try {
             poner('puManifiesto', 'MINSA/RME/111/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
             clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 111'); clic('btnRegistrarPuerta');
             await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/111/2025'), 'embarque 111');
+            // C-57 (v0.51.0): desde la v0.50.0 la lista se esconde con el asistente abierto, así que nadie toca «Pesar tara» de B
+            // con A abierto. El camino real: A abierto, el refresco sustituye las listas SIN repintar, se sale por la miga y B se
+            // pesa desde la lista que se ve. Cada clic va precedido de su visible().
+            const seVe = n => !!n && n.offsetParent !== null && getComputedStyle(n).visibility !== 'hidden';
             irGondolas();
-            filaG('baLista', 'MINSA/RME/111').querySelector('button').click();
+            const btnA = filaG('baLista', 'MINSA/RME/111').querySelector('button');
+            R.ok('C-57: «Pesar bruto» de A se ve antes de tocarlo', seVe(btnA));
+            btnA.click();
             await esperar(() => visible('baPesar') && $('baTitulo').textContent.includes('Bruto'), 'pesaje A (111) abierto');
             clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con pesaje A abierto');
-            R.ok('C-12: el refresco con captura a medias no repinta la lista (sigue el DOM viejo con el pesaje abierto)', visible('baPesar'));
+            R.ok('C-12: el refresco con captura a medias no cierra el pesaje abierto ni repinta debajo', visible('baPesar') && $('baTitulo').textContent.includes('Bruto'));
+            R.ok('C-57: la miga «Góndolas» se ve antes de tocarla', seVe($('btnBaGondolas')));
+            clic('btnBaGondolas'); await esperar(() => !visible('baAsis'), 'salir de A por la miga');
             const btnTaraB = filaG('baLista', e110.fields.Title).querySelector('button');
-            btnTaraB.click(); await esperar(() => $('baTitulo').textContent.includes('Tara') && $('baTitulo').textContent.includes(e110.fields.Title), 'pesaje B (110) abierto desde el DOM viejo');   // U-44: el título trae placa y folio
+            R.ok('C-57: tras salir por la miga, «Pesar tara» de B se ve en la lista (no en un DOM escondido)', seVe(btnTaraB) && btnTaraB.textContent === 'Pesar tara');
+            btnTaraB.click(); await esperar(() => $('baTitulo').textContent.includes('Tara') && $('baTitulo').textContent.includes(e110.fields.Title), 'pesaje B (110) abierto desde la lista visible');   // U-44: el título trae placa y folio
             // C-13 (v0.25.0): entre abrir la tara y guardar, OTRA sesion anula la gondola (mutacion directa del Graph falso).
             // La app relee el renglon antes de subir la foto: no cierra, no sube lote y lo dice.
             e110.fields.Etapa = 'anulado'; e110.fields.AnuladoPor = 'gerencia@example.invalid';
@@ -1186,9 +1234,9 @@ try {
             e110.fields.Etapa = 'bruto'; delete e110.fields.AnuladoPor;
             clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras deshacer la anulación');
             const revokeReal = URL.revokeObjectURL; let revocados = 0; URL.revokeObjectURL = u => { revocados++; return revokeReal.call(URL, u); };
-            clic('btnGuardarPeso'); await esperar(() => avisoCon(`Embarque ${e110.fields.Title} cerrado`), 'tara de B guardada');
+            clic('btnGuardarPeso'); await esperar(() => avisoCon(`Góndola ${e110.fields.Title} cerrada`), 'tara de B guardada');
             URL.revokeObjectURL = revokeReal;
-            R.ok('C-12: la tara de B (tomada del DOM viejo) cierra el renglón de la lista fresca y B sale de «En planta»', e110.fields.Etapa === 'cerrado' && e110.fields.NetoKg === 21000 && !$('baLista').textContent.includes(e110.fields.Title), `etapa ${e110.fields.Etapa} · neto ${e110.fields.NetoKg}`);
+            R.ok('C-12: la tara de B cierra el renglón de la lista fresca (tras dos refrescos) y B sale de «En planta»', e110.fields.Etapa === 'cerrado' && e110.fields.NetoKg === 21000 && !$('baLista').textContent.includes(e110.fields.Title), `etapa ${e110.fields.Etapa} · neto ${e110.fields.NetoKg}`);
             R.ok('C-21: al guardar, la vista previa de la foto revoca su blob URL (antes quedaba vivo hasta recargar la PWA)', revocados >= 1, `revocados ${revocados}`);
         }
         // 12c. Pre-alta en borrador: se elimina; firmada: no.
@@ -1295,13 +1343,16 @@ try {
         poner('baBusca', emb1.fields.Title.slice(-3)); await esperar(() => $('baBuscaCuenta').textContent.includes('resultado'), 'busca cerrados por folio');
         R.ok('el buscador filtra por folio', $('baCerrados').textContent.includes(emb1.fields.Title));
         [...document.querySelectorAll('#baCerrados .gfila')].find(r => r.textContent.includes(emb1.fields.Title)).querySelector('button').click();
-        R.ok('Ticket desde Cerrados abre la ventana con el folio y su neto', $('dlgTicket').open && $('ticketPop').textContent.includes(emb1.fields.Title) && $('ticketPop').textContent.includes('21220'));
+        R.ok('Ticket desde Cerrados abre la ventana con el folio y su neto', $('dlgTicket').open && $('ticketPop').textContent.includes(emb1.fields.Title) && $('ticketPop').textContent.includes('21,220 kg'));
         vistaG('historial');
         R.ok('tanda 3: Historial (antes Cerrados) se abre desde su pestaña, con su buscador y su resumen', !$('gpHistorial').hidden && $('gpPlanta').hidden && /\d+ con neto/.test($('gPieHistorial').textContent), $('gPieHistorial').textContent);
         clic('tkCerrar'); poner('baBusca', '');
         const nCerr = document.querySelectorAll('#baCerrados .gfila').length;
         document.querySelector('#baCerrados .gfila button').click();
         const primero = $('tkPos').textContent;
+        {   const nLlT = DB.llamadas.length;
+            clic('btnActualizar'); await dormir(60);
+            R.ok('C-53: con el ticket abierto el refresco no sustituye las listas (‹ › no recorren copias viejas)', DB.llamadas.length === nLlT && $('dlgTicket').open, `${DB.llamadas.length - nLlT} llamadas`); }
         clic('tkSig');
         R.ok('› pasa al siguiente ticket de la lista', nCerr > 1 && $('tkPos').textContent.startsWith('2 de') && $('tkPos').textContent !== primero, `${nCerr} · ${primero} → ${$('tkPos').textContent}`);
         clic('tkAnt');

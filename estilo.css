@@ -255,9 +255,9 @@ h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-tra
 
 /* Migas (tanda 2 del rediseño, v0.47.0): la ruta va ARRIBA del título aunque en el DOM venga después (order); el
    eslabón de arriba es un botón que regresa. Solo las pantallas hijas las llevan: una sección del rail no tiene de dónde venir. */
-.cabecera .migas { order: -1; flex-basis: 100%; display: flex; align-items: baseline; gap: var(--sp-1); font-size: .8rem; color: var(--mute); }
+.cabecera .migas { order: -1; flex-basis: 100%; display: flex; align-items: center; gap: var(--sp-1); font-size: .8rem; color: var(--mute); }
 .cabecera .migas b { color: var(--body); font-weight: 500; }
-.cabecera .migas .miga { all: unset; cursor: pointer; color: var(--acc); font-weight: 500; }
+.cabecera .migas .miga { all: unset; cursor: pointer; display: inline-flex; align-items: center; min-height: 36px; color: var(--acc); font-weight: 500; }   /* U-86: la de la llegada, igual que la del asistente */
 .cabecera .migas .miga:hover { text-decoration: underline; }
 .cabecera .migas .miga:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 
@@ -515,9 +515,10 @@ button:not(:disabled):active { transform: scale(.98); }
 .foto-fila .foto-texto small { font-size: .78rem; color: var(--warn-fg); font-weight: 600; }
 .foto-fila .foto-texto small.lista { color: var(--ok-fg); }
 .foto-fila button { margin: 0; width: auto; }
-.pesaje #btnGuardarPeso { position: sticky; bottom: calc(4.9rem + env(safe-area-inset-bottom)); z-index: 5; background: var(--surf); box-shadow: 0 -8px 16px -8px var(--bg); }
 .pesaje #btnGuardarPeso:hover:not(:disabled) { background: var(--ok); }
-@media (min-width: 721px) { .pesaje #btnGuardarPeso { bottom: 1rem; } }
+/* U-80 (v0.51.0): pegado solo donde no hay teclado propio (>= 900 px). Con el teclado a la vista, el Guardar pegado tapaba una
+   fila de teclas y dejaba la foto obligatoria debajo; ahora va en su lugar, justo bajo el teclado. Revertir: quitar el @media. */
+@media (min-width: 900px) { .pesaje #btnGuardarPeso { position: sticky; bottom: 1rem; z-index: 5; background: var(--surf); box-shadow: 0 -8px 16px -8px var(--bg); } }
 
 /* ---------------------------------------------------------------- HOY */
 
@@ -574,12 +575,14 @@ button:not(:disabled):active { transform: scale(.98); }
    «a b / c d / e / f»; m-x solo se ve en escritorio. La góndola que espera a gerencia va en ámbar (decisión 10). */
 .gtabs { display: flex; gap: 1.4rem; border-bottom: 1px solid var(--line); margin: 0 0 var(--sp-3); overflow-x: auto; scrollbar-width: none; }
 .gtabs::-webkit-scrollbar { display: none; }
-.gtabs button { all: unset; cursor: pointer; padding: 0 0 .6rem; margin-bottom: -1px; border-bottom: 2px solid transparent; font-weight: 500; color: var(--mute); white-space: nowrap; }
+.gtabs button { all: unset; cursor: pointer; display: inline-flex; align-items: center; box-sizing: border-box; min-height: var(--control-h); padding: 0; margin-bottom: -1px; border-bottom: 2px solid transparent; font-weight: 500; color: var(--mute); white-space: nowrap; }   /* U-82: alto de control, no del texto */
 .gtabs button[aria-pressed="true"] { color: var(--ink); font-weight: 600; border-color: var(--acc); }
 .gtabs button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 .gtabs i { font-style: normal; font-family: var(--mono); font-size: .78rem; margin-left: .4rem; color: var(--faint); }
 .gtabs i:empty { display: none; }
 .gtabs i.alerta { color: var(--warn-fg); font-weight: 600; }
+/* U-82 (v0.51.0): a 390 px «Historial» salía cortado; las cuatro se reparten el ancho con menos separación. */
+@media (max-width: 480px) { .gtabs { gap: .7rem; justify-content: space-between; } .gtabs button { font-size: .86rem; } .gtabs i { margin-left: .25rem; } }
 .gpanel > .pista:empty { display: none; }
 .gpanel > .vacio { padding: var(--sp-2) 0; }
 .gtabla { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surf); border: 1px solid var(--line-soft); border-radius: var(--r-md); overflow: hidden; font-size: .88rem; }
@@ -724,6 +727,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .subpasos button > span:first-child { font-size: .82rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subpasos .est { font-family: var(--mono); font-size: .64rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--warn-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subpasos .listo .est { color: var(--ok-fg); }
+@media (max-width: 720px) { .subpasos .est .det { display: none; } }   /* U-85: en celular solo el conteo; el detalle vive en el title y en «Faltan N datos» */
 .subpasos button[aria-current="step"] { background: var(--acc-soft); }
 .subpasos button[aria-current="step"] > span:first-child { color: var(--acc); font-weight: 600; }
 .subpasos button:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
@@ -762,10 +766,12 @@ button:not(:disabled):active { transform: scale(.98); }
 .asis-botones .secundario { width: auto; margin-top: 0; }
 .asis-botones .principal { width: auto; min-width: 16rem; }
 @media (max-width: 720px) {
-    .asis-pie { position: sticky; bottom: calc(var(--sp-7) + 8px + env(safe-area-inset-bottom)); z-index: 5; margin: 0 calc(-1 * var(--sp-3)); padding: var(--sp-3); background: var(--surf); border-top: 1px solid var(--line); }
-    .asis-botones { flex-direction: column-reverse; }
-    .asis-botones .principal, .asis-botones .secundario { width: 100%; min-width: 0; }
-    .asis-botones .principal { min-height: 52px; }
+    .asis-pie { position: sticky; bottom: calc(var(--sp-7) + 8px + env(safe-area-inset-bottom)); z-index: 5; margin: 0 calc(-1 * var(--sp-3)); padding: var(--sp-2) var(--sp-3); gap: var(--sp-1); background: var(--surf); border-top: 1px solid var(--line); }
+    /* U-84 (v0.51.0): el pie pegado se comía ~200 px; ahora el renglón vivo va en una línea y atrás/siguiente en una fila. */
+    .asis-pie .vivo { font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .asis-botones { flex-direction: row; }
+    .asis-botones .secundario { width: auto; flex: none; min-width: 0; padding: 0 var(--sp-3); }
+    .asis-botones .principal { flex: 1; width: auto; min-width: 0; min-height: 48px; }
 }
 .reglas { list-style: none; margin: 0; padding: 0; }
 .reglas li { display: grid; grid-template-columns: 9px 1fr auto; gap: var(--sp-2); align-items: center; padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft); font-size: .88rem; }
@@ -803,15 +809,15 @@ button:not(:disabled):active { transform: scale(.98); }
    En escritorio (≥ 900 px) el paso va a la izquierda y «Lo capturado» a la derecha (M7); en celular es una hoja (M6). */
 #p-bascula.asistiendo > .cabecera, #p-bascula.asistiendo > .gtabs, #p-bascula.asistiendo > .gpanel { display: none; }
 .gasis { max-width: none; }
-.gasis > .migas { display: flex; align-items: baseline; gap: var(--sp-1); font-size: .8rem; color: var(--mute); }
+.gasis > .migas { display: flex; align-items: center; gap: var(--sp-1); font-size: .8rem; color: var(--mute); }
 .gasis > .migas b { color: var(--body); font-weight: 500; font-family: var(--mono); }
-.gasis > .migas .miga { all: unset; cursor: pointer; color: var(--acc); font-weight: 500; }
+.gasis > .migas .miga { all: unset; cursor: pointer; display: inline-flex; align-items: center; min-height: 36px; color: var(--acc); font-weight: 500; }   /* U-86: área táctil de 36 px, aspecto de enlace */
 .gasis > .migas .miga:hover { text-decoration: underline; }
 .gasis > .migas .miga:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 .pasos5 .hecho { color: var(--body); }
 .pasos5 .hecho i { background: var(--ok); }
 .asis-der { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.ver-capturado { all: unset; cursor: pointer; font-size: .82rem; font-weight: 600; color: var(--acc); }
+.ver-capturado { all: unset; cursor: pointer; display: inline-flex; align-items: center; min-height: 36px; font-size: .82rem; font-weight: 600; color: var(--acc); }   /* U-86 */
 .ver-capturado:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 .gasis-cuerpo { display: grid; gap: var(--sp-4); align-items: start; }
 .gasis-paso > .tarjeta { margin: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
@@ -843,6 +849,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .datos-ba dd.mono, .capturado dd.mono { font-family: var(--mono); }
 .capturado dd.e-ok { color: var(--ok-fg); }
 .capturado dd.e-warn { color: var(--warn-fg); }
+.causa small { display: block; margin-top: 2px; font-size: .78rem; color: var(--mute); }   /* U-89: qué le pasó a la regla, bajo su nombre */
 /* M6 / M7: lo capturado. En celular, escondido hasta «Ver lo capturado», y entonces hoja inferior sobre un velo. */
 .capturado { display: none; background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4) var(--sp-4); gap: var(--sp-2); align-content: start; }
 .capturado-cab { display: flex; justify-content: space-between; align-items: center; }
@@ -851,11 +858,13 @@ button:not(:disabled):active { transform: scale(.98); }
 .capturado .sec em { font-style: normal; text-transform: none; letter-spacing: 0; font-family: var(--mono); color: var(--ok-fg); font-size: .76rem; }
 .cerrar-hoja { all: unset; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; color: var(--mute); border-radius: var(--r-sm); }
 .cerrar-hoja:focus-visible { outline: 2px solid var(--acc); }
-.capturado.abierta { display: grid; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-height: 80vh; overflow-y: auto; border-radius: 10px 10px 0 0; padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom)); box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .45); }
+.capturado.abierta { display: grid; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-height: 80vh; overflow-y: auto; border-radius: 10px 10px 0 0; padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom)); }
+/* U-81 (v0.51.0): el velo es un elemento que recibe el toque y cierra la hoja (antes, una box-shadow que dejaba pasar el toque). */
+.velo-hoja { position: fixed; inset: 0; z-index: 39; background: rgba(0, 0, 0, .45); }
 @media (min-width: 900px) {
     .gasis-cuerpo { grid-template-columns: minmax(0, 40rem) 340px; }   /* el paso conserva los 40rem de #p-bascula .tarjeta; la columna va pegada */
     .capturado, .capturado.abierta { display: grid; position: static; max-height: none; border-radius: var(--r-md); box-shadow: none; padding-bottom: var(--sp-4); }
-    .ver-capturado, .cerrar-hoja { display: none; }
+    .ver-capturado, .cerrar-hoja, .velo-hoja { display: none; }
     /* M7: Bruto − Tara = Neto en un renglón; la tara se teclea al centro. */
     .ecuacion:not(.solo) { grid-template-columns: 1fr auto 1.25fr auto 1fr; align-items: end; gap: 0 var(--sp-4); padding: var(--sp-4); background: var(--surf2); border-radius: var(--r-md); }
     .ecuacion:not(.solo) .op { display: block; font-family: var(--mono); font-size: 1.8rem; color: var(--faint); line-height: 72px; }

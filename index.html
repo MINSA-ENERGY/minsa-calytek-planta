@@ -244,12 +244,7 @@
           <div class="term res oculto" id="baNetoVivo"><span class="etiqueta-campo">Neto</span><b id="baNvNeto"></b><small id="baNvCapBox">capacidad <span id="baNvCap"></span> kg</small></div>
         </div>
         <p class="pista">Solo kilogramos enteros, nunca m³. Lo que marca el indicador, ahora.</p>
-        <div class="teclado" id="teclado" aria-label="Teclado numérico">
-          <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
-          <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button>
-          <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button>
-          <button type="button" data-k="0">0</button><button type="button" data-k="00">00</button><button type="button" data-k="borrar" class="borrar" aria-label="Borrar">⌫</button>
-        </div>
+        <!-- U-80 (v0.51.0): la evidencia va ANTES del teclado: con el Guardar pegado debajo, la foto obligatoria quedaba tapada. -->
         <div class="evidencia">
         <div class="campo foto-fila" id="baFotoFila">
           <img id="baFotoPrevia" class="foto-previa oculto" alt="">
@@ -264,6 +259,12 @@
           <input type="text" id="baTicketBascula" maxlength="40" autocomplete="off" placeholder="Número del ticket">
           <small class="pista">El número impreso en el ticket de la báscula.</small>
         </div>
+        </div>
+        <div class="teclado" id="teclado" aria-label="Teclado numérico">
+          <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
+          <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button>
+          <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button>
+          <button type="button" data-k="0">0</button><button type="button" data-k="00">00</button><button type="button" data-k="borrar" class="borrar" aria-label="Borrar">⌫</button>
         </div>
         <div id="baAvisoNeto" class="mensaje ojo oculto"></div>
         <div class="campo oculto" id="baMotivoNetoCampo">
@@ -296,6 +297,7 @@
         </div>
       </div>
           </div>
+          <div class="velo-hoja" id="baVelo" hidden></div>
           <aside class="capturado" id="baCapturado" aria-labelledby="baCapturadoTit">
             <div class="capturado-cab"><h3 id="baCapturadoTit">Lo capturado</h3><button type="button" class="cerrar-hoja" id="btnCerrarCapturado" aria-label="Cerrar">×</button></div>
             <dl id="baCapturadoDl"></dl>

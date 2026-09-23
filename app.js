@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado } from './reglas.js';
 
-const VERSION = '0.50.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.51.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -547,7 +547,8 @@ async function recargar(silencioso = false) {
     // al await caeria sobre un objeto huerfano (la gondola anulada seguia «En planta», gerencia autorizaba dos veces). Antes
     // solo se frenaba el REPINTADO (capturaAMedias); cargarTodo() corria igual. El timer lo vuelve a intentar al minuto.
     // C-38 (v0.40.0): tambien con el certificado abierto — gerencia esta leyendo un papel que el refresco repintaria debajo.
-    if (escrituras > 0 || $('dlg').open || $('dlgCertificado').open) { if (!silencioso && escrituras > 0) avisar('Espera a que termine de guardar y vuelve a actualizar.', 'ojo'); return; }
+    // C-53 (v0.51.0): y con el ticket abierto — es el papel que se lleva el chofer; ‹ › no deben recorrer otra lista a media lectura.
+    if (escrituras > 0 || $('dlg').open || $('dlgCertificado').open || $('dlgTicket').open) { if (!silencioso && escrituras > 0) avisar('Espera a que termine de guardar y vuelve a actualizar.', 'ojo'); return; }
     recargando = true;
     for (const id of ['btnActualizar', 'btnActualizarMovil']) $(id).disabled = true;
     pintarSync(true);
@@ -604,10 +605,16 @@ const PESTANA_DE = { gondolas: 'bascula' };
 function irDesdePestana(p) {
     p = PESTANA_DE[p] || p;
     if (p !== 'bascula' && pesajeConAlgo()) { soltarPesaje().then(ok => { if (ok) irA(p); }); return; }
-    if (p !== 'bascula' && !$('baPesar').classList.contains('oculto')) descartarPesaje();   // vacio: se suelta sin preguntar, como Cancelar
-    irA(p);
+    irA(p);   // vacio, en la pausa o en el ticket: irA lo suelta sin preguntar (C-51)
 }
+/**
+ * C-51 (v0.51.0): salir de Góndolas suelta el asistente en TODOS sus estados. Antes solo se soltaba con #baPesar visible: desde la
+ * pausa «A descargar» o el ticket, #baAsis se quedaba abierto en una sección oculta y capturaAMedias() congelaba el refresco de
+ * todas las pestañas. Una sola salida, llamada desde irA(): el rail, la miga y registrarPuerta pasan por ahí.
+ */
+function salirDelAsistente() { if (!$('baAsis').classList.contains('oculto') || estado.pesando) descartarPesaje(); }
 function irA(p) {
+    if (p !== 'bascula') salirDelAsistente();
     estado.pestana = p;
     for (const b of botonesRail()) { if (b.dataset.p === (RAIL_DE[p] || p)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }   // U-57 (v0.29.0): <nav> con aria-current, como .mn-rail de la piel; el role=tablist prometía flechas y tabpanel que no había
     for (const s of SECCIONES) $('p-' + s).classList.toggle('oculto', s !== p);
@@ -750,7 +757,8 @@ function pintarUnidadesPuerta() {
             dato: v });
         b.dataset.placa = placaNormal(u.Title);   // U-17: la seleccion al teclear compara contra esto, no contra el texto del chip
         b.addEventListener('click', () => {
-            $('puPlaca').value = u.Title; $('puPlacaPlana').value = u.PlacaPlana || '';
+            const x = vivo('unidades', u);   // C-58 (v0.51.0): la unidad VIVA al clic; la Puerta no se repinta con captura a medias
+            $('puPlaca').value = x.Title; $('puPlacaPlana').value = x.PlacaPlana || '';
             marcarChip(cont, b.dataset.placa);   // C-28
             pintarPrevioPuerta();
         });
@@ -848,7 +856,9 @@ function pintarPrevioPuerta() {
         const ok = !faltantes.length, n = faltantes.length;
         $(bloque).classList.toggle('listo', ok);
         // D2 (2026-09-08): el estado cuenta lo que falta; el detalle («falta la placa») queda en el title y en el texto.
-        $(est).textContent = ok ? 'Listo' : n === 1 ? `Falta 1 · ${faltantes[0]}` : `Faltan ${n}`;
+        // U-85 (v0.51.0): el «· programa» va en su propio span para que el celular muestre solo el conteo (estilo.css .est .det).
+        $(est).textContent = ok ? 'Listo' : n === 1 ? 'Falta 1' : `Faltan ${n}`;
+        if (!ok && n === 1) $(est).appendChild(el('span', 'det', ` · ${faltantes[0]}`));
         $(est).title = ok ? '' : `${pendiente} ${faltantes.join(' y ')}`;
     }
 
@@ -991,6 +1001,15 @@ document.addEventListener('keydown', ev => {
 
 async function registrarPuerta() {
     const r = estado.ultimaCompuerta; if (!r) return;
+    // C-52 (v0.51.0): el veredicto se calculó al abrirlo y puede llevar minutos abierto; si el refresco trajo otro padrón o pre-alta,
+    // se vuelve a evaluar y, si cambió, se pinta el nuevo y NO se registra hasta un segundo toque. Antes se escribía el viejo.
+    const fresca = evaluarPuerta();
+    if (fresca.resultado !== r.resultado || JSON.stringify(fresca.hallazgos) !== JSON.stringify(r.hallazgos)) {
+        const foco = estado.focoAntesVeredicto;
+        estado.ultimaCompuerta = fresca; pintarResultadoCompuerta(); estado.focoAntesVeredicto = foco;
+        avisar('El padrón o la pre-alta cambiaron mientras el veredicto estaba abierto: revisa el veredicto nuevo y vuelve a tocar el botón.', 'ojo');
+        return;
+    }
     if (r.resultado === 'excepcion-comercial' && !$('puMotivo').value.trim()) {
         avisar('La excepción lleva motivo escrito, no una casilla.', 'error');
         $('puMotivo').setAttribute('aria-invalid', 'true'); $('puMotivo').focus();   // U-39: el campo que falta se marca y recibe el foco
@@ -1167,7 +1186,9 @@ function mostrarAsistente(e, pantalla, paso) {
     $('baPasoK').textContent = pantalla === 'baPausa' ? 'Paso 3 de 5 · A descargar' : `Paso ${paso} de 5 · ${['', '', '', 'Bruto', 'Tara', 'Ticket'][paso]}`;
     $('baQuien').textContent = e.Title ? `${e.Title} · ${e.PlacaTractor || ''}` : [e.PlacaTractor, e.PlacaPlana].filter(Boolean).join(' · ');
     $('baMiga').textContent = e.Title || e.PlacaTractor || 'Góndola';
-    $('baQuienSub').textContent = [nombreDe(estado.prealtas, e.PreAltaId), nombreDe(estado.carriers, e.CarrierId), e.BrutoKg ? `bruto ${kgG(e.BrutoKg)}` : null].filter(x => x && x !== '—').join(' · ');
+    // U-88 (v0.51.0): cerrada, el dato que se le dice al chofer es el neto, no el bruto de la etapa anterior.
+    const peso = e.NetoKg ? `neto ${kgG(e.NetoKg)}` : e.BrutoKg ? `bruto ${kgG(e.BrutoKg)}` : null;
+    $('baQuienSub').textContent = [nombreDe(estado.prealtas, e.PreAltaId), nombreDe(estado.carriers, e.CarrierId), peso].filter(x => x && x !== '—').join(' · ');
     pintarCapturado(e);
     cerrarHojaCapturado();
     window.scrollTo({ top: 0 });
@@ -1201,16 +1222,17 @@ function pintarCapturado(e) {
     par('Chofer', e.ChoferNombre || nombreDe(estado.choferes, e.ChoferId));
     par('Manifiesto', e.Manifiesto, 'mono'); par('Corriente', opc ? opc.textContent : corr);
     par('Capturó', quien(e.CapturadoPor));
-    let avisos = '';
-    try { avisos = JSON.parse(e.CompuertaDetalle || '[]').filter(h => h.clase === 'aviso').map(h => h.regla).join(', '); } catch (_) { /* sin detalle */ }
+    const avisos = reglasDe(e, 'aviso');   // C-54
     sec('Veredicto');
     par('Resultado', e.Compuerta === 'pasa' ? 'Pasa' : e.Compuerta === 'excepcion-comercial' ? (e.ExcepcionAutorizo ? `Espera · autorizó ${quien(e.ExcepcionAutorizo)}` : 'Espera autorización') : e.Compuerta, e.Compuerta === 'pasa' ? 'e-ok' : 'e-warn');
     par('Avisos', avisos, 'e-warn');
     if (e.BrutoKg) { sec('Peso bruto', horaMexico(e.BrutoHora, 'hora')); par('Folio', e.Title, 'mono'); par('Bruto', kgG(e.BrutoKg), 'mono'); }
     if (e.TaraKg) { sec('Tara', horaMexico(e.TaraHora, 'hora')); par('Tara', kgG(e.TaraKg), 'mono'); par('Neto', kgG(e.NetoKg), 'mono'); par('Ticket de báscula', e.TicketBascula, 'mono'); }
 }
-function abrirHojaCapturado() { $('baCapturado').classList.add('abierta'); $('btnLoCapturado').setAttribute('aria-expanded', 'true'); $('btnCerrarCapturado').focus(); }
-function cerrarHojaCapturado() { $('baCapturado').classList.remove('abierta'); $('btnLoCapturado').setAttribute('aria-expanded', 'false'); }
+// U-81 (v0.51.0): el velo es un elemento (#baVelo) que recibe el toque y cierra la hoja; antes era una box-shadow y el toque
+// caía en el teclado o en Guardar de atrás.
+function abrirHojaCapturado() { $('baCapturado').classList.add('abierta'); $('baVelo').hidden = false; $('btnLoCapturado').setAttribute('aria-expanded', 'true'); $('btnCerrarCapturado').focus(); }
+function cerrarHojaCapturado() { $('baCapturado').classList.remove('abierta'); $('baVelo').hidden = true; $('btnLoCapturado').setAttribute('aria-expanded', 'false'); }
 /** Solo las cuatro listas y sus conteos: tras emitir un certificado no se toca el pesaje abierto. */
 function pintarListasGondolas() {
     const { hoy, dia, diaCierre } = cortesDia();
@@ -1254,14 +1276,21 @@ function pintarListasGondolas() {
     const kgHoy = cerradasHoy.reduce((a, e) => a + (Number(e.NetoKg) || 0), 0);
     $('gPieHoy').textContent = cerradasHoy.length ? `${plural(cerradasHoy.length, 'cerrada', 'cerradas')} hoy · ${kgG(kgHoy)}${PUEDE.emitirCertificado(estado.rol) ? '' : ' · el certificado lo emite gerencia'}.` : '';
 
-    // Rechazos de hoy: la causa sale de CompuertaDetalle (las reglas legales que fallaron).
-    const causa = e => { try { return JSON.parse(e.CompuertaDetalle || '[]').filter(h => h.clase === 'legal').map(h => h.regla).join(', '); } catch (_) { return ''; } };
+    // Rechazos de hoy: la causa sale de CompuertaDetalle (las reglas legales que fallaron, C-54) y, debajo, qué le pasó a
+    // cada una (U-89): «Placa» sola no dice si no estaba en el padrón o la amparaba otro carrier.
+    const causa = e => {
+        const hs = hallazgosDe(e, 'legal'), s = el('span', 'causa');
+        s.appendChild(el('span', 'paso e-bad', hs.map(h => h.regla).join(', ') || 'no entró'));
+        const det = hs.map(h => h.detalle).filter(Boolean).join(' · ');
+        if (det) s.appendChild(el('small', '', det));
+        return s;
+    };
     tablaGondolas($('gRechazos'), [
         { t: 'Folio', m: 'a', v: folioG },
         { t: 'Placa', m: 'b', v: e => e.PlacaTractor, clase: 'mono' },
         { t: 'Carrier', m: 'c', v: e => nombreDe(estado.carriers, e.CarrierId) },
         { t: 'Hora', m: 'd', num: true, v: e => horaMexico(e.Arribo, 'hora'), clase: 'mono' },
-        { t: 'Causa', m: 'e', v: e => el('span', 'paso e-bad', causa(e) || 'no entró') }
+        { t: 'Causa', m: 'e', v: causa }
     ], rechazosHoy, e => botonesCerrada(e, rechazosHoy.filter(x => x.Title)), 'Ningún rechazo hoy.');
 
     pintarHistorial();
@@ -1345,7 +1374,7 @@ async function anularEmbarque(e, btn) {
     await escribiendo(btn, async () => {   // C-24 / C-23: boton deshabilitado y sin refresco mientras el confirm esta abierto
     const { ok, motivo } = await confirmar({
         titulo: `Anular ${e.Title}`, peligro: true, ok: 'Anular con este motivo', motivo: true,
-        texto: `${e.PlacaTractor} · etapa ${e.Etapa}${e.NetoKg ? ` · neto ${e.NetoKg} kg` : e.BrutoKg ? ` · bruto ${e.BrutoKg} kg` : ''}. El folio ${e.Title} queda anulado y NO se vuelve a usar; el siguiente pesaje nace con folio nuevo. Las fotos ya subidas se conservan.${vigC ? ` Su certificado de tratamiento ${vigC.Title} se CANCELA con el mismo motivo: su QR dirá «cancelado».` : ''}`,
+        texto: `${e.PlacaTractor} · etapa ${e.Etapa}${e.NetoKg ? ` · neto ${kgG(e.NetoKg)}` : e.BrutoKg ? ` · bruto ${kgG(e.BrutoKg)}` : ''}. El folio ${e.Title} queda anulado y NO se vuelve a usar; el siguiente pesaje nace con folio nuevo. Las fotos ya subidas se conservan.${vigC ? ` Su certificado de tratamiento ${vigC.Title} se CANCELA con el mismo motivo: su QR dirá «cancelado».` : ''}`,
         etiquetaMotivo: 'Motivo de la anulación'
     });
     if (!ok) return;
@@ -1407,7 +1436,7 @@ function abrirPesaje(e, fase) {
     const u = porId(estado.unidades, e.UnidadId);
     const manif = e.Manifiesto ? `Manifiesto ${e.Manifiesto}. ` : '';
     $('baSub').textContent = fase === 'bruto' ? `${manif}Primera pasada: la góndola cargada. Al guardar nace el folio E-.` :
-        `${manif}Segunda pasada: la góndola vacía. Bruto ${e.BrutoKg} kg${u && u.CapacidadKg ? ` · capacidad ${u.CapacidadKg} kg` : ''}.`;
+        `${manif}Segunda pasada: la góndola vacía. Bruto ${kgG(e.BrutoKg)}${u && u.CapacidadKg ? ` · capacidad ${kgG(u.CapacidadKg)}` : ''}.`;   // U-87: con separador de miles, como la resta
     $('baKgLabel').textContent = fase === 'bruto' ? 'Bruto (kg)' : 'Tara (kg)';
     $('baKg').value = '';
     $('baFotoPrevia').classList.add('oculto');
@@ -1486,7 +1515,7 @@ async function guardarPeso() {
         const ahora = new Date().toISOString();
         if (p.fase === 'bruto') await guardarBruto(e, kg, ahora, paso);
         else await guardarTara(e, kg, ahora, aviso, paso);
-        soltarFotoPrevia();
+        soltarFotoPrevia(); estado.pesando = null; estado.fotoBytes = null;   // C-51: el JPEG ya subió; la pausa y el ticket no lo necesitan
         pintarTicket(e);   // tras el bruto también: «Ver ticket» de la pausa lo reimprime con el folio recién nacido
         pintarListasGondolas();   // la lista de atrás ya al día; el asistente sigue en pantalla
         // M5 / M8: el bruto lleva a la pausa de la descarga; la tara, al ticket con «Terminar».
@@ -1554,7 +1583,7 @@ async function guardarTara(e, kg, ahora, aviso, paso) {
         Notas: aviso ? `Neto fuera de banda (${aviso}). Motivo: ${$('baMotivoNeto').value.trim()}` : null });
     await guardarConLote(e, lote, campos, paso);
     aplicar('embarques', e, campos);
-    avisar(`Embarque ${e.Title} cerrado: neto ${neto} kg.`, 'bien');
+    avisar(`Góndola ${e.Title} cerrada: neto ${kgG(neto)}.`, 'bien');   // U-87: el vocabulario de la sección
 }
 
 /**
@@ -1590,9 +1619,11 @@ async function subirEvidencia(folio, fase, kg, avisar) {
 /** Ticket en ventana (v0.19.1): `lista` es lo que se ve en Cerrados; ‹ › y las flechas recorren. */
 function abrirTicketPop(lista, i) {
     const d = $('dlgTicket');
+    // C-53 (v0.51.0): el renglón se resuelve por id en cada ‹ ›, como vivo(): la lista con que se pintó puede traer copias viejas.
+    const actual = () => vivo('embarques', lista[i]);
     const pintar = () => {
-        pintarTicket(lista[i], $('ticketPop'));
-        $('tkPos').textContent = `${i + 1} de ${lista.length} · ${lista[i].Title}`;
+        pintarTicket(actual(), $('ticketPop'));
+        $('tkPos').textContent = `${i + 1} de ${lista.length} · ${actual().Title}`;
         $('tkAnt').disabled = i <= 0; $('tkSig').disabled = i >= lista.length - 1;
     };
     $('tkAnt').onclick = () => { if (i > 0) { i--; pintar(); } };
@@ -1626,11 +1657,11 @@ function pintarTicket(e, t = $('ticket')) {
         ['Generador', pre ? `${pre.Generador || ''} ${pre.GeneradorRegistro ? '(' + pre.GeneradorRegistro + ')' : ''}` : '—'],
         ['Pozo / corriente', pre ? `${pre.Pozo || '—'} · ${e.CorrienteDeclarada || pre.Corriente || ''}` : (e.CorrienteDeclarada || '—')],
         ['Transportista', nombreDe(estado.carriers, e.CarrierId)],
-        ['Placas', `${e.PlacaTractor || ''} / ${e.PlacaPlana || ''}`], ['Operador', e.ChoferNombre || nombreDe(estado.choferes, e.ChoferId)],
+        ['Placas', [e.PlacaTractor, e.PlacaPlana].filter(Boolean).join(' / ') || '—'], ['Operador', e.ChoferNombre || nombreDe(estado.choferes, e.ChoferId)],   // U-87: placas sin la diagonal colgando
         ['Arribo', horaCorta(e.Arribo)],
-        ['Bruto', e.BrutoKg ? `${e.BrutoKg} kg · ${horaCorta(e.BrutoHora)}` : '—'],
-        ['Tara', e.TaraKg ? `${e.TaraKg} kg · ${horaCorta(e.TaraHora)}` : 'pendiente'],
-        ['NETO', e.NetoKg ? `${e.NetoKg} kg` : 'pendiente'],
+        ['Bruto', e.BrutoKg ? `${kgG(e.BrutoKg)} · ${horaCorta(e.BrutoHora)}` : '—'],
+        ['Tara', e.TaraKg ? `${kgG(e.TaraKg)} · ${horaCorta(e.TaraHora)}` : 'pendiente'],
+        ['NETO', e.NetoKg ? kgG(e.NetoKg) : 'pendiente'],
         ['Ticket de báscula', e.TicketBascula || '—'],
         ['Capturó', quien(e.CapturadoPor)], ['Emitido', `${horaCorta(new Date().toISOString())} · CALYTEK Planta ${VERSION}`]
     ];
@@ -2986,9 +3017,13 @@ function pintarPendientesHoy(borradores, pendientes, botonesExcepcion) {
 // filtro y la lectura de CompuertaDetalle vivían copiados en los dos y la etiqueta difería (Hoy decía legal/comercial).
 const esRechazo = e => e.Etapa !== 'anulado' && (e.Etapa === 'rechazado' || e.Compuerta === 'excepcion-comercial');
 const rechazosYExcepciones = () => estado.embarques.filter(esRechazo).sort((a, b) => b.id - a.id);
+/** C-54 (v0.51.0): la ÚNICA lectura de CompuertaDetalle — los hallazgos de las clases pedidas; detalle ilegible = ninguno. */
+function hallazgosDe(e, ...clases) {
+    try { return JSON.parse(e.CompuertaDetalle || '[]').filter(h => clases.includes(h.clase)); } catch (_) { return []; }
+}
+const reglasDe = (e, ...clases) => hallazgosDe(e, ...clases).map(h => h.regla).join(', ');
 function renglonRechazo(e) {
-    let causa = '';
-    try { causa = JSON.parse(e.CompuertaDetalle || '[]').filter(h => h.clase === 'legal' || h.clase === 'comercial').map(h => h.regla).join(', '); } catch (_) { /* detalle ilegible */ }
+    const causa = reglasDe(e, 'legal', 'comercial');
     const r = renglon(`${e.Title || '(excepción)'} · ${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + quien(e.ExcepcionAutorizo) : ''}`);
     r.firstChild.firstChild.appendChild(etiquetaCompuertaDe(e));
     return r;
@@ -3167,7 +3202,11 @@ $('puChofer').addEventListener('change', () => marcarOpcion($('puChoferes'), $('
 $('puCorriente').addEventListener('change', () => marcarOpcion($('puCorrientes'), $('puCorriente').value));
 for (const b of $('puSubpasos').querySelectorAll('button')) b.addEventListener('click', () => irSubpaso(Number(b.dataset.s), true));
 $('btnPuAtras').addEventListener('click', () => irSubpaso(estado.subpasoPuerta - 1, true));
-$('btnPuSiguiente').addEventListener('click', () => irSubpaso(estado.subpasoPuerta + 1, true));
+$('btnPuSiguiente').addEventListener('click', () => {
+    // U-83 (v0.51.0): sin programa no hay unidades ni choferes que tocar; se queda y enfoca la lista, como «Faltan N datos».
+    if (estado.subpasoPuerta === 1 && !$('puPrealta').value) { avisar('Falta el programa: elígelo para ver sus unidades y choferes.', 'error'); enfocarCampoPuerta('puPrealta'); return; }
+    irSubpaso(estado.subpasoPuerta + 1, true);
+});
 $('btnVerReglas').addEventListener('click', () => { $('puHallazgos').classList.remove('plegada'); $('btnVerReglas').classList.add('oculto'); });
 pintarCorrientesPuerta();
 // U-17 (v0.22.0): se compara con data-placa; el textContent del chip trae pegado el <small> («55XY9Kgóndola · 20,000 kg»)
@@ -3224,7 +3263,18 @@ $('btnTerminar').addEventListener('click', () => {   // M8: de vuelta a la lista
 });
 $('btnLoCapturado').addEventListener('click', abrirHojaCapturado);
 $('btnCerrarCapturado').addEventListener('click', () => { cerrarHojaCapturado(); $('btnLoCapturado').focus(); });
-$('baCapturado').addEventListener('keydown', ev => { if (ev.key === 'Escape' && $('baCapturado').classList.contains('abierta')) { cerrarHojaCapturado(); $('btnLoCapturado').focus(); } });
+$('baVelo').addEventListener('click', () => { cerrarHojaCapturado(); $('btnLoCapturado').focus(); });
+$('baCapturado').addEventListener('keydown', ev => {
+    if (!$('baCapturado').classList.contains('abierta') || $('baVelo').hidden) return;
+    if (ev.key === 'Escape') { cerrarHojaCapturado(); $('btnLoCapturado').focus(); return; }
+    // U-81: con la hoja abierta, Tab no sale al contenido atenuado de atrás (como el veredicto, U-16).
+    if (ev.key !== 'Tab') return;
+    const focables = [...$('baCapturado').querySelectorAll('button, a[href], input, select, textarea')].filter(x => !x.disabled && x.offsetParent !== null);
+    if (!focables.length) return;
+    const i = focables.indexOf(document.activeElement);
+    ev.preventDefault();
+    focables[ev.shiftKey ? (i <= 0 ? focables.length - 1 : i - 1) : (i < 0 || i === focables.length - 1 ? 0 : i + 1)].focus();
+});
 // El boton vive dentro del <summary>: sin preventDefault el clic pliega el grupo (igual que en el padron).
 $('btnNuevaPrealta').addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); $('paGrupoBorradores').open = true; nuevaPrealta(); });
 $('paCarrier').addEventListener('change', pintarUnidadesChoferesPrealta);
