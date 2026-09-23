@@ -103,6 +103,12 @@
             if (!m) throw new Error('clausula no soportada: ' + c);
             const crudo = m[3].trim();
             const valor = /^'.*'$/.test(crudo) ? crudo.slice(1, -1) : crudo;
+            // C-45 (v0.44.0): un valor SIN comillas y numerico compara como numero, como en SharePoint (columna number):
+            // como texto, «EmbarqueId ge 9» dejaria fuera el 10. Un renglon sin valor no pasa un rango.
+            if (valor === crudo && crudo !== '' && !isNaN(Number(crudo)) && m[2] !== 'eq' && m[2] !== 'ne') {
+                const a = campos[m[1]]; if (a == null || a === '' || isNaN(Number(a))) return false;
+                return { ge: Number(a) >= Number(crudo), gt: Number(a) > Number(crudo), le: Number(a) <= Number(crudo), lt: Number(a) < Number(crudo) }[m[2]];
+            }
             return OPS[m[2]](campos[m[1]], valor);
         }));
     }
@@ -1450,7 +1456,14 @@ try {
                 R.ok('v0.39.0: sin neto la góndola no se certifica y el botón dice por qué', $('btnEmitirCertificado').disabled && $('btnEmitirCertificado').title.includes('no tiene neto'), $('btnEmitirCertificado').title);
                 g1.fields.NetoKg = netoReal;
                 clic('ctCerrar'); await dormir(20);   // C-38 (v0.40.0): con el certificado abierto el refresco no corre (y el modal tapa Actualizar)
+                // C-45 (v0.44.0): la carga de PLANTA_Certificados va acotada por EmbarqueId, y un certificado de una gondola que
+                // no esta cargada (id menor que todas) no entra a memoria.
+                const viejo = { id: DB.siguienteId++, fields: { Title: 'CT-26-0900', EmbarqueId: -5, PreAltaId: pDemo.id, Estado: 'vigente', EmitidoPor: 'otra@minsa.test' } };
+                filas('certificados').push(viejo); const nLlC = DB.llamadas.length;
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con neto');
+                const getsCert = DB.llamadas.slice(nLlC).filter(x => x.startsWith('GET /sites/sitio-falso/lists/lista-certificados/items?'));
+                R.ok('C-45 (v0.44.0): PLANTA_Certificados se lee con filtro EmbarqueId ge (nunca entera) y deja fuera los de góndolas no cargadas', getsCert.length === 1 && /EmbarqueId%20ge%20[0-9]+/.test(getsCert[0]) && !$('baGrupoCerrados').textContent.includes('CT-26-0900') && !$('paDetalleCertificado').textContent.includes('CT-26-0900'), getsCert.join(' | ').slice(0, 160));
+                filas('certificados').splice(filas('certificados').indexOf(viejo), 1);
                 $('baGrupoCerrados').open = true; await dormir(20);
                 botonCert(g1.fields.Title).click(); await esperar(() => $('dlgCertificado').open, 'vista para el tercero');
                 // C-38 (v0.40.0): otra sesión emitió mientras el diálogo estaba abierto (el renglón existe en la lista pero no en
@@ -1461,9 +1474,12 @@ try {
                 await esperar(() => avisosCert().includes('ya tiene el certificado'), 'freno por otro vigente');
                 R.ok('C-38 (v0.40.0): si otra sesión ya emitió para la góndola, no nace un segundo vigente', filas('certificados').length === 3 && avisosCert().includes('CT-26-0999'), avisosCert().slice(0, 100));
                 filas('certificados').splice(filas('certificados').indexOf(fantasma), 1);
+                const nLlE = DB.llamadas.length;
                 clic('btnEmitirCertificado');
                 await confirmar();   // la góndola ya trae ticket (lo corrigió la sustitución): solo el confirm de emitir
                 await esperar(() => filas('certificados').length === 3, 'tercer certificado');
+                const getsEmision = DB.llamadas.slice(nLlE).filter(x => x.startsWith('GET /sites/sitio-falso/lists/lista-certificados/items?'));
+                R.ok('C-45 (v0.44.0): la emisión relee solo la góndola (EmbarqueId eq) y el folio único por igualdad, nunca la lista entera', getsEmision.length >= 1 && getsEmision.every(x => x.includes('$filter=')) && getsEmision.some(x => x.includes(`EmbarqueId%20eq%20${g1.id}`)), getsEmision.join(' | ').slice(0, 200));
                 const c3 = filas('certificados')[2];
                 R.ok('v0.39.0: tras cancelar se puede emitir otro y el folio sigue (CT-..-0003, nunca se reutiliza)', /-0003$/.test(c3.fields.Title) && c3.fields.Estado === 'vigente' && c2.fields.Estado === 'cancelado');
                 // C-39 (v0.40.0): una sustitución que falla al marcar el viejo cancela el NUEVO — el viejo sigue siendo el único vigente.

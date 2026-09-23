@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas } from './reglas.js';
 
-const VERSION = '0.43.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.44.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -378,9 +378,16 @@ async function cargarFirmas(c, s, avisar) {
  * columna faltante y sube tal cual: antes «invalid» casaba con InvalidAuthenticationToken y «no existe» con el 404 del sitio.
  */
 function esColumnaFaltante(e) { return !!e && e.status === 400; }
-/** v0.35.0: PLANTA_Certificados puede no existir todavia (provisionar.html la crea): la app sigue, sin emitir, y lo dice a gerencia. */
-async function cargarCertificados(c, s, avisar) {
-    try { const x = await c.renglones(s, L.certificados, null, avisar); estado.certificadosError = null; return x; }
+/**
+ * v0.35.0: PLANTA_Certificados puede no existir todavia (provisionar.html la crea): la app sigue, sin emitir, y lo dice a gerencia.
+ * C-45 (v0.44.0): solo los certificados de las gondolas CARGADAS. Nace uno por gondola y nunca se borra, asi que la lista
+ * entera crece sin tope; los ids de PLANTA_Embarques son crecientes, asi que «EmbarqueId ge el menor id cargado» (columna
+ * indexada, filtro numerico) trae todos los de la ventana y los abiertos. Sin gondolas no hay nada que certificar.
+ */
+async function cargarCertificados(c, s, avisar, embarques) {
+    if (!embarques.length) { estado.certificadosError = null; return []; }
+    const desde = Math.min(...embarques.map(e => Number(e.id)));
+    try { const x = await c.renglones(s, L.certificados, `fields/EmbarqueId ge ${desde}`, avisar); estado.certificadosError = null; return x; }
     catch (e) {
         if (!(e && (e.status === 404 || e.status === 403))) throw e;
         estado.certificadosError = String(e.message); return [];
@@ -489,11 +496,13 @@ async function cargarTodo() {
     // C-17 (v0.25.0): graph.js reintenta 429/503/red caida hasta 5.6 s; antes nadie recibia el aviso y la pantalla se
     // quedaba en «Leyendo las listas…». La franja de sync dice que esta reintentando.
     const av = texto => pintarSync(true, texto);
-    [estado.carriers, estado.unidades, estado.choferes, estado.prealtas, estado.embarques, estado.vigencias, estado.roles, estado.firmas, estado.certificados] =
+    // C-45 (v0.44.0): los certificados se acotan con los ids de los embarques, asi que van encadenados a ellos (y el resto en paralelo).
+    const embarquesYCertificados = cargarEmbarques(c, s, av).then(async emb => [emb, await cargarCertificados(c, s, av, emb)]);
+    [estado.carriers, estado.unidades, estado.choferes, estado.prealtas, [estado.embarques, estado.certificados], estado.vigencias, estado.roles, estado.firmas] =
         await Promise.all([
             c.renglones(s, L.carriers, null, av), c.renglones(s, L.unidades, null, av), c.renglones(s, L.choferes, null, av),
-            c.renglones(s, L.prealtas, null, av), cargarEmbarques(c, s, av), c.renglones(s, L.vigencias, null, av),
-            c.renglones(s, L.roles, null, av), cargarFirmas(c, s, av), cargarCertificados(c, s, av)
+            c.renglones(s, L.prealtas, null, av), embarquesYCertificados, c.renglones(s, L.vigencias, null, av),
+            c.renglones(s, L.roles, null, av), cargarFirmas(c, s, av)
         ]);
     estado.cargadoEl = Date.now();
     reanclar();
@@ -1666,10 +1675,24 @@ async function cerrarPrealta() {
 
 /** Dia (hora de Mexico) de un ISO datetime, como dd/mm/aaaa. aIsoDia NO sirve aqui: espera una fecha tecleada y lanza con un ISO. */
 const diaCert = iso => (iso ? fechaCorta(fechaMexico(new Date(iso))) : '—');
-/** Los certificados de UNA gondola, del mas nuevo al mas viejo (una sustitucion deja el viejo aqui). */
-function certificadosDe(e) { return estado.certificados.filter(c => Number(c.EmbarqueId) === Number(e.id)).sort((a, b) => b.id - a.id); }
+/**
+ * Los certificados de UNA gondola, del mas nuevo al mas viejo (una sustitucion deja el viejo aqui). No se muta lo que devuelve.
+ * C-45 (v0.44.0): de un indice por EmbarqueId que se rehace solo cuando la lista cambia (carga nueva o push); antes cada
+ * renglon de Cerrados filtraba y ordenaba la lista entera.
+ */
+let indiceCertificados = { lista: null, n: -1, porEmbarque: new Map() };
+function certificadosDe(e) {
+    const lista = estado.certificados;
+    if (indiceCertificados.lista !== lista || indiceCertificados.n !== lista.length) {
+        const porEmbarque = new Map();
+        for (const c of lista) { const k = Number(c.EmbarqueId); if (!porEmbarque.has(k)) porEmbarque.set(k, []); porEmbarque.get(k).push(c); }
+        for (const v of porEmbarque.values()) v.sort((a, b) => b.id - a.id);
+        indiceCertificados = { lista, n: lista.length, porEmbarque };
+    }
+    return indiceCertificados.porEmbarque.get(Number(e.id)) || [];
+}
 function certificadoVigente(e) { return certificadosDe(e).find(c => c.Estado === 'vigente') || null; }
-/** Los del PROGRAMA entero: solo para leerlos en el detalle de la pre-alta. No se emite nada desde ahi. */
+/** Los del PROGRAMA: solo para leerlos en el detalle de la pre-alta. No se emite nada desde ahi. C-45: los de sus gondolas cargadas. */
 function certificadosDePrograma(p) { return estado.certificados.filter(c => Number(c.PreAltaId) === Number(p.id)).sort((a, b) => a.id - b.id); }
 /** S-11 sobre el certificado: vale solo con un renglon de PLANTA_Firmas de Tipo certificado, firmado por gerencia y por la misma cuenta que EmitidoPor. */
 function certificadoFirmado(c) { return !!firmaDe('certificado', c.id, c.EmitidoPor); }
@@ -1800,11 +1823,13 @@ async function emitirCertificado(sustituye = null, motivoSust = '', corr = null)
     const carrier = porId(estado.carriers, e.CarrierId || (p && p.CarrierId));
     let nuevo = null, paso = '';
     try {
-        const certsDelAno = await estado.cliente.renglones(estado.siteId, L.certificados, null);
-        const otro = certsDelAno.find(x => Number(x.EmbarqueId) === Number(e.id) && x.Estado === 'vigente' && (!sustituye || x.id !== sustituye.id));
+        // C-45 (v0.44.0): se relee solo lo de ESTA gondola (EmbarqueId indexada, una peticion), no la lista entera. El folio sale
+        // de lo cargado mas eso; si otra sesion tomo el mismo numero, asegurarFolioUnico lo detecta y renumbera (C-16).
+        const deLaGondola = await estado.cliente.renglones(estado.siteId, L.certificados, `fields/EmbarqueId eq ${Number(e.id)}`);
+        const otro = deLaGondola.find(x => Number(x.EmbarqueId) === Number(e.id) && x.Estado === 'vigente' && (!sustituye || x.id !== sustituye.id));
         if (otro) throw new Error(`la góndola ya tiene el certificado ${otro.Title} vigente (${quien(otro.EmitidoPor)}). Actualiza antes de emitir otro`);
-        if (sustituye && !certsDelAno.some(x => x.id === sustituye.id && x.Estado === 'vigente')) throw new Error(`${sustituye.Title} ya no está vigente. Actualiza`);
-        const folio = siguienteFolio('C', certsDelAno.map(x => x.Title));
+        if (sustituye && !deLaGondola.some(x => x.id === sustituye.id && x.Estado === 'vigente')) throw new Error(`${sustituye.Title} ya no está vigente. Actualiza`);
+        const folio = siguienteFolio('C', [...estado.certificados, ...deLaGondola].map(x => x.Title));
         const ahora = new Date().toISOString();
         nuevo = await estado.cliente.crearRenglon(estado.siteId, L.certificados, limpiar({
             Title: folio, PreAltaId: p.id, EmbarqueId: e.id, Estado: 'vigente', Kg: d.kg,
