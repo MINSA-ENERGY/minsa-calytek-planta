@@ -86,10 +86,11 @@ assert.equal(deNode.pedidos[0], './datos/' + k.nombre, 'S-19: verificar.js pide 
 const dePs1 = await verificar(fx.folio + '-' + fx.sufijo, { [fx.nombre]: fx.blob });
 assert.equal(dePs1.clase, 'estado ok', 'verificar.js descifra lo que cifro el .ps1: ' + dePs1.texto);
 if (vivo) assert.equal((await verificar(f, { [vivo.nombre]: vivo.blob })).clase, 'estado ok', 'verificar.js descifra el blob en vivo del .ps1');
+// v0.45.2: el respaldo de transicion salio — un archivo con el nombre viejo (sha256) ya NO se lee, y se pide un solo nombre.
 const transicion = await verificar(f, { [legado]: blobNode });
-assert.equal(transicion.clase, 'estado ok', 'transicion S-19: lo publicado con el nombre viejo se sigue leyendo');
+assert.ok(transicion.clase === 'estado ojo' && transicion.pedidos.length === 1, 'S-19: el nombre viejo ya no se consulta (sin oraculo): ' + transicion.clase + ' · ' + transicion.pedidos.join(', '));
 const alterado = await verificar(f, { [k.nombre]: alterar(blobNode) });
 assert.ok(alterado.clase === 'estado mal' && /sello/.test(alterado.texto), 'verificar.js rechaza un blob alterado: ' + alterado.texto);
 assert.equal((await verificar(f, {})).clase, 'estado ojo', 'sin archivo: aviso ambar (U-78)');
 
-console.log(`cifrado: ok (Node · verificar.js · .ps1 ${vivo ? 'en vivo + ' : ''}fixture: mismo nombre derivado del PBKDF2, cada uno descifra al otro, blob alterado rechazado, transicion con el nombre viejo)`);
+console.log(`cifrado: ok (Node · verificar.js · .ps1 ${vivo ? 'en vivo + ' : ''}fixture: mismo nombre derivado del PBKDF2, cada uno descifra al otro, blob alterado rechazado, el nombre viejo ya no se consulta)`);

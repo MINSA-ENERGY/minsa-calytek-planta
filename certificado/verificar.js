@@ -78,10 +78,9 @@
         const [, folio, sufijo] = m;
         try {
             const k = await material(folio, sufijo);
-            let r = await fetch(`./datos/${k.nombre}.json`, { cache: 'no-store' });
-            // Transicion S-19: hasta que el publicador corra con la v0.43.0, lo publicado sigue bajo sha256(folio-sufijo).
-            // El publicador borra esos nombres en su primera corrida; retirar este respaldo en la version siguiente.
-            if (r.status === 404) r = await fetch(`./datos/${hex(await crypto.subtle.digest('SHA-256', enc.encode(f)))}.json`, { cache: 'no-store' });
+            // S-19: solo el nombre derivado del PBKDF2. El respaldo de transicion al sha256(folio-sufijo) salio en la v0.45.2:
+            // el Action ya republico con los nombres nuevos (621a559, 2026-09-23 00:13Z) y un respaldo vivo reabria el oraculo.
+            const r = await fetch(`./datos/${k.nombre}.json`, { cache: 'no-store' });
             // U-78 (v0.42.0): lo mas probable es que sea recien emitido (se publica cada hora): aviso ambar, no rojo.
             if (r.status === 404) { estado('ojo', `Todavía no hay un certificado publicado con el folio ${folio}. Si se emitió hoy, la verificación se publica cada hora (al minuto 7): intente más tarde. Si el papel tiene más de un día, puede ser un papel falso o un QR dañado.`); return; }
             if (!r.ok) throw new Error('HTTP ' + r.status);
