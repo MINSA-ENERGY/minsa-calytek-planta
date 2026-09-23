@@ -42,6 +42,11 @@
     --hero-ok: #2f9e44; --hero-warn: #c8891a; --hero-bad: #b3261e; --hero-ink: #ffffff;
     --rail: var(--bg); --rail-on: #ffffff; --rail-hover: var(--slate-150); --rail-chip: var(--slate-200);
     --sombra-pop: 0 10px 34px rgba(11, 18, 32, .18), 0 2px 6px rgba(11, 18, 32, .10);
+    /* Rediseño 2026-09-23, tanda 1 (docs/rediseno-2026-09-23.md): esquinas más finas, pedido de Carlos con su captura
+       035419 como modelo. Se REDEFINEN aquí los tokens de minsa-ui.css (vendor, no se edita): controles 4 · tarjetas,
+       tablas y listas 6 · hojas 10. Todo lo que ya leía --r-sm / --r-md / --r-lg los hereda sin tocarse clase por clase. */
+    --r-sm: 4px; --r-md: 6px; --r-lg: 10px;
+    --sombra-pri: 0 1px 2px rgba(11, 18, 32, .18), 0 2px 6px rgba(11, 18, 32, .10);
     --radio: var(--r-md);
     --titulo: "Saira", "Barlow", system-ui, sans-serif;
     --texto: "Barlow", system-ui, -apple-system, sans-serif;
@@ -339,15 +344,17 @@ textarea { min-height: 4.5rem; resize: vertical; }
 .chk input { width: 18px; height: 18px; margin: .15rem 0 0; accent-color: var(--ok); }
 .pista { font-size: .85rem; color: var(--mute); line-height: 1.45; margin: var(--sp-1) 0 0; }
 .sin-margen { margin-top: 0; margin-bottom: var(--sp-2); }
-/* Botones: el mismo mn-btn de la piel. El PRIMARIO es contorno verde que se llena al pasar (Proyectos v0.30.0, B5). */
-:is(.principal, .secundario, .alta, .salir, .renglon button, .fila button, .ftar .botones-fila button, .franja .botones button, .foto-fila button, .nueva-version button, .dlg .dlg-botones button, .btn, .h2-con-boton .alta, .con-boton .alta) {
+/* Botones: el mismo mn-btn de la piel. El PRIMARIO es contorno verde que se llena al pasar (Proyectos v0.30.0, B5).
+   :where y no :is (rediseño 23-sep): :is toma la especificidad de su argumento más fuerte (.ftar .botones-fila button = 0,2,1)
+   y le ganaba a .principal y a .btn.tono — el primario salía gris y el botón del veredicto sin el color de su encabezado. */
+:where(.principal, .secundario, .alta, .salir, .renglon button, .fila button, .ftar .botones-fila button, .franja .botones button, .foto-fila button, .nueva-version button, .dlg .dlg-botones button, .btn, .h2-con-boton .alta, .con-boton .alta) {
     display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
     min-height: var(--control-h); padding: 0 var(--sp-4); font: inherit; font-weight: 600; line-height: 1.2;
     border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surf); color: var(--ink-body);
     transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 }
-:is(.principal, .secundario, .alta, .salir, .renglon button, .fila button, .ftar .botones-fila button, .franja .botones button, .foto-fila button, .dlg .dlg-botones button, .btn):hover:not(:disabled) { background: var(--rail-hover); }
-.principal { width: 100%; background: transparent; color: var(--ok-fg); border: 2px solid var(--ok); }
+:where(.principal, .secundario, .alta, .salir, .renglon button, .fila button, .ftar .botones-fila button, .franja .botones button, .foto-fila button, .dlg .dlg-botones button, .btn):hover:not(:disabled) { background: var(--rail-hover); }
+.principal { width: 100%; background: transparent; color: var(--ok-fg); border: 2px solid var(--ok); box-shadow: var(--sombra-pri); }   /* sombra ligera en reposo: rediseño 23-sep */
 .principal:hover:not(:disabled) { background: var(--ok); color: var(--acc-ink); box-shadow: 0 3px 10px rgba(44, 138, 55, .28); }
 .secundario { width: 100%; margin-top: var(--sp-2); }
 .enviar { margin-top: var(--sp-4); }
@@ -712,7 +719,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .guion small { display: block; font-family: var(--mono); font-size: .66rem; letter-spacing: .1em; margin-bottom: .2rem; }
 .acciones { margin-top: auto; display: flex; flex-direction: column; gap: var(--sp-2); padding-top: var(--sp-3); }
 .btn { font-size: 1rem; }
-.btn.tono { background: var(--tono); color: var(--tono-ink); border-color: transparent; }
+.btn.tono { background: var(--tono); color: var(--tono-ink); border-color: transparent; box-shadow: var(--sombra-pri); }   /* el color del encabezado (--hero-*), decisión 17 del rediseño */
 .btn.tono:hover:not(:disabled) { background: var(--tono); filter: brightness(1.06); }
 .btn.contorno { background: transparent; }
 
@@ -723,6 +730,15 @@ button:not(:disabled):active { transform: scale(.98); }
 .unidades-puerta .u .t small { display: block; font-family: var(--texto); font-weight: 400; letter-spacing: 0; color: var(--mute); font-size: .7rem; }
 .unidades-puerta .u.sel { border-color: var(--acc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acc) 25%, transparent); }
 .unidades-puerta .pista { margin: 0; flex-basis: 100%; }
+
+/* Rediseño 23-sep (tanda 1): el select lleva un triángulo relleno pequeño en vez de la flecha del sistema. Dos degradados
+   y no un SVG en data-URI, para que el color siga a --mute en los dos temas. Las reglas con padding propio se nombran aquí. */
+select, .archivos-filtros select, .con-boton select {
+    -webkit-appearance: none; appearance: none; padding-right: 34px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--mute) 50%), linear-gradient(135deg, var(--mute) 50%, transparent 50%);
+    background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+    background-position: calc(100% - 19px) 55%, calc(100% - 14px) 55%;
+}
 
 /* buscador del padrón (I1, 7-sep) */
 .busca { display: flex; align-items: center; gap: var(--sp-3); margin: 0 0 var(--sp-3); }
@@ -735,7 +751,7 @@ button:not(:disabled):active { transform: scale(.98); }
    habían fijado y que la piel (32 px) bajó en la v0.32.0 sin que nadie lo decidiera. Con ratón (≥ 900 px) siguen los 32 de la piel. */
 @media (max-width: 899px) { :root { --control-h-sm: 36px; } }
 @media (min-width: 900px) {
-    :root { --control-h: 36px; }   /* U-26: con ratón basta 36 px; en celular quedan los 44 de la piel (guante) */
+    :root { --control-h: 40px; }   /* U-26: con ratón basta menos que los 44 del guante; 40 desde el rediseño del 23-sep (era 36) */
     .rail .tema.seg .mn-btn { min-height: 26px; height: 26px; }   /* U-59: el segmento Claro | Oscuro compacto de Proyectos, solo con ratón */
     .flujo { max-width: 24rem; }
     /* Formularios y listas no se estiran a todo lo ancho: leen mejor en una columna acotada. */
