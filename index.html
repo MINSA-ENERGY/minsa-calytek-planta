@@ -39,8 +39,9 @@
     <!-- U-57 (v0.29.0): <nav> con aria-current="page", sin role=tablist/tab. -->
     <nav id="pestanas" aria-label="Secciones">
       <button type="button" data-p="hoy"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 15l5-5 4 4 7-7"/></svg><span>Hoy</span></button>
-      <button type="button" data-p="puerta"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-7h6v7"/></svg><span>Puerta</span></button>
-      <button type="button" data-p="bascula"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M6 20V9l6-4 6 4v11"/><path d="M12 5v15"/></svg><span>Báscula</span><b class="n" id="nBascula" hidden></b></button>
+      <!-- Rediseño tanda 2 (v0.47.0): Puerta + Báscula son UNA sección, Góndolas (decisión 5). Por dentro siguen siendo
+           p-puerta (la llegada, «+ Nueva góndola») y p-bascula (la lista) hasta que la tanda 3 las funda. -->
+      <button type="button" data-p="gondolas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 17V8h12v9"/><path d="M14 11h4l3 3v3h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Góndolas</span><b class="n" id="nGondolas" hidden></b></button>
       <button type="button" data-p="prealtas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><span>Pre-altas</span><b class="n" id="nPrealtas" hidden></b></button>
       <button type="button" data-p="padron"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h13l5 5v5H3z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Padrón</span></button>
     </nav>
@@ -86,8 +87,8 @@
     <!-- HOY -->
     <section id="p-hoy" class="oculto">
       <header class="cabecera"><span class="titulo-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 15l5-5 4 4 7-7"/></svg></span><h1>Hoy</h1><span class="k" id="hoyKicker"></span><p class="sub" id="hoyTitulo"></p></header>
-      <!-- D2 (2026-09-08): carril Puerta -> Bascula -> Ticket con el conteo del dia; lo llena pintarInsignias. -->
-      <div class="flujo" id="flujoHoy" aria-label="Flujo del día"><span data-e="puerta"><b>0</b>Puerta</span><span data-e="bascula"><b>0</b>Báscula</span><span data-e="ticket"><b>0</b>Ticket</span></div>
+      <!-- Tanda 2 (v0.47.0, decisión 6): Hoy es el escritorio de oficina. Salieron el carril Puerta → Báscula → Ticket
+           (D2) y la Fila del día, que vive en Góndolas. -->
       <div id="hoyFranja" class="franja oculto"></div>
       <!-- Pendiente revisar (v0.19.15, Carlos): lo que espera a una persona va ARRIBA de los KPI y en ambar
            mientras haya algo; sin nada, se queda discreta. -->
@@ -95,25 +96,15 @@
         <div class="h2-con-boton"><h2>Pendiente revisar</h2><span class="cuenta-alerta oculto" id="tbPendientesN"></span></div>
         <div id="tbPendientes"></div>
       </div>
-      <div class="cols">
-        <div class="tarjeta">
-          <div class="h2-con-boton"><h2>Fila del día</h2><button id="btnExportar" class="alta mn-btn is-sm oculto" type="button" title="Descarga en CSV todo lo cargado (la ventana de días más lo abierto)">Exportar CSV</button></div>
-          <div class="tabla-scroll" id="tbFila"></div>
-          <div class="fila-tarjetas" id="tbFilaTarjetas"></div>
-          <!-- U-14: hasta dónde alcanza lo cargado, fuera de la tabla (que en el celular está oculta). -->
-          <p class="pista" id="tbAlcance"></p>
-        </div>
-        <div class="pila">
-          <div class="tarjeta"><h2>Vigencias a 30 días</h2><div id="tbVigencias"></div></div>
-          <div class="tarjeta"><h2>Rechazos y excepciones recientes</h2><div id="tbRechazos"></div></div>
-        </div>
+      <div class="cols pares">
+        <div class="tarjeta"><h2>Vigencias a 30 días</h2><div id="tbVigencias"></div></div>
+        <div class="tarjeta"><h2>Rechazos y excepciones recientes</h2><div id="tbRechazos"></div></div>
       </div>
     </section>
 
     <!-- PUERTA -->
     <section id="p-puerta" class="oculto">
-      <header class="cabecera"><span class="titulo-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-7h6v7"/></svg></span><h1>Qué llegó</h1><span class="k">Puerta · paso 1 de 3</span></header>
-      <div class="flujo" aria-hidden="true"><span class="on">Puerta</span><span>Báscula</span><span>Ticket</span></div>
+      <header class="cabecera"><span class="titulo-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-7h6v7"/></svg></span><h1>Nueva góndola</h1><nav class="migas" aria-label="Ruta"><button type="button" class="miga" id="migaGondolasPuerta">Góndolas</button><span aria-hidden="true">/</span><b aria-current="page">Nueva góndola</b></nav></header>
       <!-- Solo informa (Carlos, 2026-09-08): borradores sin firmar; la puerta no puede recibir sus gondolas. -->
       <p id="puPendientes" class="mensaje ojo oculto" role="status"></p>
       <!-- U-38 (v0.26.0): el rol de lectura se dice aquí, fijo, no como aviso: el refresco silencioso lo repetía cada 2 min. -->
@@ -170,9 +161,9 @@
 
     <!-- BASCULA -->
     <section id="p-bascula" class="oculto">
-      <header class="cabecera"><span class="titulo-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 20V9l6-4 6 4v11"/><path d="M12 5v15"/></svg></span><h1>En planta</h1><span class="k">Báscula · paso 2 de 3</span></header>
-      <div class="flujo" aria-hidden="true"><span class="done">Puerta</span><span class="on">Báscula</span><span>Ticket</span></div>
+      <header class="cabecera"><span class="titulo-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2 17V8h12v9"/><path d="M14 11h4l3 3v3h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></span><h1>Góndolas</h1><button id="btnNuevaGondola" class="principal mn-btn oculto" type="button">+ Nueva góndola</button></header>
       <div class="tarjeta">
+        <h2>En planta</h2>
         <p class="pista sin-margen">Góndolas que pasaron la compuerta y no han cerrado su folio.</p>
         <div id="baLista"></div>
       </div>
@@ -228,6 +219,14 @@
         <h2>Ticket de báscula</h2>
         <div id="ticket" class="ticket"></div>
         <button id="btnImprimir" class="principal enviar" type="button">Imprimir / guardar PDF</button>
+      </div>
+      <!-- Tanda 2 (v0.47.0): la Fila del día se mudó de Hoy aquí; la tanda 3 la funde en las pestañas En planta · Cerradas hoy · Rechazos · Historial. -->
+      <div class="tarjeta ancha">
+        <div class="h2-con-boton"><h2>Fila del día</h2><button id="btnExportar" class="alta mn-btn is-sm oculto" type="button" title="Descarga en CSV todo lo cargado (la ventana de días más lo abierto)">Exportar CSV</button></div>
+        <div class="tabla-scroll" id="tbFila"></div>
+        <div class="fila-tarjetas" id="tbFilaTarjetas"></div>
+        <!-- U-14: hasta dónde alcanza lo cargado, fuera de la tabla (que en el celular está oculta). -->
+        <p class="pista" id="tbAlcance"></p>
       </div>
     </section>
 

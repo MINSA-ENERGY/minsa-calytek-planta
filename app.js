@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas } from './reglas.js';
 
-const VERSION = '0.46.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.47.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -342,9 +342,9 @@ async function sesionIniciada() {
     $('rail').classList.remove('oculto');
     $('barraMovil').classList.remove('oculto');
     $('syncMovil').classList.remove('oculto'); pintarSync();
-    // Pantalla inicial por rol: quien captura abre en la puerta, quien firma en las pre-altas,
-    // gerencia y lectura en «Hoy» (la consola). Igual en celular y en computadora.
-    irA(estado.rol === 'trazabilidad' ? 'puerta' : estado.rol === 'validador' ? 'prealtas' : 'hoy');
+    // Pantalla inicial por rol: quien captura abre en Góndolas (decisión 12 del rediseño, v0.47.0; antes en la puerta),
+    // quien firma en las pre-altas, gerencia y lectura en «Hoy» (la consola). Igual en celular y en computadora.
+    irA(estado.rol === 'trazabilidad' ? 'bascula' : estado.rol === 'validador' ? 'prealtas' : 'hoy');
 }
 
 /** Un embarque esta "en planta" si paso la compuerta (o le autorizaron la excepcion) y no ha cerrado.
@@ -429,19 +429,9 @@ async function firmar(tipo, objeto, motivo) {
 function pintarInsignias() {
     const b = estado.embarques.filter(enPlanta).length;
     const p = estado.prealtas.filter(x => x.Estado === 'borrador').length;
-    $('nBascula').textContent = String(b); $('nBascula').hidden = b === 0;
+    $('nGondolas').textContent = String(b); $('nGondolas').hidden = b === 0;
     $('nPrealtas').textContent = String(p); $('nPrealtas').hidden = p === 0 || !PUEDE.firmarPrealta(estado.rol);
-    // D2 (2026-09-08): carril Puerta -> Bascula -> Ticket en «Hoy». Puerta = gondolas registradas hoy (sin las anuladas),
-    // Bascula = las que estan en planta (misma definicion que la insignia), Ticket = las cerradas hoy.
-    const flujo = $('flujoHoy');
-    if (flujo) {
-        const hoy = fechaMexico(new Date());
-        const deHoy = estado.embarques.filter(e => e.Etapa !== 'anulado' && e.Arribo && fechaMexico(new Date(e.Arribo)) === hoy);
-        const pon = (k, v) => { const b = flujo.querySelector(`[data-e="${k}"] b`); if (b) b.textContent = String(v); };
-        pon('puerta', deHoy.length);
-        pon('bascula', b);
-        pon('ticket', deHoy.filter(e => e.Etapa === 'cerrado').length);
-    }
+    // El carril Puerta -> Bascula -> Ticket de «Hoy» (D2, 8-sep) salio en la tanda 2 del rediseño (decision 6).
 }
 
 // ---------------------------------------------------------------- carga acotada (cubeta 3)
@@ -603,14 +593,18 @@ async function soltarPesaje() {
     return true;
 }
 /** El clic en una pestana: sincrono salvo que haya que preguntar (la E2E y el usuario esperan la pestana pintada al soltar). */
+/** Tanda 2 (v0.47.0): el boton «Góndolas» del rail cubre las dos pantallas que la tanda 3 va a fundir; entra por la lista. */
+const RAIL_DE = { puerta: 'gondolas', bascula: 'gondolas' };
+const PESTANA_DE = { gondolas: 'bascula' };
 function irDesdePestana(p) {
+    p = PESTANA_DE[p] || p;
     if (p !== 'bascula' && pesajeConAlgo()) { soltarPesaje().then(ok => { if (ok) irA(p); }); return; }
     if (p !== 'bascula' && !$('baPesar').classList.contains('oculto')) descartarPesaje();   // vacio: se suelta sin preguntar, como Cancelar
     irA(p);
 }
 function irA(p) {
     estado.pestana = p;
-    for (const b of botonesRail()) { if (b.dataset.p === p) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }   // U-57 (v0.29.0): <nav> con aria-current, como .mn-rail de la piel; el role=tablist prometía flechas y tabpanel que no había
+    for (const b of botonesRail()) { if (b.dataset.p === (RAIL_DE[p] || p)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }   // U-57 (v0.29.0): <nav> con aria-current, como .mn-rail de la piel; el role=tablist prometía flechas y tabpanel que no había
     for (const s of SECCIONES) $('p-' + s).classList.toggle('oculto', s !== p);
     limpiarAvisos();
     cerrarVeredicto();
@@ -958,7 +952,20 @@ function pintarBascula() {
     }
     $('baPesar').classList.add('oculto');
     $('baTicketCaja').classList.add('oculto');
+    $('btnNuevaGondola').classList.toggle('oculto', !PUEDE.puerta(estado.rol));   // tanda 2: la llegada se abre desde aquí; quien no captura no la ve
     pintarCerrados();
+    pintarFilaDiaGondolas();
+}
+/** La Fila del día vivió en «Hoy» hasta la tanda 2 (v0.47.0); aquí espera a que la tanda 3 la funda en las pestañas. */
+function pintarFilaDiaGondolas() {
+    const { hoy, dia } = cortesDia();
+    pintarFilaDia(hoy, dia);
+    // Exportar lo cargado a CSV (F4): para el reporte al cliente y la bitacora, sin copiar cifras de la pantalla.
+    $('btnExportar').classList.toggle('oculto', !estado.embarques.length);
+    // Que la pantalla diga hasta donde alcanza lo que muestra: sin esta linea, «4 rechazos esta
+    // semana» y «0 hace cuatro meses» se leen igual y el segundo es solo que no se cargo.
+    // U-14 (v0.22.0): va en #tbAlcance, fuera de la tabla, que en el celular esta oculta: ahi nunca se veia.
+    $('tbAlcance').textContent = `Se cargan los últimos ${CONFIG.ventanaDias} días (desde el ${fechaCorta(estado.ventanaDesde)}) más todo lo que sigue abierto. El historial completo vive en SharePoint.`;
 }
 
 /**
@@ -2823,7 +2830,6 @@ function cortesDia() {
     return { hoy, ayer, lunes, dia, diaCierre, cerrados };
 }
 function pintarHoy() {
-    const { hoy, dia } = cortesDia();
     const activos = estado.embarques.filter(enPlanta);
     const pendientes = excepcionesPendientes();
     const borradores = estado.prealtas.filter(p => p.Estado === 'borrador');
@@ -2841,13 +2847,6 @@ function pintarHoy() {
         return bs;
     };
     pintarFranjaHoy(pendientes, botonesExcepcion);
-    pintarFilaDia(hoy, dia);
-    // Exportar lo cargado a CSV (F4): para el reporte al cliente y la bitacora, sin copiar cifras de la pantalla.
-    $('btnExportar').classList.toggle('oculto', !estado.embarques.length);
-    // Que la consola diga hasta donde alcanza lo que muestra: sin esta linea, «4 rechazos esta
-    // semana» y «0 hace cuatro meses» se leen igual y el segundo es solo que no se cargo.
-    // U-14 (v0.22.0): va en #tbAlcance, fuera de la tabla, que en el celular esta oculta: ahi nunca se veia.
-    $('tbAlcance').textContent = `Se cargan los últimos ${CONFIG.ventanaDias} días (desde el ${fechaCorta(estado.ventanaDesde)}) más todo lo que sigue abierto. El historial completo vive en SharePoint.`;
     pintarPendientesHoy(borradores, pendientes, botonesExcepcion);
     pintarRechazosHoy();
     pintarVigenciasHoy();
@@ -2937,6 +2936,9 @@ if (CONFIG.refrescoMs > 0) setInterval(() => {
     if (document.visibilityState === 'visible' && estado.siteId && Date.now() - estado.cargadoEl > CONFIG.refrescoMs - 5000) recargar(true);
 }, CONFIG.refrescoMs);
 for (const b of botonesRail()) b.addEventListener('click', () => irDesdePestana(b.dataset.p));   // C-27 / U-41
+// Tanda 2 (v0.47.0): la llegada se abre con «+ Nueva góndola» y regresa por la miga «Góndolas».
+$('btnNuevaGondola').addEventListener('click', () => irDesdePestana('puerta'));
+$('migaGondolasPuerta').addEventListener('click', () => irDesdePestana('bascula'));
 $('puPrealta').addEventListener('change', () => { pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta(); });
 // U-17 (v0.22.0): se compara con data-placa; el textContent del chip trae pegado el <small> («55XY9Kgóndola · 20,000 kg»)
 // y una unidad sin placa plana nunca se marcaba al teclear.

@@ -11,7 +11,7 @@
        msedge --headless=new --virtual-time-budget=30000 --dump-dom http://localhost:8080/?rol=gerencia
 
      Modo SOLO MIRAR (obs. 569): `?rol=gerencia&vista=puerta` oculta este <pre> al terminar la
-     corrida y deja abierta esa pestana (puerta · bascula · hoy · padron · prealtas), asi la captura
+     corrida y deja abierta esa pestana (puerta · gondolas · hoy · padron · prealtas; bascula = gondolas), asi la captura
      headless muestra la UI y no el log:
        msedge --headless=new --virtual-time-budget=30000 --window-size=1280,900 --screenshot=captura.png "http://localhost:8080/?rol=gerencia&vista=puerta"
 
@@ -275,6 +275,10 @@ const clic = id => {
     if (id === 'btnGuardarPeso' && !window.__sinTicket && visible('baTicketCampo') && !$('baTicketBascula').value) poner('baTicketBascula', 'B-' + String(++nTicketBascula).padStart(6, '0'));
     return $(id).click();
 };
+// Tanda 2 del rediseño (v0.47.0): el rail ya no trae Puerta ni Báscula. «Góndolas» abre la lista (p-bascula) y la llegada
+// (p-puerta) se abre con «+ Nueva góndola», como lo haría el operador.
+const irGondolas = () => document.querySelector('#pestanas button[data-p="gondolas"]').click();
+const irPuerta = () => { irGondolas(); $('btnNuevaGondola').click(); };
 const poner = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('input', { bubbles: true })); $(id).dispatchEvent(new Event('change', { bubbles: true })); };
 const elegirPorTexto = (id, texto) => { const o = [...$(id).options].find(x => x.textContent.includes(texto)); if (!o) throw new Error(`no hay opción "${texto}" en ${id}`); poner(id, o.value); };
 const filas = clave => DB.listas[clave].items;
@@ -424,7 +428,25 @@ try {
         R.ok('U-43: --ok-fg está definido (y en tema claro es distinto de --ok)', okFg !== '' && (ok !== '#2f9e44' || okFg !== ok), `--ok ${ok} · --ok-fg ${okFg}`);
     }
     const inicial = ['hoy', 'puerta', 'bascula', 'prealtas', 'padron'].find(p => visible('p-' + p));
-    R.ok('pantalla inicial por rol', ROL === 'trazabilidad' ? inicial === 'puerta' : ROL === 'validador' ? inicial === 'prealtas' : inicial === 'hoy', inicial);
+    R.ok('pantalla inicial por rol (tanda 2: trazabilidad entra a Góndolas)', ROL === 'trazabilidad' ? inicial === 'bascula' : ROL === 'validador' ? inicial === 'prealtas' : inicial === 'hoy', inicial);
+
+    // Tanda 2 del rediseño (v0.47.0): rail Hoy · Góndolas · Pre-altas · Padrón — raya — Reportes · Archivos; sin carriles en Hoy.
+    {
+        const rail = [...document.querySelectorAll('#pestanas button')].map(b => b.dataset.p).join(' ') + ' | ' + [...document.querySelectorAll('#pestanasExtra button')].map(b => b.dataset.p).join(' ');
+        R.ok('tanda 2: el rail es Hoy · Góndolas · Pre-altas · Padrón | Reportes · Archivos', rail === 'hoy gondolas prealtas padron | reportes archivos', rail);
+        R.ok('tanda 2: sin carril Puerta → Báscula → Ticket en ninguna sección, y Hoy sin Fila del día', !document.querySelector('.flujo') && !$('p-hoy').querySelector('#tbFila') && !!$('p-bascula').querySelector('#tbFila'));
+        irGondolas();
+        R.ok('tanda 2: «Góndolas» abre la lista con su botón marcado', visible('p-bascula') && document.querySelector('#pestanas button[data-p="gondolas"]').getAttribute('aria-current') === 'page' && $('p-bascula').querySelector('.cabecera h1').textContent === 'Góndolas');
+        const capturo = ['trazabilidad', 'gerencia'].includes(ROL);
+        R.ok('tanda 2: «+ Nueva góndola» solo para quien captura en la puerta', visible('btnNuevaGondola') === capturo, `visible ${visible('btnNuevaGondola')} · rol ${ROL}`);
+        if (capturo) {
+            clic('btnNuevaGondola');
+            R.ok('tanda 2: «+ Nueva góndola» abre la llegada con migas y Góndolas sigue marcado', visible('p-puerta') && $('p-puerta').querySelector('.migas').textContent.includes('Góndolas') && document.querySelector('#pestanas button[data-p="gondolas"]').getAttribute('aria-current') === 'page' && document.querySelectorAll('#pestanas [aria-current="page"]').length === 1);
+            clic('migaGondolasPuerta');
+            R.ok('tanda 2: la miga «Góndolas» regresa a la lista', visible('p-bascula') && !visible('p-puerta'));
+        }
+        document.querySelector('#pestanas button[data-p="hoy"]').click();
+    }
 
     // C-08 (v0.23.0): el pill de tema fija el tema, marca aria-pressed y repinta <meta theme-color> con el --bg real.
     {
@@ -601,8 +623,10 @@ try {
     }
     const prealtaId = filas('prealtas')[0].id;
     // Aviso informativo en la puerta mientras el borrador no se firma (v0.19.11).
-    document.querySelector('#pestanas button[data-p="puerta"]').click();
-    R.ok('la puerta avisa que hay una pre-alta por firmar', visible('puPendientes') && $('puPendientes').textContent.includes('1 pre-alta por firmar'), $('puPendientes').textContent);
+    if (['trazabilidad', 'gerencia'].includes(ROL)) {   // tanda 2: la llegada solo se abre con «+ Nueva góndola»
+        irPuerta();
+        R.ok('la puerta avisa que hay una pre-alta por firmar', visible('puPendientes') && $('puPendientes').textContent.includes('1 pre-alta por firmar'), $('puPendientes').textContent);
+    }
     document.querySelector('#pestanas button[data-p="prealtas"]').click();
 
     if (['validador', 'gerencia'].includes(ROL)) {
@@ -629,7 +653,7 @@ try {
             const sinFirma = { id: DB.siguienteId++, fields: { Title: 'SELLO SIN FIRMA-POZO 9-2026', Estado: 'firmada', FirmadaPor: 'intruso@example.invalid', FirmadaEl: new Date().toISOString(), Corriente: 'base-aceite', CarrierId: carrierId, Campana: 'L-99-999', FechaEstimada: '2026-12-01T12:00:00Z' } };
             filas('prealtas').push(sinFirma);
             clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con sello sin firma');
-            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            irPuerta();
             R.ok('S-01: la compuerta MANDA — con sello y sin firma NO sale en la puerta y cuenta como por firmar', ![...$('puPrealta').options].some(o => o.textContent.includes('SELLO SIN FIRMA')) && visible('puPendientes') && $('puPendientes').textContent.includes('SELLO SIN FIRMA'), $('puPendientes').textContent.slice(0, 90));
             document.querySelector('#pestanas button[data-p="hoy"]').click();
             R.ok('S-01: Hoy la lista en Pendiente revisar como «Firma ·» con el sello sin firma', [...document.querySelectorAll('#tbPendientes .renglon')].some(r => r.textContent.includes('Firma · SELLO SIN FIRMA') && r.textContent.includes('sin firma registrada')));
@@ -640,7 +664,7 @@ try {
             R.ok('S-01: el detalle dice SIN FIRMA y ofrece Firmar aunque el Estado ya sea firmada', visible('btnFirmar') && !$('btnFirmar').disabled && $('paDetalleLista').textContent.includes('sello sin firma') && !!avisoCon('Falta la firma del validador'));
             clic('btnFirmar'); await confirmar(); await esperar(() => avisoCon('Pre-alta firmada'), 'firma del sello');
             R.ok('S-01: firmar crea el renglón y el sello pasa a quien firmó', !!filas('firmas').find(x => x.fields.Tipo === 'prealta' && Number(x.fields.ObjetoId) === sinFirma.id) && sinFirma.fields.FirmadaPor === window.__CUENTA.username);
-            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            irPuerta();
             R.ok('S-01: ya firmada, sale en el selector de la puerta', [...$('puPrealta').options].some(o => o.textContent.includes('SELLO SIN FIRMA')));
             // Se retira para no alterar el resto de la corrida.
             filas('prealtas').splice(filas('prealtas').indexOf(sinFirma), 1);
@@ -658,8 +682,8 @@ try {
     if (['trazabilidad', 'gerencia'].includes(ROL)) {
         // 5. Puerta: caso 3 del plan -> PASA.
         // Recargar el estado desde el servidor si el rol no capturo (lo sembramos por fuera).
-        document.querySelector('#pestanas button[data-p="puerta"]').click();
-        if (!$('puPrealta').options.length || $('puPrealta').options.length < 2) { if ($('btnActualizar')) { clic('btnActualizar'); await dormir(300); document.querySelector('#pestanas button[data-p="puerta"]').click(); } }
+        irPuerta();
+        if (!$('puPrealta').options.length || $('puPrealta').options.length < 2) { if ($('btnActualizar')) { clic('btnActualizar'); await dormir(300); irPuerta(); } }
         R.ok('firmada la pre-alta, la puerta ya no avisa pendientes de firma', !visible('puPendientes'));
         document.querySelector('#pestanas button[data-p="prealtas"]').click();
         R.ok('una firmada reciente con fecha futura no se señala como dormida', !$('paFirmadas').textContent.includes('¿se cierra?'));
@@ -667,12 +691,12 @@ try {
         {
             const fuera = { id: DB.siguienteId++, fields: { Title: 'PEDRO FUERA DEMO', CarrierId: carrierId, LicenciaVigencia: '2027-01-15T18:00:00.000Z', Activo: true } };
             filas('choferes').push(fuera); clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con chofer fuera');
-            document.querySelector('#pestanas button[data-p="puerta"]').click(); elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
+            irPuerta(); elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
             const ops = [...$('puChofer').options].map(o => o.textContent);
             R.ok('U-21: el chofer autorizado va primero sin marca y el otro al final como «fuera del programa»', ops[1] === 'JUAN PEREZ DEMO' && ops[2] === 'PEDRO FUERA DEMO · fuera del programa' && ops.length === 3, ops.join(' | '));
             filas('choferes').splice(filas('choferes').indexOf(fuera), 1); clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga sin chofer fuera');
         }
-        document.querySelector('#pestanas button[data-p="puerta"]').click();
+        irPuerta();
         elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
         poner('puManifiesto', 'MINSA/RME/000/2026'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M');
         elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
@@ -709,8 +733,8 @@ try {
         // U-40 (v0.29.0): el programa elegido sobrevive al cambio de pestaña y al repintado (opciones() conserva el value).
         {
             const progAntes = $('puPrealta').value;
-            document.querySelector('#pestanas button[data-p="bascula"]').click();
-            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            irGondolas();
+            irPuerta();
             R.ok('U-40: el programa elegido en la Puerta se conserva al cambiar de pestaña y volver', progAntes !== '' && $('puPrealta').value === progAntes && $('puEst1').textContent === 'Listo', `${progAntes} → ${$('puPrealta').value}`);
         }
         // U-01 (v0.21.0): con datos faltantes el botón no abre el veredicto: enfoca el primer faltante (aquí, la placa).
@@ -720,7 +744,7 @@ try {
             `veredicto ${visible('veredicto')} · foco ${document.activeElement && document.activeElement.id}`);
 
         // 6. Bascula: bruto (nace E-) con foto; colision de folio con "otro celular".
-        document.querySelector('#pestanas button[data-p="bascula"]').click();
+        irGondolas();
         R.ok('la góndola aparece en planta', $('baLista').textContent.includes('55XY9K') && $('baLista').textContent.includes('falta el BRUTO'));
         document.querySelector('#baLista .renglon button').click();
         await esperar(() => visible('baPesar'), 'pesaje abierto');
@@ -762,7 +786,7 @@ try {
         R.ok('«Capturó» muestra el Nombre de PLANTA_Roles, no el correo', $('ticket').textContent.includes('Prueba') && !$('ticket').textContent.includes(window.__CUENTA.username), $('ticket').textContent.slice(-160));
 
         // 7. Tara: fallo del PATCH tras subir la foto -> no debe quedar lote huérfano.
-        document.querySelector('#pestanas button[data-p="bascula"]').click();
+        irGondolas();
         const btnTara = [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(emb1.fields.Title)).querySelector('button');
         R.ok('la góndola espera la TARA', btnTara.textContent === 'Pesar tara');
         btnTara.click(); await esperar(() => visible('baPesar'), 'pesaje tara');
@@ -789,18 +813,18 @@ try {
         R.ok('C-01: la góndola cerrada tras el refresco ya NO está en «En planta» (se cerró la de la lista, no una copia)', !$('baLista').textContent.includes(emb1.fields.Title), $('baLista').textContent.slice(0, 120));
 
         // 8. Neto fuera de banda pide motivo.
-        document.querySelector('#pestanas button[data-p="puerta"]').click();
+        irPuerta();
         elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
         poner('puManifiesto', 'MINSA/RME/106/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite');
         clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 2');
         R.ok('sin art. 79 marcado sale como aviso, no bloquea', $('vkW').textContent === 'Pasa' && $('puHallazgos').textContent.includes('Art. 79'));
         clic('btnRegistrarPuerta'); await esperar(() => filas('embarques').length === 3, 'segundo embarque');
         const emb2 = filas('embarques')[2];
-        document.querySelector('#pestanas button[data-p="bascula"]').click();
+        irGondolas();
         [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('falta el BRUTO')).querySelector('button').click();
         await esperar(() => visible('baPesar'), 'pesaje 2'); poner('baKg', '44600'); await foto(); clic('btnGuardarPeso');
         await esperar(() => avisoCon(`Folio E-${aa}-00003`), 'bruto 2');
-        document.querySelector('#pestanas button[data-p="bascula"]').click();
+        irGondolas();
         [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(emb2.fields.Title)).querySelector('button').click();
         await esperar(() => visible('baPesar'), 'tara 2');
         poner('baKg', '40000'); await dormir(30);
@@ -814,7 +838,7 @@ try {
         R.ok('motivo del neto queda en Notas', String(emb2.fields.Notas).includes('fuera de banda') && String(emb2.fields.Notas).includes('un cuarto'));
 
         // 9. Caso 4 del plan: placa no transcrita -> rechazo legal R-, sin consumir E-.
-        document.querySelector('#pestanas button[data-p="puerta"]').click();
+        irPuerta();
         elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
         poner('puManifiesto', 'MINSA/RME/107/2025'); poner('puPlaca', 'XX1234'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite');
         clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto rechazo');
@@ -828,7 +852,7 @@ try {
         filas('unidades')[0].fields.PolizaVigencia = '2026-01-01T12:00:00Z';
         if ($('btnActualizar')) { clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados') || true, 'recarga'); await dormir(200); }
         else { R.log('nota', 'sin botón Actualizar: la póliza vencida se inyecta en el estado por la vista'); }
-        document.querySelector('#pestanas button[data-p="puerta"]').click();
+        irPuerta();
         elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
         poner('puManifiesto', 'MINSA/RME/108/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite');
         clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto excepción');
@@ -841,7 +865,7 @@ try {
             poner('puMotivo', 'Póliza renovada, el carrier manda el PDF hoy'); clic('btnRegistrarPuerta');
             await esperar(() => avisoCon('Gerencia lo ve'), 'excepción registrada');
             const exc = filas('embarques').find(e => e.fields.Compuerta === 'excepcion-comercial');
-            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            irGondolas();
             R.ok('la excepción NO está en planta hasta que se autorice', !$('baLista').textContent.includes(exc.fields.Manifiesto));
             document.querySelector('#pestanas button[data-p="hoy"]').click();
             R.ok('Hoy muestra la franja de excepción con su motivo', visible('hoyFranja') && $('hoyFranja').textContent.includes('Póliza renovada'));
@@ -858,7 +882,7 @@ try {
                 // S-01: alguien escribe el sello por Graph (sin renglon en PLANTA_Firmas): la compuerta manda, sigue fuera de bascula y Hoy lo dice.
                 exc.fields.ExcepcionAutorizo = 'intruso@example.invalid'; exc.fields.ExcepcionEl = new Date().toISOString();
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con sello sin firma');
-                document.querySelector('#pestanas button[data-p="bascula"]').click();
+                irGondolas();
                 const fueraBascula = !$('baLista').textContent.includes(exc.fields.Manifiesto);
                 document.querySelector('#pestanas button[data-p="hoy"]').click();
                 R.ok('S-01: un sello ExcepcionAutorizo sin firma en PLANTA_Firmas NO mete la góndola a báscula y Hoy lo señala', fueraBascula && visible('hoyFranja') && $('hoyFranja').textContent.includes('sin firma registrada'), $('hoyFranja').textContent.slice(0, 120));
@@ -873,7 +897,7 @@ try {
                     const probar = async (firmante, sello) => {
                         filas('firmas').push(firmaDe(firmante)); exc.fields.ExcepcionAutorizo = sello; exc.fields.ExcepcionEl = new Date().toISOString();
                         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), `recarga S-11 ${firmante}`);
-                        document.querySelector('#pestanas button[data-p="bascula"]').click();
+                        irGondolas();
                         const enBascula = $('baLista').textContent.includes(exc.fields.Manifiesto);
                         document.querySelector('#pestanas button[data-p="hoy"]').click();
                         const franja = visible('hoyFranja') ? $('hoyFranja').textContent : '';
@@ -901,13 +925,13 @@ try {
                 await esperar(() => avisoCon('Excepción autorizada'), 'autorización');
                 R.ok('excepción autorizada queda en el embarque con quién y cuándo', exc.fields.ExcepcionAutorizo === window.__CUENTA.username && !!exc.fields.ExcepcionEl);
                 R.ok('S-01: la autorización deja su renglón en PLANTA_Firmas (Tipo excepcion, ObjetoId, motivo de la caseta)', filas('firmas').some(x => x.fields.Tipo === 'excepcion' && Number(x.fields.ObjetoId) === exc.id && x.fields.Firmante === window.__CUENTA.username && String(x.fields.Motivo).includes('Póliza renovada')));
-                document.querySelector('#pestanas button[data-p="bascula"]').click();
+                irGondolas();
                 R.ok('ya autorizada, la góndola aparece en planta', $('baLista').textContent.includes('55XY9K'));
                 // S-07 (v0.25.0): la compuerta falla CERRADA. Si PLANTA_Firmas no se puede leer (404: la lista no se ve para
                 // esta cuenta), la app no acepta ningun sello, no ofrece Autorizar y lo dice en Hoy. Antes volvia al sello solo.
                 DB.fallas.push({ metodo: 'GET', incluye: 'lista-firmas/items', status: 404, veces: 1 });
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga sin PLANTA_Firmas');
-                document.querySelector('#pestanas button[data-p="bascula"]').click();
+                irGondolas();
                 const excFuera = !$('baLista').textContent.includes(exc.fields.Manifiesto);
                 document.querySelector('#pestanas button[data-p="hoy"]').click();
                 const btnAutS07 = $('hoyFranja').querySelector('button.si');
@@ -915,7 +939,7 @@ try {
                     excFuera && !!btnAutS07 && btnAutS07.disabled && /registro de firmas/.test(btnAutS07.title) && $('tbPendientes').textContent.includes('No se pudo leer el registro de firmas') && (ROL !== 'gerencia' || $('tbPendientes').textContent.includes('PLANTA_Firmas')),
                     `fuera ${excFuera} · disabled ${btnAutS07 && btnAutS07.disabled} · ${$('tbPendientes').textContent.slice(0, 80)}`);
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con PLANTA_Firmas de vuelta');
-                document.querySelector('#pestanas button[data-p="bascula"]').click();
+                irGondolas();
                 R.ok('S-07: con la lista de vuelta, la autorización vuelve a valer', $('baLista').textContent.includes(exc.fields.Manifiesto));
             }
         }
@@ -956,6 +980,7 @@ try {
         // La poliza vencida del paso 10 se restaura para lo que sigue.
         filas('unidades')[0].fields.PolizaVigencia = '2027-03-01T18:00:00.000Z';
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga 11');
+        irGondolas();   // tanda 2: la Fila del día vive en Góndolas
         R.ok('fila del día lista los embarques de hoy con folio y neto', $('tbFila').textContent.includes(emb1.fields.Title) && $('tbFila').textContent.includes('21,220'));
         // C-02 (v0.21.0): el CSV de «Exportar» se parsea del Blob (se intercepta createObjectURL; el <a download> no se dispara).
         {
@@ -984,13 +1009,13 @@ try {
 
         // 12. ELIMINAR / ANULAR (lo que pidio Carlos el 2026-09-05).
         // 12a. Embarque en compuerta (sin folio): se elimina.
-        document.querySelector('#pestanas button[data-p="puerta"]').click();
+        irPuerta();
         elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
         poner('puManifiesto', 'MINSA/RME/109/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
         clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 109');
         clic('btnRegistrarPuerta'); await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/109/2025'), 'embarque 109');
         const emb109 = filas('embarques').find(e => e.fields.Manifiesto === 'MINSA/RME/109/2025');
-        document.querySelector('#pestanas button[data-p="bascula"]').click();
+        irGondolas();
         const r109 = [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/109'));
         const btnElim = r109 && r109.querySelector('button[data-accion="eliminar"]');
         R.ok('embarque en compuerta (sin folio) ofrece Eliminar', !!btnElim);
@@ -1003,7 +1028,7 @@ try {
             R.ok('C-14: «Captura eliminada» se queda en pantalla y la lista ya no trae el renglón', !!avisoCon('Captura eliminada') && !filas('embarques').some(e => e.id === emb109.id) && !$('baLista').textContent.includes('109'));
         }
         // 12b. Embarque cerrado con folio E-: se ANULA con motivo, el folio no se reutiliza.
-        document.querySelector('#pestanas button[data-p="hoy"]').click();
+        irGondolas();   // tanda 2: la Fila del día vive en Góndolas
         const filaEmb2 = [...document.querySelectorAll('#tbFila tr')].find(tr => tr.textContent.includes(emb2.fields.Title));
         const btnAnular = filaEmb2 && filaEmb2.querySelector('button[data-accion="anular"]');
         R.ok('embarque cerrado con folio ofrece Anular (no eliminar)', !!btnAnular && !(filaEmb2 && filaEmb2.querySelector('button[data-accion="eliminar"]')));
@@ -1024,12 +1049,12 @@ try {
             const kp2 = $('tbKpis').textContent.replace(/\s+/g, '');
             R.ok('KPI: el anulado ya no cuenta (cerradas hoy = 1, 21.2 t)', /Góndolascerradashoy1/.test(kp2) && kp2.includes('21.2'), kp2.slice(0, 60));
             // El siguiente folio E- salta el anulado.
-            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            irPuerta();
             elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
             poner('puManifiesto', 'MINSA/RME/110/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
             clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 110'); clic('btnRegistrarPuerta');
             await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/110/2025'), 'embarque 110');
-            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            irGondolas();
             [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/110')).querySelector('button').click();
             await esperar(() => visible('baPesar'), 'pesaje 110'); poner('baKg', '41000'); await foto(); clic('btnGuardarPeso');
             await esperar(() => avisoCon('Bruto guardado'), 'bruto 110');
@@ -1043,18 +1068,18 @@ try {
                 const folio110 = String(e110.fields.Title).toLowerCase();
                 const lote110 = await esperar(() => [...buzonC31.querySelectorAll(':scope > .hijos > details')].find(d => d.dataset.nombre.includes(folio110)), 'lote 110 en el buzón sin Actualizar').catch(() => null);
                 R.ok('C-31: el lote que se acaba de subir aparece en «Pendiente de archivar» sin tocar Actualizar (la rama se releyó sola)', !!lote110 && DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length >= gets && !avisoCon('Datos actualizados'), `lote ${!!lote110} · gets +${DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length - gets}`);
-                document.querySelector('#pestanas button[data-p="bascula"]').click();
+                irGondolas();
             }
             R.ok('el folio del anulado NO se reutiliza', e110.fields.Title === `E-${aa}-00004`, e110.fields.Title);
             // C-12 (v0.25.0): con el pesaje de A abierto, un refresco (captura a medias: NO repinta) sustituye estado.embarques;
             // el boton «Pesar tara» de B sigue en el DOM viejo con un objeto huerfano. El handler resuelve el objeto VIVO al
             // clic, la tara se guarda sobre el de la lista y B sale de «En planta». Antes: gondola cerrada seguia en planta.
-            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            irPuerta();
             elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
             poner('puManifiesto', 'MINSA/RME/111/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
             clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 111'); clic('btnRegistrarPuerta');
             await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/111/2025'), 'embarque 111');
-            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            irGondolas();
             [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/111')).querySelector('button').click();
             await esperar(() => visible('baPesar') && $('baTitulo').textContent.includes('Bruto'), 'pesaje A (111) abierto');
             clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con pesaje A abierto');
@@ -1120,7 +1145,7 @@ try {
             R.ok('unidad dada de baja (Activo=false), el renglón se conserva', filas('unidades')[0].fields.Activo === false && filas('unidades').length === 1);
             // C-06 (v0.22.0): el motivo de la baja queda en Notas tambien para unidades y choferes (antes solo carriers).
             R.ok('C-06: el motivo de la baja de una UNIDAD queda en Notas con quién y cuándo', String(filas('unidades')[0].fields.Notas).includes('BAJA') && String(filas('unidades')[0].fields.Notas).includes('Placa mal transcrita') && String(filas('unidades')[0].fields.Notas).includes(window.__CUENTA.username) && !!avisoCon('el motivo quedó en Notas'), String(filas('unidades')[0].fields.Notas));
-            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            irPuerta();
             elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
             poner('puManifiesto', 'MINSA/RME/111/2025'); poner('puPlaca', '55XY9K'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite');
             clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto baja');
@@ -1153,7 +1178,7 @@ try {
         // 13. Regla que sorprende: un carrier SIN vigencia CSF capturada vuelve cada gondola una excepcion.
         const csf = filas('carriers')[0].fields.CSFVigencia; delete filas('carriers')[0].fields.CSFVigencia;
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga 13');
-        document.querySelector('#pestanas button[data-p="puerta"]').click();
+        irPuerta();
         elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
         poner('puManifiesto', 'MINSA/RME/112/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
         clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto CSF');
@@ -1170,7 +1195,7 @@ try {
         const mismoAnio = new Date(hace(120)).getFullYear() === new Date().getFullYear();
         filas('embarques').push(viejoCerrado, viejoAbierto);
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga 15');
-        document.querySelector('#pestanas button[data-p="bascula"]').click();
+        irGondolas();
         R.ok('el cerrado de hace 120 días NO se carga (fuera de la ventana)', !$('tbFila').textContent.includes('VIEJA01') && !$('baLista').textContent.includes('VIEJA01'));
         R.ok('el ABIERTO de hace 120 días SÍ se carga (la fosa sigue ocupada)', $('baLista').textContent.includes('MINSA/RME/099'));
         // Cerrados (v0.19.0): el folio cerrado hoy se vuelve a ver desde Báscula y su ticket se reimprime.
@@ -1192,9 +1217,9 @@ try {
         clic('tkAnt');
         R.ok('‹ regresa al primero y se deshabilita', $('tkPos').textContent === primero && $('tkAnt').disabled);
         clic('tkCerrar');
-        document.querySelector('#pestanas button[data-p="hoy"]').click();
+        irGondolas();   // tanda 2: la Fila del día y su alcance viven en Góndolas
         // U-14 (v0.22.0): la linea vive en #tbAlcance, fuera de la tabla que el celular oculta.
-        R.ok('«Hoy» dice hasta dónde alcanza lo cargado, fuera de la tabla (U-14)', $('tbAlcance').textContent.includes('últimos 90 días') && !$('tbFila').textContent.includes('últimos 90 días'), $('tbAlcance').textContent.slice(0, 80));
+        R.ok('«Góndolas» dice hasta dónde alcanza lo cargado, fuera de la tabla (U-14)', $('tbAlcance').textContent.includes('últimos 90 días') && !$('tbFila').textContent.includes('últimos 90 días'), $('tbAlcance').textContent.slice(0, 80));
         // U-15 (v0.22.0) / U-58 (v0.29.0): el FOLIO de la tarjeta de la fila del dia (celular) es el <button> que la abre; la tarjeta
         // ya no es role=button (tenia botones adentro).
         {
@@ -1207,15 +1232,15 @@ try {
             const pel = tar && tar.querySelector('.botones-fila button.peligro');
             R.ok('U-07: Anular/Eliminar de la tarjeta llevan clase peligro y Ticket no', !!pel && !!tar.querySelector('.botones-fila button:not(.peligro)'), tar ? [...tar.querySelectorAll('.botones-fila button')].map(b => b.textContent + ':' + b.className).join(' ') : '');
         }
-        // v0.19.2: Ticket en Hoy abre la ventana sin cambiar de pestaña.
+        // v0.19.2: Ticket de la Fila del día abre la ventana sin cambiar de pestaña (tanda 2: la Fila vive en Góndolas).
         const btnTkHoy = [...document.querySelectorAll('#tbFila button')].find(b => b.textContent === 'Ticket');
         if (btnTkHoy) { btnTkHoy.click();
-            R.ok('Ticket en Hoy abre la ventana y se queda en Hoy', $('dlgTicket').open && !$('p-hoy').classList.contains('oculto') && /\d+ de \d+/.test($('tkPos').textContent), $('tkPos').textContent);
+            R.ok('Ticket de la Fila del día abre la ventana y se queda en Góndolas', $('dlgTicket').open && !$('p-bascula').classList.contains('oculto') && /\d+ de \d+/.test($('tkPos').textContent), $('tkPos').textContent);
             clic('tkCerrar'); }
 
         // 15b. El folio mira el ANIO entero, no la ventana: si mirara la ventana repetiria E-..-00099.
         if (mismoAnio) {
-            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            irGondolas();
             [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/099')).querySelector('button').click();
             await esperar(() => visible('baPesar'), 'pesaje viejo'); poner('baKg', '40000'); await foto(); clic('btnGuardarPeso');
             await esperar(() => avisoCon('Bruto guardado'), 'bruto viejo');
@@ -1269,7 +1294,7 @@ try {
             await esperar(() => avisoCon('no se sincronizó'), 'aviso ámbar del segundo paso');
             R.ok('C-19: PATCH fallido sobre la vigencia del tablero → el carrier queda actualizado y el aviso «no se sincronizó» lo dice', filas('carriers')[0].fields.FolioOficio === 'UGI-DEMO-0001-2025' && fallaVig.veces === 0 && !$('pdFormaCarrier').open && !!avisoCon('no se sincronizó'), (avisoCon('no se sincronizó') || {}).textContent);
             // (d) las flechas del teclado mueven el ticket.
-            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            irGondolas();
             document.querySelector('#baCerrados .renglon button').click(); await esperar(() => $('dlgTicket').open, 'ticket para flechas');
             const pos0 = $('tkPos').textContent;
             $('dlgTicket').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
@@ -1305,13 +1330,13 @@ try {
         // C-23 / C-24 (v0.28.0): con el confirm de Anular abierto, Actualizar NO sustituye las listas (ni con escritura en
         // vuelo); el boton que disparo queda deshabilitado mientras dura; y un doble toque en Guardar del padron crea UN renglon.
         {
-            document.querySelector('#pestanas button[data-p="puerta"]').click();
+            irPuerta();
             elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
             poner('puManifiesto', 'MINSA/RME/112/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
             clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 112'); clic('btnRegistrarPuerta');
             await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/112/2025'), 'embarque 112');
             const e112 = filas('embarques').find(e => e.fields.Manifiesto === 'MINSA/RME/112/2025');
-            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            irGondolas();
             [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/112')).querySelector('button').click();
             await esperar(() => visible('baPesar'), 'pesaje 112'); poner('baKg', '43000'); await foto(); clic('btnGuardarPeso');
             await esperar(() => avisoCon('Bruto guardado'), 'bruto 112');
@@ -1331,14 +1356,14 @@ try {
             await esperar(() => $('dlg').open, 'confirm 2 al salir'); clic('dlgOk');
             await esperar(() => visible('p-hoy'), 'Hoy tras descartar el pesaje');
             URL.revokeObjectURL = revokeC27;
-            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            irGondolas();
             R.ok('C-27: al descartar se suelta la foto (blob URL revocado) y, de vuelta en Báscula, la tarjeta no reaparece; la góndola sigue esperando la tara', revocadosC27 >= 1 && !visible('baPesar') && $('baLista').textContent.includes(e112.fields.Title) && !e112.fields.TaraKg, `revocados ${revocadosC27}`);
             // Sin nada capturado, cambiar de pestana no pregunta (como Cancelar vacio).
             [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e112.fields.Title)).querySelector('button').click();
             await esperar(() => visible('baPesar'), 'tara 112 abierta otra vez');
             document.querySelector('#pestanas button[data-p="hoy"]').click();
             R.ok('C-27: con el pesaje vacío cambiar de pestaña no pregunta y sale directo', !$('dlg').open && visible('p-hoy'));
-            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            irGondolas();
             // C-23: Anular desde Bascula con el confirm abierto; Actualizar en medio no debe recargar ni cerrar el dialogo.
             const r112 = [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e112.fields.Title));
             const btnAn112 = r112 && r112.querySelector('button[data-accion="anular"]');
@@ -1382,7 +1407,7 @@ try {
             const gondolas = filas('embarques').filter(e => Number(e.fields.PreAltaId) === pDemo.id && e.fields.Etapa === 'cerrado' && Number(e.fields.NetoKg) > 0);
             const g1 = gondolas.find(e => e.fields.TicketBascula) || gondolas[0];
             const conTicket = !!g1.fields.TicketBascula;
-            document.querySelector('#pestanas button[data-p="bascula"]').click();
+            irGondolas();
             $('baGrupoCerrados').open = true; await dormir(20);
             const filaDe = folio => [...document.querySelectorAll('#baCerrados .renglon')].find(r => r.textContent.includes(folio));
             const botonDe = (folio, texto) => { const r = filaDe(folio); return r && [...r.querySelectorAll('button')].find(b => b.textContent === texto); };
@@ -1533,7 +1558,7 @@ try {
                     poner('dlgMotivo', 'Góndola duplicada'); clic('dlgOk');
                     await esperar(() => g1.fields.Etapa === 'anulado', 'góndola anulada');
                     R.ok('U-70: el confirm lo avisa y el certificado vigente queda CANCELADO con el motivo de la anulación', textoConf.includes(c3.fields.Title) && c3.fields.Estado === 'cancelado' && String(c3.fields.Motivo).includes('Góndola duplicada'), `${c3.fields.Estado} · ${c3.fields.Motivo}`);
-                    document.querySelector('#pestanas button[data-p="bascula"]').click(); $('baGrupoCerrados').open = true; await dormir(20);
+                    irGondolas(); $('baGrupoCerrados').open = true; await dormir(20);
                     R.ok('U-70: la góndola anulada sigue mostrando «Certificado» en Cerrados', !!botonDe(g1.fields.Title, 'Certificado'), filaDe(g1.fields.Title) ? [...filaDe(g1.fields.Title).querySelectorAll('button')].map(b => b.textContent).join(' | ') : 'sin fila');
                 }
             } else {
@@ -1550,10 +1575,10 @@ try {
         R.ok('token caducado → acquireTokenRedirect (vuelve al login)', redirigio);
     } else {
         R.log('nota', `rol ${ROL}: sin captura de puerta; se prueba solo lectura`);
-        document.querySelector('#pestanas button[data-p="puerta"]').click();
-        // U-38 (v0.26.0): el rol de lectura es texto fijo de la tarjeta, no un aviso (el refresco silencioso lo repetía cada 2 min).
-        R.ok('rol de lectura: la compuerta está deshabilitada y lo dice la tarjeta, no un aviso', $('btnCompuerta').disabled && visible('puSoloLectura') && !avisoCon('Tu rol es de lectura'));
-        R.ok('U-50: el texto de la Puerta nombra el rol real (validador ≠ lectura)', ROL === 'validador' ? $('puSoloLectura').textContent.includes('validador') && $('puSoloLectura').textContent.includes('Pre-altas') : $('puSoloLectura').textContent.includes('lectura'), $('puSoloLectura').textContent);
+        // Tanda 2 (v0.47.0): la llegada se abre con «+ Nueva góndola», que este rol no ve; U-38/U-50 (el texto de solo
+        // lectura en la tarjeta de la puerta) quedan sin camino hasta que la tanda 4 rehaga la llegada.
+        irGondolas();
+        R.ok('rol sin captura: Góndolas sin «+ Nueva góndola» ni botones de pesar', !visible('btnNuevaGondola') && ![...document.querySelectorAll('#baLista button')].some(x => /Pesar/.test(x.textContent)));
         document.querySelector('#pestanas button[data-p="padron"]').click();
         R.ok('rol de lectura: sin botones de alta en el padrón', !visible('btnNuevoCarrier') && !visible('btnNuevaUnidad'));
         R.ok('v0.39.0: los botones del certificado existen y están ocultos para un rol que no captura', !!$('btnEmitirCertificado') && !visible('btnEmitirCertificado') && !visible('btnSustituirCertificado') && !visible('btnCancelarCertificado'));
@@ -1571,13 +1596,13 @@ try {
     if (params.get('vista') === 'certificado') {
         // v0.39.0: para la captura y el print-to-pdf del formato — la GONDOLA certificada, desde Bascula > Cerrados.
         $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close();
-        document.querySelector('#pestanas button[data-p="bascula"]').click(); $('baGrupoCerrados').open = true; await dormir(30);
+        irGondolas(); $('baGrupoCerrados').open = true; await dormir(30);
         const vigente = filas('certificados').find(c => c.fields.Estado === 'vigente');
         const emb = vigente && filas('embarques').find(e => e.id === Number(vigente.fields.EmbarqueId));
         const r = emb && [...document.querySelectorAll('#baCerrados .renglon')].find(x => x.textContent.includes(emb.fields.Title));
         const btn = r && [...r.querySelectorAll('button')].find(b => b.textContent === 'Certificado');
         if (btn) { btn.click(); await dormir(30); if (params.get('imprimir')) { document.body.classList.add('imprimiendo-certificado'); $('cssImpresionCert').media = 'print'; } }
-    } else if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); document.querySelector(`#pestanas button[data-p="${params.get('vista')}"], #pestanasExtra button[data-p="${params.get('vista')}"]`).click(); }
+    } else if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); const v = params.get('vista'); if (v === 'puerta') irPuerta(); else if (v === 'bascula' || v === 'gondolas') irGondolas(); else document.querySelector(`#pestanas button[data-p="${v}"], #pestanasExtra button[data-p="${v}"]`).click(); }
 }
 </script>
 </body>

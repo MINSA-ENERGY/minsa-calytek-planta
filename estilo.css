@@ -251,17 +251,15 @@ h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-tra
 .titulo-ico { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: var(--r-sm); color: var(--ok); background: color-mix(in srgb, var(--ok) 16%, transparent); flex: none; }
 .titulo-ico svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .cabecera > .mn-btn { margin-left: auto; }
+.cabecera > .principal { width: auto; }   /* tanda 2: la acción primaria de la cabecera a su ancho, a la derecha del título */
 
-/* Carril del flujo: Puerta → Báscula → Ticket, con el conteo del día en «Hoy»; en Puerta y Báscula marca la etapa (= .mn-flow). */
-.flujo { display: flex; gap: 3px; margin: 0 0 var(--sp-4); }
-.flujo span {
-    flex: 1; text-align: center; font-size: .62rem; font-weight: 600; color: var(--mute); padding: var(--sp-1) 0; border-radius: var(--r-sm);
-    background: var(--surf); border: 1px solid var(--line-soft); text-transform: uppercase; letter-spacing: .06em;
-}
-.flujo span b { display: block; font-size: .9rem; font-family: var(--mono); color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-.flujo span.on { border-color: var(--acc); color: var(--acc); }
-.flujo span.on b { color: var(--acc); }
-.flujo span.done { color: var(--ok-fg); }
+/* Migas (tanda 2 del rediseño, v0.47.0): la ruta va ARRIBA del título aunque en el DOM venga después (order); el
+   eslabón de arriba es un botón que regresa. Solo las pantallas hijas las llevan: una sección del rail no tiene de dónde venir. */
+.cabecera .migas { order: -1; flex-basis: 100%; display: flex; align-items: baseline; gap: var(--sp-1); font-size: .8rem; color: var(--mute); }
+.cabecera .migas b { color: var(--body); font-weight: 500; }
+.cabecera .migas .miga { all: unset; cursor: pointer; color: var(--acc); font-weight: 500; }
+.cabecera .migas .miga:hover { text-decoration: underline; }
+.cabecera .migas .miga:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 
 /* ---------------------------------------------------------------- entrada */
 
@@ -753,9 +751,9 @@ select, .archivos-filtros select, .con-boton select {
 @media (min-width: 900px) {
     :root { --control-h: 40px; }   /* U-26: con ratón basta menos que los 44 del guante; 40 desde el rediseño del 23-sep (era 36) */
     .rail .tema.seg .mn-btn { min-height: 26px; height: 26px; }   /* U-59: el segmento Claro | Oscuro compacto de Proyectos, solo con ratón */
-    .flujo { max-width: 24rem; }
     /* Formularios y listas no se estiran a todo lo ancho: leen mejor en una columna acotada. */
     #p-puerta .tarjeta, #p-puerta .bloque, #p-bascula .tarjeta, #p-prealtas .tarjeta { max-width: 40rem; }
+    #p-bascula .tarjeta.ancha { max-width: none; }   /* la Fila del día (8 columnas) no cabe en 40rem: se desbordaba */
     /* Padrón en tres columnas: los tres grupos abiertos (lo fija app.js), sin chevron, el carrier elegido filtra las otras dos. */
     #p-padron .padron { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: var(--sp-4); align-items: start; }
     #p-padron .padron details { margin-bottom: 0; }
@@ -765,6 +763,7 @@ select, .archivos-filtros select, .con-boton select {
     #p-prealtas .padron { max-width: 40rem; }
     #avisos { max-width: 40rem; }   /* U-42: sigue sticky */
     .cols { display: grid; grid-template-columns: minmax(0, 1.8fr) 1fr; gap: var(--sp-4); align-items: start; }
+    .cols.pares { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }   /* Hoy sin la Fila del día: vigencias | rechazos */
     .fila { min-width: 0; }
     .tabla-scroll { margin: 0; padding: 0; }
     .franja .item { grid-template-columns: auto 1fr auto; }
