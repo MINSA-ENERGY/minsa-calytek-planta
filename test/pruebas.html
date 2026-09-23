@@ -1449,7 +1449,12 @@ try {
                 R.ok('U-69: sin «qué estaba mal» no se sustituye, y el aviso sale dentro del diálogo', filas('certificados').length === 1 && avisosCert().includes('qué estaba mal'), `dlg: ${avisosCert().slice(0, 80)} · avisos: ${$('avisos').textContent.slice(0, 80)} · abierto ${$('dlgCertificado').open}`);
                 const genAntes = pDemo.fields.Generador;
                 poner('ctTicket', 'B-CORREGIDO-1'); poner('ctGenerador', 'GENERADOR CORREGIDO SA DE CV'); poner('ctMotivo', 'Generador mal escrito');
-                clic('ctCorregirOk'); await confirmar();
+                clic('ctCorregirOk');
+                await esperar(() => $('dlg').open, 'confirm de sustituir');
+                const textoConfirmSust = $('dlg').textContent;
+                const faltanS = [['dirección', pDemo.fields.GeneradorDireccion], ['registro de generador', pDemo.fields.GeneradorRegistro], ['pozo', pDemo.fields.Pozo]].filter(([, v]) => !v).map(([n]) => n);
+                R.ok('U-72 (v0.45.1): el confirm de Sustituir nombra los renglones que saldrán vacíos con los datos del panel', faltanS.every(n => textoConfirmSust.includes(n)) && (faltanS.length > 0) === textoConfirmSust.includes('saldrán vacíos'), textoConfirmSust.slice(0, 220));
+                await confirmar();
                 await esperar(() => filas('certificados').length === 2, 'certificado sustituto');
                 const c2 = filas('certificados')[1];
                 R.ok('v0.39.0: Sustituir crea CT-..-0002 vigente y firmado, sobre la MISMA góndola, y deja 0001 «sustituido»', /-0002$/.test(c2.fields.Title) && c2.fields.Estado === 'vigente' && Number(c2.fields.EmbarqueId) === g1.id && c1.fields.Estado === 'sustituido' && c1.fields.SustituidoPor === c2.fields.Title && c1.fields.Motivo === 'Generador mal escrito' && c2.fields.Motivo.includes(c1.fields.Title) && !!filas('firmas').find(f => f.fields.Tipo === 'certificado' && Number(f.fields.ObjetoId) === c2.id), `${c1.fields.Estado} → ${c2.fields.Title}`);

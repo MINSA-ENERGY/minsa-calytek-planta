@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas } from './reglas.js';
 
-const VERSION = '0.45.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.45.1';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1921,8 +1921,13 @@ async function confirmarSustitucion() {
     const corr = { TicketBascula: $('ctTicket').value.trim(), Manifiesto: $('ctManifiesto').value.trim(), Generador: $('ctGenerador').value.trim(),
         GeneradorDireccion: $('ctGeneradorDireccion').value.trim(), GeneradorRegistro: $('ctGeneradorRegistro').value.trim(), Pozo: $('ctPozo').value.trim() };
     const tocaGondola = corr.TicketBascula !== textoDe(e.TicketBascula) || corr.Manifiesto !== textoDe(e.Manifiesto);
+    // U-72 (v0.45.1, revisor): Sustituir tambien emite — su confirm nombra lo que saldria vacio con los datos del panel,
+    // armado con la misma camposPapel que congela. El ticket se queda fuera: emitirCertificado le da su propio aviso.
+    const p = porId(estado.prealtas, e.PreAltaId);
+    const gen = generadorDe(p); for (const k of Object.keys(gen)) gen[k] = corr[k] || null;
+    const vacios = vaciosDelPapel(camposPapel(p, e, datosCertificado(p, { ...e, TicketBascula: corr.TicketBascula || null, Manifiesto: corr.Manifiesto || null }), gen)).filter(n => n !== 'ticket de báscula');
     const { ok } = await confirmar({ titulo: 'Sustituir el certificado', ok: 'Sustituir',
-        texto: `${vig.Title} queda como «sustituido» (su QR lo dirá) y nace uno nuevo con los datos del panel${tocaGondola ? '; el ticket y el manifiesto se corrigen también en la góndola' : ''}. «${motivo}» queda registrado en los dos.` });
+        texto: `${vig.Title} queda como «sustituido» (su QR lo dirá) y nace uno nuevo con los datos del panel${tocaGondola ? '; el ticket y el manifiesto se corrigen también en la góndola' : ''}. «${motivo}» queda registrado en los dos.${vacios.length ? ` OJO: saldrán vacíos («—») en el papel: ${vacios.join(', ')}.` : ''}` });
     if (!ok) return;
     await emitirCertificado(vig, motivo, corr);
 }
