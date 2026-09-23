@@ -283,6 +283,22 @@ export function siguientePaso(e, autorizada = false) {
     return { paso: 0, texto: x.Etapa ? `etapa ${x.Etapa}` : 'sin etapa', tono: 'mute' };
 }
 
+/**
+ * Tanda 5 (v0.50.0, decisión 11 — gana el primero): qué dejó capturado la otra sesión que avanzó la góndola mientras
+ * esta tecleaba, en una frase. `nombre` convierte el correo del renglón en nombre (quien() en app.js); `_por` es el
+ * lastModifiedBy de SharePoint (graph.js aplanar), que ya viene como nombre.
+ */
+export function yaCapturado(e, nombre = x => x) {
+    const x = e || {};
+    const a = h => (h ? ` a las ${horaMexico(h, 'hora')}` : '');
+    const por = x._por ? `; lo guardó ${x._por}` : '';
+    if (x.Etapa === 'anulado') return `la anuló ${x.AnuladoPor ? nombre(x.AnuladoPor) : 'otra sesión'}${a(x.AnuladoEl)}${x.AnuladoMotivo ? ` («${x.AnuladoMotivo}»)` : ''}`;
+    if (x.Etapa === 'cerrado') return `ya se cerró${a(x.TaraHora)}: tara ${x.TaraKg} kg, neto ${x.NetoKg} kg${por}`;
+    if (x.Etapa === 'bruto') return `ya tiene peso bruto: ${x.BrutoKg} kg${a(x.BrutoHora)}${x.Title ? `, folio ${x.Title}` : ''}${por}`;
+    if (x.Etapa === 'rechazado') return `quedó como rechazo${x.Title ? ` ${x.Title}` : ''}${por}`;
+    return `está en ${x.Etapa || 'otra etapa'}${por}`;
+}
+
 // ---------------------------------------------------------------- C-25 (v0.28.0): la frontera de fechas y utilerias puras
 // Vivian en app.js, que no se importa desde node: la E2E solo pegaba ISO y nadie probaba «16/03/26», «31/04/2026» ni el
 // mensaje de error. Fechas: el estandar de la casa es dd/mm/aaaa (Carlos, 2026-09-05), en pantalla, en el ticket y al

@@ -209,15 +209,40 @@
         <!-- U-14: hasta dónde alcanza lo cargado. -->
         <p class="pista" id="tbAlcance"></p>
       </div>
-      <div class="tarjeta oculto pesaje" id="baPesar">
-        <h2 id="baTitulo"></h2>
-        <p class="pista" id="baSub"></p>
-        <div class="peso">
-          <label for="baKg" id="baKgLabel">Peso (kg)</label>
-          <input type="number" id="baKg" inputmode="numeric" min="0" step="1" placeholder="0">
-          <span class="unidad">kg</span>
+      <!-- Tanda 5 del rediseño (v0.50.0, M5–M8 del artifact 3Jnv6cT49BgMbNsNEvRvKu): la báscula es el asistente, pasos
+           3 a 5. Mientras está abierto, la lista se esconde (#p-bascula.asistiendo) y arriba va la misma barra de cinco pasos
+           que la llegada. Tres pantallas: el pesaje (bruto o tara, #baPesar), la pausa «A descargar» tras el bruto (#baPausa)
+           y el ticket con «Terminar» (#baTicketCaja). A la derecha —en celular, una hoja que abre «Ver lo capturado»— todo
+           lo que la góndola ya trae (#baCapturado). Los ids del pesaje no cambiaron: guardarPeso y la E2E los siguen usando. -->
+      <div class="asis gasis oculto" id="baAsis">
+        <nav class="migas" aria-label="Ruta"><button type="button" class="miga" id="btnBaGondolas">Góndolas</button><span aria-hidden="true">/</span><b id="baMiga"></b></nav>
+        <div class="asis-cab">
+          <div class="pasos5" id="baPasos" aria-hidden="true">
+            <div><i></i><span>Programa y documentos</span></div>
+            <div><i></i><span>Veredicto</span></div>
+            <div><i></i><span>Peso bruto</span></div>
+            <div><i></i><span>Tara</span></div>
+            <div><i></i><span>Ticket</span></div>
+          </div>
+          <div class="asis-quien"><div><b id="baQuien" class="mono"></b><small id="baQuienSub"></small></div><div class="asis-der"><span class="asis-k" id="baPasoK"></span><button type="button" class="ver-capturado" id="btnLoCapturado" aria-controls="baCapturado" aria-expanded="false">Ver lo capturado</button></div></div>
         </div>
-        <div class="neto-vivo oculto" id="baNetoVivo"><span>Bruto <b id="baNvBruto"></b></span><span>Neto <b id="baNvNeto"></b></span><span id="baNvCapBox">Cap. <b id="baNvCap"></b></span></div>
+        <div class="gasis-cuerpo">
+          <div class="gasis-paso">
+      <div class="tarjeta oculto pesaje" id="baPesar">
+        <h2 id="baTitulo" class="pregunta"></h2>
+        <p class="sub" id="baSub"></p>
+        <!-- M7: en escritorio la tara se compone alrededor de la resta, Bruto − Tara = Neto, en un renglón; en celular se apila. -->
+        <div class="ecuacion" id="baEcuacion">
+          <div class="term" id="baTermBruto"><span class="etiqueta-campo">Bruto<span id="baNvHora"></span></span><b id="baNvBruto"></b><small>kg · ya capturado</small></div>
+          <span class="op" aria-hidden="true">−</span>
+          <div class="peso term">
+            <label for="baKg" id="baKgLabel">Peso (kg)</label>
+            <input type="number" id="baKg" inputmode="numeric" min="0" step="1" placeholder="0">
+            <span class="unidad">kg</span>
+          </div>
+          <span class="op" aria-hidden="true">=</span>
+          <div class="term res oculto" id="baNetoVivo"><span class="etiqueta-campo">Neto</span><b id="baNvNeto"></b><small id="baNvCapBox">capacidad <span id="baNvCap"></span> kg</small></div>
+        </div>
         <p class="pista">Solo kilogramos enteros, nunca m³. Lo que marca el indicador, ahora.</p>
         <div class="teclado" id="teclado" aria-label="Teclado numérico">
           <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
@@ -225,6 +250,7 @@
           <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button>
           <button type="button" data-k="0">0</button><button type="button" data-k="00">00</button><button type="button" data-k="borrar" class="borrar" aria-label="Borrar">⌫</button>
         </div>
+        <div class="evidencia">
         <div class="campo foto-fila" id="baFotoFila">
           <img id="baFotoPrevia" class="foto-previa oculto" alt="">
           <div class="foto-texto"><span class="etiqueta-campo">Foto del indicador · obligatoria</span><small id="baFotoEstado">Sin foto todavía</small></div>
@@ -236,6 +262,8 @@
         <div class="campo oculto" id="baTicketCampo">
           <label for="baTicketBascula">Ticket de báscula · obligatorio</label>
           <input type="text" id="baTicketBascula" maxlength="40" autocomplete="off" placeholder="Número del ticket">
+          <small class="pista">El número impreso en el ticket de la báscula.</small>
+        </div>
         </div>
         <div id="baAvisoNeto" class="mensaje ojo oculto"></div>
         <div class="campo oculto" id="baMotivoNetoCampo">
@@ -246,10 +274,33 @@
         <div id="avance" class="oculto"><span id="textoAvance"></span><div class="barra"><div id="barraAvance"></div></div></div>
         <button id="btnCancelarPeso" class="secundario" type="button">Cancelar</button>
       </div>
+      <!-- M5: tras el bruto la góndola se va a descargar; la pausa larga del proceso dice qué pasa y dónde se retoma. -->
+      <div class="tarjeta oculto pausa-ba" id="baPausa">
+        <span class="pausa-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg></span>
+        <h2 class="pregunta">A descargar</h2>
+        <p>El folio ya nació. Cuando la góndola regrese vacía, tócala en la lista y sigue con la tara.</p>
+        <dl class="datos-ba" id="baPausaDatos"></dl>
+        <div class="guion"><small>Qué le dices al chofer</small><span>«Pásate a la fosa a descargar.»</span></div>
+        <div class="asis-botones">
+          <button id="btnPausaTicket" class="secundario" type="button">Ver ticket</button>
+          <button id="btnPausaLista" class="principal" type="button">Volver a la lista</button>
+        </div>
+      </div>
+      <!-- M8: el ticket es el paso 5; «Terminar» regresa a la lista con la góndola ya en Cerradas hoy. -->
       <div class="tarjeta oculto" id="baTicketCaja">
-        <h2>Ticket de báscula</h2>
+        <h2 class="pregunta">Ticket listo</h2>
         <div id="ticket" class="ticket"></div>
-        <button id="btnImprimir" class="principal enviar" type="button">Imprimir / guardar PDF</button>
+        <div class="asis-botones">
+          <button id="btnImprimir" class="secundario" type="button">Imprimir / guardar PDF</button>
+          <button id="btnTerminar" class="principal" type="button">Terminar</button>
+        </div>
+      </div>
+          </div>
+          <aside class="capturado" id="baCapturado" aria-labelledby="baCapturadoTit">
+            <div class="capturado-cab"><h3 id="baCapturadoTit">Lo capturado</h3><button type="button" class="cerrar-hoja" id="btnCerrarCapturado" aria-label="Cerrar">×</button></div>
+            <dl id="baCapturadoDl"></dl>
+          </aside>
+        </div>
       </div>
     </section>
 

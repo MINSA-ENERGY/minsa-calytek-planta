@@ -70,7 +70,10 @@ export function rutaUrl(ruta) {
  */
 export function aplanar(item) {
     const f = item && item.fields ? item.fields : (item || {});
-    return { ...f, id: Number(item.id ?? f.id) };
+    // Tanda 5 (v0.50.0, decisión 11): quién tocó el renglón por última vez, sin columna nueva — SharePoint ya lo sabe.
+    // Lo lee el aviso de «gana el primero» cuando otra sesión avanzó la góndola; el guion bajo lo aparta de las columnas.
+    const por = item && item.lastModifiedBy && item.lastModifiedBy.user && item.lastModifiedBy.user.displayName;
+    return { ...f, id: Number(item.id ?? f.id), ...(por ? { _por: por } : {}) };
 }
 
 export function crearCliente(graph, token) {

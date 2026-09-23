@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado } from './reglas.js';
 
-const VERSION = '0.49.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.50.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -533,7 +533,8 @@ function reanclar() {
  */
 function capturaAMedias() {
     const abierto = id => !$(id).classList.contains('oculto');
-    if (abierto('baPesar') || abierto('veredicto')) return true;
+    // Tanda 5 (decisión 11): el asistente de la báscula abierto —pesaje, pausa «A descargar» o ticket— cuenta entero.
+    if (abierto('baAsis') || abierto('veredicto')) return true;
     if (['paForma', 'paDetalle', 'pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer'].some(id => $(id).open)) return true;
     if (estado.pestana === 'puerta' && ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo', 'puPrealta'].some(id => $(id).value.trim())) return true;   // U-40: el programa elegido también es captura
     return false;
@@ -587,7 +588,7 @@ function repintar() { pintarInsignias(); PINTORES[estado.pestana](); }
  * basculista volvia a fotografiar el indicador; el JPEG comprimido quedaba vivo hasta el siguiente pesaje. Devuelve si se salio.
  */
 const pesajeConAlgo = () => !$('baPesar').classList.contains('oculto') && !!($('baKg').value.trim() || estado.fotoBytes);
-function descartarPesaje() { estado.pesando = null; estado.fotoBytes = null; soltarFotoPrevia(); $('baPesar').classList.add('oculto'); }
+function descartarPesaje() { estado.pesando = null; estado.fotoBytes = null; soltarFotoPrevia(); cerrarAsistente(); }
 async function soltarPesaje() {
     if (pesajeConAlgo()) {
         const { ok } = await confirmar({ titulo: 'Cancelar el pesaje', peligro: true, ok: 'Descartar', texto: 'Se pierden el peso tecleado y la foto del indicador; habría que volver a tomarla.' });
@@ -1144,10 +1145,72 @@ function estadoCertificadoG(e) {
 
 /** La sección entera: las listas y, cerradas, las tarjetas de pesaje y de ticket (como al entrar). */
 function pintarGondolas() {
-    $('baPesar').classList.add('oculto');
-    $('baTicketCaja').classList.add('oculto');
+    cerrarAsistente();
     pintarListasGondolas();
 }
+
+// ---------------------------------------------------------------- tanda 5: el asistente de la báscula (M5–M8)
+/**
+ * Muestra el asistente sobre la góndola `e` en una de sus tres pantallas (baPesar · baPausa · baTicketCaja) y esconde la
+ * lista. `paso` pinta la barra de cinco: 3 bruto, 4 tara, 5 ticket; 3.5 es la pausa de la descarga (tres hechos, ninguno
+ * en curso: la góndola no está en la báscula).
+ */
+function mostrarAsistente(e, pantalla, paso) {
+    estado.asisEmbarque = e;
+    for (const id of ['baPesar', 'baPausa', 'baTicketCaja']) $(id).classList.toggle('oculto', id !== pantalla);
+    $('baAsis').classList.remove('oculto');
+    $('p-bascula').classList.add('asistiendo');
+    [...$('baPasos').children].forEach((d, i) => {
+        d.className = i + 1 < paso ? 'hecho' : i + 1 === paso ? 'ahora' : '';
+        if (i + 1 === paso) d.dataset.tercio = '3'; else delete d.dataset.tercio;
+    });
+    $('baPasoK').textContent = pantalla === 'baPausa' ? 'Paso 3 de 5 · A descargar' : `Paso ${paso} de 5 · ${['', '', '', 'Bruto', 'Tara', 'Ticket'][paso]}`;
+    $('baQuien').textContent = e.Title ? `${e.Title} · ${e.PlacaTractor || ''}` : [e.PlacaTractor, e.PlacaPlana].filter(Boolean).join(' · ');
+    $('baMiga').textContent = e.Title || e.PlacaTractor || 'Góndola';
+    $('baQuienSub').textContent = [nombreDe(estado.prealtas, e.PreAltaId), nombreDe(estado.carriers, e.CarrierId), e.BrutoKg ? `bruto ${kgG(e.BrutoKg)}` : null].filter(x => x && x !== '—').join(' · ');
+    pintarCapturado(e);
+    cerrarHojaCapturado();
+    window.scrollTo({ top: 0 });
+}
+function cerrarAsistente() {
+    for (const id of ['baAsis', 'baPesar', 'baPausa', 'baTicketCaja']) $(id).classList.add('oculto');
+    $('p-bascula').classList.remove('asistiendo');
+    cerrarHojaCapturado();
+    estado.asisEmbarque = null;
+}
+/** M5: tras el bruto, la pausa de la descarga — el folio ya nació y la góndola se retoma desde la lista. */
+function mostrarPausa(e) {
+    const dl = $('baPausaDatos'); dl.textContent = '';
+    for (const [k, v] of [['Folio', e.Title], ['Bruto', `${kgG(e.BrutoKg)} · ${horaMexico(e.BrutoHora, 'hora')}`], ['Sigue', 'la tara, con la góndola vacía']]) {
+        dl.appendChild(el('dt', '', k)); dl.appendChild(el('dd', k === 'Sigue' ? '' : 'mono', v));
+    }
+    mostrarAsistente(e, 'baPausa', 3.5);
+}
+/** M6 / M7: todo lo que la góndola ya trae, por paso. En escritorio es la columna derecha; en celular, la hoja. */
+function pintarCapturado(e) {
+    const dl = $('baCapturadoDl'); dl.textContent = '';
+    const sec = (t, h) => { const d = el('div', 'sec', t); if (h) d.appendChild(el('em', '', h)); dl.appendChild(d); };
+    // nombreDe() da «—» cuando no hay id: ese renglón no se pinta.
+    const par = (k, v, clase) => { if (!v || v === '—') return; dl.appendChild(el('dt', '', k)); dl.appendChild(el('dd', clase || '', v)); };
+    const pre = porId(estado.prealtas, e.PreAltaId);
+    const corr = e.CorrienteDeclarada || (pre && pre.Corriente);
+    const opc = corr && [...$('puCorriente').options].find(o => o.value === corr);
+    sec('Programa y documentos', horaMexico(e.Arribo, 'hora'));
+    par('Programa', nombreDe(estado.prealtas, e.PreAltaId)); par('Carrier', nombreDe(estado.carriers, e.CarrierId));
+    par('Placas', [e.PlacaTractor, e.PlacaPlana].filter(Boolean).join(' · '), 'mono');
+    par('Chofer', e.ChoferNombre || nombreDe(estado.choferes, e.ChoferId));
+    par('Manifiesto', e.Manifiesto, 'mono'); par('Corriente', opc ? opc.textContent : corr);
+    par('Capturó', quien(e.CapturadoPor));
+    let avisos = '';
+    try { avisos = JSON.parse(e.CompuertaDetalle || '[]').filter(h => h.clase === 'aviso').map(h => h.regla).join(', '); } catch (_) { /* sin detalle */ }
+    sec('Veredicto');
+    par('Resultado', e.Compuerta === 'pasa' ? 'Pasa' : e.Compuerta === 'excepcion-comercial' ? (e.ExcepcionAutorizo ? `Espera · autorizó ${quien(e.ExcepcionAutorizo)}` : 'Espera autorización') : e.Compuerta, e.Compuerta === 'pasa' ? 'e-ok' : 'e-warn');
+    par('Avisos', avisos, 'e-warn');
+    if (e.BrutoKg) { sec('Peso bruto', horaMexico(e.BrutoHora, 'hora')); par('Folio', e.Title, 'mono'); par('Bruto', kgG(e.BrutoKg), 'mono'); }
+    if (e.TaraKg) { sec('Tara', horaMexico(e.TaraHora, 'hora')); par('Tara', kgG(e.TaraKg), 'mono'); par('Neto', kgG(e.NetoKg), 'mono'); par('Ticket de báscula', e.TicketBascula, 'mono'); }
+}
+function abrirHojaCapturado() { $('baCapturado').classList.add('abierta'); $('btnLoCapturado').setAttribute('aria-expanded', 'true'); $('btnCerrarCapturado').focus(); }
+function cerrarHojaCapturado() { $('baCapturado').classList.remove('abierta'); $('btnLoCapturado').setAttribute('aria-expanded', 'false'); }
 /** Solo las cuatro listas y sus conteos: tras emitir un certificado no se toca el pesaje abierto. */
 function pintarListasGondolas() {
     const { hoy, dia, diaCierre } = cortesDia();
@@ -1337,8 +1400,7 @@ async function autorizarExcepcion(e, btn) {
 function abrirPesaje(e, fase) {
     estado.pesando = { embarque: e, fase };
     estado.fotoBytes = null; soltarFotoPrevia();
-    $('baPesar').classList.remove('oculto');
-    $('baTicketCaja').classList.add('oculto');
+    mostrarAsistente(e, 'baPesar', fase === 'bruto' ? 3 : 4);   // tanda 5: el pesaje es un paso del asistente, no una tarjeta bajo la lista
     // U-44 (v0.29.0): las dos fases titulan con la PLACA (lo que el basculista ve en el camión) y la tara además con el folio;
     // el manifiesto va al subtítulo. Antes la tara decía solo «Tara · E-26-00004» y el bruto no traía el manifiesto.
     $('baTitulo').textContent = fase === 'bruto' ? `Bruto · ${e.PlacaTractor}` : `Tara · ${e.PlacaTractor} · ${e.Title}`;
@@ -1352,10 +1414,13 @@ function abrirPesaje(e, fase) {
     $('baFotoEstado').textContent = 'Sin foto todavía'; $('baFotoEstado').classList.remove('lista');
     $('btnFoto').textContent = 'Tomar foto';
     $('baNetoVivo').classList.toggle('oculto', fase !== 'tara');
-    $('btnGuardarPeso').textContent = fase === 'bruto' ? 'Guardar bruto' : 'Guardar tara';
+    $('baEcuacion').classList.toggle('solo', fase !== 'tara');   // M7: el bruto es un solo término; la tara, la resta entera
+    $('btnGuardarPeso').textContent = fase === 'bruto' ? 'Guardar bruto ›' : 'Guardar tara';
     if (fase === 'tara') {
         $('baNvBruto').textContent = Number(e.BrutoKg).toLocaleString('es-MX');
-        $('baNvCap').textContent = u && u.CapacidadKg ? Number(u.CapacidadKg).toLocaleString('es-MX') : '—';
+        $('baNvHora').textContent = e.BrutoHora ? ` · ${horaMexico(e.BrutoHora, 'hora')}` : '';
+        $('baNvCap').textContent = u && u.CapacidadKg ? Number(u.CapacidadKg).toLocaleString('es-MX') : '';
+        $('baNvCapBox').classList.toggle('oculto', !(u && u.CapacidadKg));
         revisarNeto();
     }
     // v0.39.0: el ticket de bascula (el que imprime el indicador) se captura al cerrar la TARA — cubre tara y destara,
@@ -1365,7 +1430,6 @@ function abrirPesaje(e, fase) {
     $('baAvisoNeto').classList.add('oculto');
     $('baMotivoNetoCampo').classList.add('oculto');
     $('baMotivoNeto').value = '';
-    $('baPesar').scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (ESCRITORIO.matches) $('baKg').focus();   // U-53: con ratón el foco va a los kilos; en celular el teclado es propio (inputmode none)
 }
 
@@ -1397,9 +1461,10 @@ function revisarNeto() {
     // I2: el neto se ve conforme se teclea; ambar si se sale de la banda; el boton dice lo que va a cerrar.
     const tara = Number($('baKg').value), bruto = Number(p.embarque.BrutoKg);
     const neto = Number.isFinite(tara) && tara > 0 ? bruto - tara : null;
-    const nv = $('baNvNeto'); nv.textContent = neto === null ? '—' : neto.toLocaleString('es-MX');
-    nv.parentElement.className = neto === null ? '' : aviso ? 'neto-mal' : 'neto-ok';
-    $('btnGuardarPeso').textContent = neto === null || neto <= 0 ? 'Guardar tara' : `Guardar tara · neto ${neto.toLocaleString('es-MX')} kg`;
+    $('baNvNeto').textContent = neto === null ? '—' : neto.toLocaleString('es-MX');
+    $('baNetoVivo').classList.toggle('neto-ok', neto !== null && !aviso);
+    $('baNetoVivo').classList.toggle('neto-mal', neto !== null && !!aviso);
+    $('btnGuardarPeso').textContent = neto === null || neto <= 0 ? 'Guardar tara' : `Guardar tara · neto ${neto.toLocaleString('es-MX')} kg ›`;
     return aviso;
 }
 
@@ -1421,12 +1486,13 @@ async function guardarPeso() {
         const ahora = new Date().toISOString();
         if (p.fase === 'bruto') await guardarBruto(e, kg, ahora, paso);
         else await guardarTara(e, kg, ahora, aviso, paso);
-        $('baPesar').classList.add('oculto'); soltarFotoPrevia();
-        pintarTicket(e);
-        pintarGondolas();
-        $('baTicketCaja').classList.remove('oculto');
-        $('baTicketCaja').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        soltarFotoPrevia();
+        pintarTicket(e);   // tras el bruto también: «Ver ticket» de la pausa lo reimprime con el folio recién nacido
+        pintarListasGondolas();   // la lista de atrás ya al día; el asistente sigue en pantalla
+        // M5 / M8: el bruto lleva a la pausa de la descarga; la tara, al ticket con «Terminar».
+        if (p.fase === 'bruto') mostrarPausa(e); else mostrarAsistente(e, 'baTicketCaja', 5);
     } catch (err) {
+        pintarCapturado(p.embarque);   // decisión 11: si otra sesión avanzó la góndola, lo capturado ya dice lo suyo
         avisar('No se pudo guardar: ' + (err && err.message ? err.message : err), 'error');
     } finally {
         $('avance').classList.add('oculto');
@@ -1451,7 +1517,8 @@ async function guardarBruto(e, kg, ahora, paso) {
     if (fresco) Object.assign(e, fresco);
     fundirEnVentana(delAno);
     anclar('embarques', e);
-    if (e.Etapa !== 'compuerta') throw new Error(`este embarque ya está en ${e.Etapa} (lo movió otra sesión). Actualiza la lista.`);
+    // Decisión 11 (tanda 5): gana el primero, y se dice qué dejó y quién. Nada se sube: el lote todavía no existe.
+    if (e.Etapa !== 'compuerta') throw new Error(`esta góndola ${yaCapturado(e, quien)} (lo movió otra sesión). Tu peso no se guardó; vuelve a la lista.`);
     // C-03 (v0.23.0): el folio se RESERVA (PATCH Title) y se confirma unico ANTES de subir la foto, para que la
     // carpeta, la foto y el _lote.json nazcan con el definitivo. Antes, si asegurarFolioUnico renumeraba, el lote ya
     // subido y BrutoFoto se quedaban con el folio viejo, que ahora era de otra gondola. Si la subida o el PATCH
@@ -1476,7 +1543,7 @@ async function guardarTara(e, kg, ahora, aviso, paso) {
     const vigente = await estado.cliente.renglon(estado.siteId, L.embarques, e.id, paso);
     Object.assign(e, vigente);
     anclar('embarques', e);
-    if (e.Etapa !== 'bruto') throw new Error(`este embarque ya está en ${e.Etapa} (lo movió otra sesión). Actualiza la lista.`);
+    if (e.Etapa !== 'bruto') throw new Error(`esta góndola ${yaCapturado(e, quien)} (lo movió otra sesión). Tu tara no se guardó; vuelve a la lista.`);   // decisión 11
     paso('Subiendo la foto…');
     const lote = await subirEvidencia(e.Title, 'tara', kg, paso);
     paso('Cerrando el embarque…');
@@ -3143,6 +3210,21 @@ $('btnCancelarPeso').addEventListener('click', async () => {
     if (await soltarPesaje()) repintar();   // C-12: la lista se repinta (un refresco con el pesaje abierto la dejaba vieja)
 });
 $('btnImprimir').addEventListener('click', () => window.print());
+// Tanda 5: los botones del asistente de la báscula. «Góndolas» de las migas suelta el pesaje como Cancelar (pregunta si hay algo).
+$('btnBaGondolas').addEventListener('click', async () => {
+    if (!$('baPesar').classList.contains('oculto')) { if (await soltarPesaje()) repintar(); return; }
+    cerrarAsistente(); repintar();
+});
+$('btnPausaLista').addEventListener('click', () => { cerrarAsistente(); repintar(); });
+$('btnPausaTicket').addEventListener('click', () => { const e = estado.asisEmbarque; if (e) abrirTicketPop([vivo('embarques', e)], 0); });
+$('btnTerminar').addEventListener('click', () => {   // M8: de vuelta a la lista, con el aviso de lo que se cerró
+    const e = estado.asisEmbarque;
+    cerrarAsistente(); repintar();
+    if (e) avisar(`${e.Title} cerrada · neto ${kgG(e.NetoKg)}. Queda en Cerradas hoy.`, 'bien');
+});
+$('btnLoCapturado').addEventListener('click', abrirHojaCapturado);
+$('btnCerrarCapturado').addEventListener('click', () => { cerrarHojaCapturado(); $('btnLoCapturado').focus(); });
+$('baCapturado').addEventListener('keydown', ev => { if (ev.key === 'Escape' && $('baCapturado').classList.contains('abierta')) { cerrarHojaCapturado(); $('btnLoCapturado').focus(); } });
 // El boton vive dentro del <summary>: sin preventDefault el clic pliega el grupo (igual que en el padron).
 $('btnNuevaPrealta').addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); $('paGrupoBorradores').open = true; nuevaPrealta(); });
 $('paCarrier').addEventListener('change', pintarUnidadesChoferesPrealta);

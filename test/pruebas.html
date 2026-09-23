@@ -799,6 +799,8 @@ try {
         }
         document.querySelector('#baLista .gfila button[data-accion="pesar"]').click();
         await esperar(() => visible('baPesar'), 'pesaje abierto');
+        // Tanda 5 (v0.50.0): el pesaje es el paso 3 del asistente; la lista se esconde y el bruto no muestra la resta (M7).
+        R.ok('tanda 5: el bruto abre el asistente en «Paso 3 de 5 · Bruto», con la lista escondida y sin la resta', $('p-bascula').classList.contains('asistiendo') && getComputedStyle($('gTabs')).display === 'none' && $('baPasoK').textContent === 'Paso 3 de 5 · Bruto' && $('baEcuacion').classList.contains('solo') && $('baPasos').querySelectorAll('.hecho').length === 2, $('baPasoK').textContent);
         poner('baKg', '44600');
         // U-24 (v0.26.0): Cancelar con peso tecleado (o foto) pregunta antes de tirarlo; al no confirmar, el pesaje sigue con su peso.
         clic('btnCancelarPeso'); await esperar(() => $('dlg').open, 'confirmación de cancelar pesaje');
@@ -835,12 +837,27 @@ try {
         }
         R.ok('ticket con folio y bruto', $('ticket').textContent.includes(emb1.fields.Title) && $('ticket').textContent.includes('44600'));
         R.ok('«Capturó» muestra el Nombre de PLANTA_Roles, no el correo', $('ticket').textContent.includes('Prueba') && !$('ticket').textContent.includes(window.__CUENTA.username), $('ticket').textContent.slice(-160));
+        // M5: tras el bruto, la pausa «A descargar»: el folio ya nació, la góndola se retoma desde la lista.
+        R.ok('M5: tras el bruto sale «A descargar» con el folio y el bruto', visible('baPausa') && !visible('baPesar') && !visible('baTicketCaja') && $('baPausaDatos').textContent.includes(emb1.fields.Title) && $('baPausaDatos').textContent.includes('44,600'), $('baPausaDatos').textContent);
+        R.ok('M5: la barra marca tres pasos hechos y ninguno en curso', $('baPasos').querySelectorAll('.hecho').length === 3 && !$('baPasos').querySelector('.ahora') && $('baPasoK').textContent.includes('A descargar'), $('baPasoK').textContent);
+        R.ok('M6/M7: lo capturado trae el manifiesto, el veredicto y el bruto', $('baCapturadoDl').textContent.includes('MINSA/RME/000/2026') && $('baCapturadoDl').textContent.includes('Pasa') && $('baCapturadoDl').textContent.includes('44,600 kg'), $('baCapturadoDl').textContent.slice(0, 200));
+        {   // M6 en celular es una hoja inferior; en escritorio (≥ 900 px) la columna ya está a la vista y el botón no se muestra.
+            const movil = !window.matchMedia('(min-width: 900px)').matches;
+            clic('btnLoCapturado');
+            const cs = getComputedStyle($('baCapturado'));
+            R.ok('M6/M7: «Ver lo capturado» abre la hoja en celular; en escritorio es la columna derecha', cs.display !== 'none' && (movil ? cs.position === 'fixed' && $('btnLoCapturado').getAttribute('aria-expanded') === 'true' : cs.position === 'static'), `${window.innerWidth}px · ${cs.display} · ${cs.position}`);
+            clic('btnCerrarCapturado');
+            R.ok('M6: cerrar la hoja la esconde (en escritorio la columna se queda)', movil ? getComputedStyle($('baCapturado')).display === 'none' : getComputedStyle($('baCapturado')).display !== 'none');
+        }
+        clic('btnPausaLista');
+        R.ok('M5: «Volver a la lista» cierra el asistente y la góndola dice «falta tara»', !visible('baAsis') && !$('p-bascula').classList.contains('asistiendo') && filaG('baLista', emb1.fields.Title).textContent.includes('falta tara'));
 
         // 7. Tara: fallo del PATCH tras subir la foto -> no debe quedar lote huérfano.
         irGondolas();
         const btnTara = filaG('baLista', emb1.fields.Title).querySelector('button');
         R.ok('la góndola espera la TARA', btnTara.textContent === 'Pesar tara');
         btnTara.click(); await esperar(() => visible('baPesar'), 'pesaje tara');
+        R.ok('M7: la tara compone la resta (Bruto − Tara = Neto) en el paso 4', !$('baEcuacion').classList.contains('solo') && visible('baNetoVivo') && $('baNvBruto').textContent === '44,600' && $('baPasoK').textContent === 'Paso 4 de 5 · Tara', `${$('baNvBruto').textContent} · ${$('baPasoK').textContent}`);
         // C-01 (v0.21.0): un refresco con el pesaje abierto sustituye estado.embarques; el embarque en la mano
         // debe re-anclarse al objeto fresco, si no la tara se guarda sobre una copia huérfana y la góndola sigue «en planta».
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con pesaje abierto');
@@ -861,6 +878,9 @@ try {
         await esperar(() => avisoCon('cerrado: neto 21220'), 'tara guardada');
         R.ok('neto = bruto − tara, etapa cerrado, InicioAlmacen = hora del bruto', emb1.fields.NetoKg === 21220 && emb1.fields.Etapa === 'cerrado' && emb1.fields.InicioAlmacen === emb1.fields.BrutoHora);
         R.ok('ticket final con NETO', $('ticket').textContent.includes('21220'));
+        R.ok('M8: tras la tara sale el ticket como paso 5, con «Terminar»', visible('baTicketCaja') && !visible('baPesar') && visible('btnTerminar') && $('baPasoK').textContent === 'Paso 5 de 5 · Ticket' && $('baPasos').querySelectorAll('.hecho').length === 4, $('baPasoK').textContent);
+        clic('btnTerminar');
+        R.ok('M8: «Terminar» regresa a la lista y dice qué se cerró', !visible('baAsis') && !!avisoCon(`${emb1.fields.Title} cerrada · neto 21,220 kg`));
         R.ok('C-01: la góndola cerrada tras el refresco ya NO está en «En planta» (se cerró la de la lista, no una copia)', !$('baLista').textContent.includes(emb1.fields.Title), $('baLista').textContent.slice(0, 120));
 
         // 8. Neto fuera de banda pide motivo.
@@ -1160,6 +1180,7 @@ try {
             poner('baKg', '20000'); await foto();
             const carpetasC13 = DB.carpetas.length;
             clic('btnGuardarPeso'); await esperar(() => avisoCon('lo movió otra sesión'), 'tara rechazada por carrera');
+            R.ok('decisión 11 (gana el primero): el aviso dice qué hizo la otra sesión y quién, y el pesaje sigue abierto con lo tecleado', !!avisoCon('la anuló') && visible('baPesar') && $('baKg').value === '20000', (avisoCon('lo movió otra sesión') || {}).textContent);
             R.ok('C-13: la tara NO cierra una góndola que otra sesión anuló: relee el renglón, no sube lote y avisa', e110.fields.Etapa === 'anulado' && !e110.fields.TaraKg && DB.carpetas.length === carpetasC13, `etapa ${e110.fields.Etapa} · carpetas ${carpetasC13}→${DB.carpetas.length}`);
             // Se deshace la anulacion ajena y se guarda la tara sobre el objeto VIVO (C-12).
             e110.fields.Etapa = 'bruto'; delete e110.fields.AnuladoPor;
@@ -1630,6 +1651,7 @@ try {
         // 14. Sesion caducada: acquireTokenSilent pide interaccion -> la app manda al login, no un error mudo.
         const pcaFalso = window.msal;
         let redirigio = false;
+        window.__tokenReal = pcaFalso.PublicClientApplication.prototype.acquireTokenSilent;   // tanda 5: las capturas (`&asis=pausa|ticket`) guardan después de esta prueba
         pcaFalso.PublicClientApplication.prototype.acquireTokenSilent = async () => { throw new pcaFalso.InteractionRequiredAuthError('interaction_required'); };
         pcaFalso.PublicClientApplication.prototype.acquireTokenRedirect = async () => { redirigio = true; };
         clic('btnActualizar'); await esperar(() => redirigio || avisoCon('No se pudo actualizar'), 'token caducado');
@@ -1663,7 +1685,19 @@ try {
         const r = emb && [...document.querySelectorAll('#baCerrados .gfila')].find(x => x.textContent.includes(emb.fields.Title));
         const btn = r && [...r.querySelectorAll('button')].find(b => b.textContent === 'Certificado');
         if (btn) { btn.click(); await dormir(30); if (params.get('imprimir')) { document.body.classList.add('imprimiendo-certificado'); $('cssImpresionCert').media = 'print'; } }
-    } else if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); const v = params.get('vista'); if (v === 'puerta') { irPuerta(); if (params.get('s')) document.querySelector(`#puSubpasos button[data-s="${params.get('s')}"]`).click(); if (params.get('vk')) { poner('puManifiesto', 'MINSA/RME/900/2026'); poner('puPlaca', params.get('vk') === 'rechazo' ? 'XX1234' : '55XY9K'); poner('puPlacaPlana', params.get('vk') === 'rechazo' ? '' : '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true; clic('btnCompuerta'); } } else if (v === 'bascula' || v === 'gondolas') { irGondolas(); if (params.get('g')) vistaG(params.get('g')); } else document.querySelector(`#pestanas button[data-p="${v}"], #pestanasExtra button[data-p="${v}"]`).click(); }
+    } else if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); const v = params.get('vista'); if (v === 'puerta') { irPuerta(); if (params.get('s')) document.querySelector(`#puSubpasos button[data-s="${params.get('s')}"]`).click(); if (params.get('vk')) { poner('puManifiesto', 'MINSA/RME/900/2026'); poner('puPlaca', params.get('vk') === 'rechazo' ? 'XX1234' : '55XY9K'); poner('puPlacaPlana', params.get('vk') === 'rechazo' ? '' : '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true; clic('btnCompuerta'); } } else if (v === 'bascula' || v === 'gondolas') { irGondolas(); if (params.get('g')) vistaG(params.get('g'));
+            // Tanda 5 (v0.50.0), solo para capturas: `&asis=bruto|tara` abre ese pesaje con datos tecleados; `pausa|ticket` lo guarda
+            // (la pausa «A descargar» o el ticket con «Terminar»); `&hoja=1` abre «Ver lo capturado».
+            const a = params.get('asis');
+            if (a) (async () => {
+                const tara = a === 'tara' || a === 'ticket';
+                const b = [...document.querySelectorAll('#baLista button[data-accion="pesar"]')].find(x => x.textContent === (tara ? 'Pesar tara' : 'Pesar bruto'));
+                if (!b) return; b.click();
+                if (window.__tokenReal) window.msal.PublicClientApplication.prototype.acquireTokenSilent = window.__tokenReal;
+                poner('baKg', tara ? '17620' : '41080'); if (tara) poner('baTicketBascula', 'B-18841'); await foto();
+                if (a === 'pausa' || a === 'ticket') { clic('btnGuardarPeso'); await esperar(() => visible(a === 'pausa' ? 'baPausa' : 'baTicketCaja'), 'captura ' + a); }
+                if (params.get('hoja')) clic('btnLoCapturado');
+            })(); } else document.querySelector(`#pestanas button[data-p="${v}"], #pestanasExtra button[data-p="${v}"]`).click(); }
 }
 </script>
 </body>

@@ -1,6 +1,6 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -253,4 +253,16 @@ assert.equal(residuoDe(''), 'RECORTES DE PERFORACIÓN');
     assert.equal(siguientePaso({ Etapa: 'anulado' }).paso, 0);
     assert.equal(siguientePaso({ Etapa: 'descargando' }).texto, 'etapa descargando');   // la etapa retirada el 7-sep no revienta
     assert.equal(siguientePaso(null).texto, 'sin etapa');
+}
+
+// Rediseño tanda 5 (v0.50.0, decisión 11): gana el primero — qué dejó capturado la otra sesión, y quién.
+{
+    assert.equal(yaCapturado({ Etapa: 'bruto', BrutoKg: 41080, BrutoHora: '2026-10-15T17:12:00Z', Title: 'E-26-00043', _por: 'Daniel Hipólito' }),
+        'ya tiene peso bruto: 41080 kg a las 11:12, folio E-26-00043; lo guardó Daniel Hipólito');
+    assert.equal(yaCapturado({ Etapa: 'cerrado', TaraKg: 17620, NetoKg: 23460, TaraHora: '2026-10-15T18:40:00Z' }), 'ya se cerró a las 12:40: tara 17620 kg, neto 23460 kg');
+    // La anulación dice quién por su columna (AnuladoPor, correo → nombre), no por lastModifiedBy.
+    assert.equal(yaCapturado({ Etapa: 'anulado', AnuladoPor: 'g@x.mx', AnuladoMotivo: 'placa mal' }, c => (c === 'g@x.mx' ? 'Gerencia' : c)), 'la anuló Gerencia («placa mal»)');
+    assert.equal(yaCapturado({ Etapa: 'anulado' }), 'la anuló otra sesión');
+    assert.equal(yaCapturado({ Etapa: 'rechazado', Title: 'R-26-0004' }), 'quedó como rechazo R-26-0004');
+    assert.equal(yaCapturado(null), 'está en otra etapa');
 }

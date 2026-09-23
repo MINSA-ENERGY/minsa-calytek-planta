@@ -798,6 +798,77 @@ button:not(:disabled):active { transform: scale(.98); }
 .enlace { align-self: flex-start; min-height: 0; padding: 0; border: 0; background: none; font: inherit; font-size: .88rem; font-weight: 600; color: var(--acc); cursor: pointer; }
 .enlace:hover { text-decoration: underline; }
 
+/* ---------------------------------------------------------------- tanda 5: el asistente de la báscula (M5–M8)
+   Pasos 3 a 5 con la misma barra que la llegada. Mientras está abierto la lista se esconde: es una pantalla por paso.
+   En escritorio (≥ 900 px) el paso va a la izquierda y «Lo capturado» a la derecha (M7); en celular es una hoja (M6). */
+#p-bascula.asistiendo > .cabecera, #p-bascula.asistiendo > .gtabs, #p-bascula.asistiendo > .gpanel { display: none; }
+.gasis { max-width: none; }
+.gasis > .migas { display: flex; align-items: baseline; gap: var(--sp-1); font-size: .8rem; color: var(--mute); }
+.gasis > .migas b { color: var(--body); font-weight: 500; font-family: var(--mono); }
+.gasis > .migas .miga { all: unset; cursor: pointer; color: var(--acc); font-weight: 500; }
+.gasis > .migas .miga:hover { text-decoration: underline; }
+.gasis > .migas .miga:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
+.pasos5 .hecho { color: var(--body); }
+.pasos5 .hecho i { background: var(--ok); }
+.asis-der { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.ver-capturado { all: unset; cursor: pointer; font-size: .82rem; font-weight: 600; color: var(--acc); }
+.ver-capturado:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
+.gasis-cuerpo { display: grid; gap: var(--sp-4); align-items: start; }
+.gasis-paso > .tarjeta { margin: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
+.gasis-paso .tarjeta h2.pregunta { margin: 0; font-family: var(--titulo); font-weight: 600; font-size: 1.3rem; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.gasis-paso .sub { font-size: .88rem; color: var(--mute); margin: calc(-1 * var(--sp-2)) 0 0; }
+.gasis-paso .pista, .gasis-paso .campo { margin: 0; }
+/* La resta (M7). En celular se apila: el campo grande y, abajo, «Bruto» y «Neto» como renglones. */
+.ecuacion { display: grid; gap: var(--sp-2); }
+.ecuacion .op { display: none; }
+.ecuacion .term:not(.peso) { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); background: var(--surf2); border-radius: var(--r-sm); }
+.ecuacion .term:not(.peso) b { font-family: var(--mono); font-weight: 500; font-size: 1.2rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ecuacion .term:not(.peso) small { display: none; }
+.ecuacion.solo #baTermBruto { display: none; }
+#baTermBruto { order: -1; }
+#baTermBruto b { color: var(--mute); }
+#baNetoVivo.neto-ok b { color: var(--ok-fg); }
+#baNetoVivo.neto-mal b { color: var(--warn-fg); }
+.evidencia { display: grid; gap: var(--sp-3); }
+.evidencia .campo { margin: 0; }
+.evidencia .pista { font-size: .8rem; }
+/* M5: la pausa de la descarga. */
+.pausa-ba .pausa-ic { width: 52px; height: 52px; border-radius: 50%; background: var(--info-soft); color: var(--info-fg); display: flex; align-items: center; justify-content: center; }
+.pausa-ba .pausa-ic svg { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pausa-ba p { margin: 0; }
+.datos-ba, .capturado dl { display: grid; grid-template-columns: auto 1fr; gap: 6px var(--sp-4); margin: 0; font-size: .88rem; }
+.pausa-ba .datos-ba { padding: var(--sp-3); background: var(--surf2); border-radius: var(--r-sm); }
+.datos-ba dt, .capturado dt { color: var(--mute); }
+.datos-ba dd, .capturado dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.datos-ba dd.mono, .capturado dd.mono { font-family: var(--mono); }
+.capturado dd.e-ok { color: var(--ok-fg); }
+.capturado dd.e-warn { color: var(--warn-fg); }
+/* M6 / M7: lo capturado. En celular, escondido hasta «Ver lo capturado», y entonces hoja inferior sobre un velo. */
+.capturado { display: none; background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4) var(--sp-4); gap: var(--sp-2); align-content: start; }
+.capturado-cab { display: flex; justify-content: space-between; align-items: center; }
+.capturado h3 { margin: 0; font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; }
+.capturado .sec { grid-column: 1 / -1; display: flex; justify-content: space-between; margin-top: var(--sp-2); font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; }
+.capturado .sec em { font-style: normal; text-transform: none; letter-spacing: 0; font-family: var(--mono); color: var(--ok-fg); font-size: .76rem; }
+.cerrar-hoja { all: unset; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; color: var(--mute); border-radius: var(--r-sm); }
+.cerrar-hoja:focus-visible { outline: 2px solid var(--acc); }
+.capturado.abierta { display: grid; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-height: 80vh; overflow-y: auto; border-radius: 10px 10px 0 0; padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom)); box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .45); }
+@media (min-width: 900px) {
+    .gasis-cuerpo { grid-template-columns: minmax(0, 40rem) 340px; }   /* el paso conserva los 40rem de #p-bascula .tarjeta; la columna va pegada */
+    .capturado, .capturado.abierta { display: grid; position: static; max-height: none; border-radius: var(--r-md); box-shadow: none; padding-bottom: var(--sp-4); }
+    .ver-capturado, .cerrar-hoja { display: none; }
+    /* M7: Bruto − Tara = Neto en un renglón; la tara se teclea al centro. */
+    .ecuacion:not(.solo) { grid-template-columns: 1fr auto 1.25fr auto 1fr; align-items: end; gap: 0 var(--sp-4); padding: var(--sp-4); background: var(--surf2); border-radius: var(--r-md); }
+    .ecuacion:not(.solo) .op { display: block; font-family: var(--mono); font-size: 1.8rem; color: var(--faint); line-height: 72px; }
+    .ecuacion:not(.solo) .term:not(.peso) { display: grid; gap: 4px; padding: 0; background: none; }
+    .ecuacion:not(.solo) .term:not(.peso) b { font-size: 2rem; line-height: 72px; }
+    .ecuacion:not(.solo) .term:not(.peso) small { display: block; font-size: .8rem; color: var(--mute); }
+    .ecuacion:not(.solo) #baNetoVivo b { font-size: 2.3rem; }
+    .ecuacion:not(.solo) .peso input { background: var(--surf); font-size: 2rem; padding-right: 44px; min-width: 0; }
+    .ecuacion:not(.solo) .peso .unidad { right: 12px; }
+    #baTermBruto { order: 0; }
+    .evidencia { grid-template-columns: 1fr 1fr; align-items: start; }
+}
+
 /* Rediseño 23-sep (tanda 1): el select lleva un triángulo relleno pequeño en vez de la flecha del sistema. Dos degradados
    y no un SVG en data-URI, para que el color siga a --mute en los dos temas. Las reglas con padding propio se nombran aquí. */
 select, .archivos-filtros select, .con-boton select {
