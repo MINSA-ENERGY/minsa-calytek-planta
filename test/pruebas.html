@@ -1393,11 +1393,27 @@ try {
                 R.ok('v0.39.0: una góndola cerrada sin certificado ofrece «Certificar» en Cerrados', !!botonDe(g1.fields.Title, 'Certificar'), [...filaDe(g1.fields.Title).querySelectorAll('button')].map(b => b.textContent).join(' | '));
                 botonDe(g1.fields.Title, 'Certificar').click();
                 await esperar(() => $('dlgCertificado').open, 'diálogo del certificado');
-                R.ok('v0.39.0: sin certificado, el diálogo lo dice, ofrece Emitir y no ofrece Imprimir', $('certificado').textContent.includes('todavía no tiene certificado') && visible('btnEmitirCertificado') && !$('btnEmitirCertificado').disabled && !visible('btnSustituirCertificado') && !visible('btnCancelarCertificado') && !visible('ctImprimir'));
+                R.ok('v0.39.0: sin certificado, el diálogo lo dice, ofrece Emitir y no ofrece Imprimir', $('ctEstado').textContent.includes('sin certificado') && visible('btnEmitirCertificado') && !$('btnEmitirCertificado').disabled && !visible('btnSustituirCertificado') && !visible('btnCancelarCertificado') && !visible('ctImprimir'));
+                // U-72 (v0.45.0): antes de emitir, gerencia ve el papel como BORRADOR (sello, sin QR, sin folio) y qué renglones saldrían vacíos.
+                const papelB = $('certificado');
+                const faltanB = [['dirección', pDemo.fields.GeneradorDireccion], ['registro de generador', pDemo.fields.GeneradorRegistro], ['pozo', pDemo.fields.Pozo]].filter(([, v]) => !v).map(([n]) => n);
+                R.ok('U-72 (v0.45.0): sin certificado, gerencia ve el papel como BORRADOR con los datos de la góndola y el programa, sin QR', papelB.classList.contains('borrador') && papelB.textContent.includes('BORRADOR · SIN EMITIR') && papelB.textContent.includes('POR ASIGNAR') && papelB.textContent.includes(pDemo.fields.Generador) && papelB.textContent.includes((Number(g1.fields.NetoKg) / 1000).toLocaleString('es-MX', { minimumFractionDigits: 2 })) && papelB.textContent.includes('El QR se genera al emitir') && !papelB.querySelector('svg.qr') && $('ctEstado').textContent.includes('BORRADOR'), $('ctEstado').textContent.slice(0, 160));
+                R.ok('U-72 (v0.45.0): el encabezado nombra los renglones que saldrían vacíos (y no dice nada si no falta ninguno)', faltanB.every(n => $('ctEstado').textContent.includes(n)) && (faltanB.length > 0) === $('ctEstado').textContent.includes('saldrían vacíos'), `faltan [${faltanB.join(', ')}] · ${$('ctEstado').textContent.slice(0, 200)}`);
+                // U-75 (v0.45.0): la lista de texto trae los datos del papel, y tocar el papel lo amplía y lo regresa.
+                const resumenB = $('ctResumen').textContent;
+                R.ok('U-75 (v0.45.0): los datos del papel también van como lista de texto (Generador, Volumen, Transportista…)', !$('ctResumen').classList.contains('oculto') && resumenB.includes('Generador') && resumenB.includes(pDemo.fields.Generador) && resumenB.includes('Transportista') && resumenB.includes('BORRADOR'), resumenB.slice(0, 160));
+                const vistaC = document.querySelector('#dlgCertificado .ct-vista');
+                vistaC.click(); const amplia1 = vistaC.classList.contains('ampliada') && vistaC.getAttribute('aria-pressed') === 'true';
+                vistaC.click(); const amplia2 = vistaC.classList.contains('ampliada');
+                R.ok('U-75 (v0.45.0): tocar el papel lo amplía y volver a tocarlo lo regresa (aria-pressed lo dice)', amplia1 && !amplia2 && vistaC.getAttribute('aria-pressed') === 'false');
                 clic('btnEmitirCertificado');
                 if (!conTicket) { await confirmar(); }   // la góndola se sembró cerrada, sin ticket de báscula: la app avisa antes de emitir
+                await esperar(() => $('dlg').open, 'confirm de emitir');
+                const textoConfirmEmitir = $('dlg').textContent;
+                R.ok('U-72 (v0.45.0): el confirm de Emitir nombra los renglones que saldrán vacíos', faltanB.every(n => textoConfirmEmitir.includes(n)) && (faltanB.length > 0) === textoConfirmEmitir.includes('saldrán vacíos'), textoConfirmEmitir.slice(0, 200));
                 await confirmar();
                 await esperar(() => filas('certificados').length === 1, 'certificado creado');
+                R.ok('U-72 (v0.45.0): lo emitido es lo que mostró el borrador (generador, manifiesto, transportista)', [filas('certificados')[0].fields.Generador, filas('certificados')[0].fields.Manifiesto, filas('certificados')[0].fields.Transportista].filter(Boolean).every(v => resumenB.includes(v)), resumenB.slice(0, 200));
                 const c1 = filas('certificados')[0];
                 const firmaC = filas('firmas').find(f => f.fields.Tipo === 'certificado' && Number(f.fields.ObjetoId) === c1.id);
                 R.ok('v0.39.0: el renglón nace vigente, cuelga del EMBARQUE y congela los datos de ESA góndola', /^CT-\d\d-0001$/.test(c1.fields.Title) && c1.fields.Estado === 'vigente' && Number(c1.fields.EmbarqueId) === g1.id && Number(c1.fields.PreAltaId) === pDemo.id && c1.fields.Kg === Number(g1.fields.NetoKg) && (c1.fields.Manifiesto || null) === (g1.fields.Manifiesto || null) && (c1.fields.TicketBascula || null) === (g1.fields.TicketBascula || null) && c1.fields.FechaRecepcion === g1.fields.TaraHora && c1.fields.TipoBulto === 'gondola' && !c1.fields.Embarques && /^[a-z2-9]{12}$/.test(c1.fields.Sufijo) && c1.fields.EmitidoPor === window.__CUENTA.username && !!c1.fields.GeneradorDireccion, `${c1.fields.Title} · ${c1.fields.Kg} kg (góndola ${g1.fields.Title}: ${g1.fields.NetoKg}) · ticket ${c1.fields.TicketBascula} · ${c1.fields.FechaRecepcion}`);

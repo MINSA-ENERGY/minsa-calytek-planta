@@ -501,7 +501,9 @@
 <dialog id="dlgCertificado" class="dlg dlg-cert con-avisos" aria-label="Certificado de tratamiento">
   <div class="ct-nav"><span id="ctEstado" class="tk-pos"></span></div>
   <div class="dlg-avisos" aria-live="polite"></div><!-- U-71 (v0.40.0): «emitido» / «No se pudo emitir» se pintan aqui, no detras del modal -->
-  <div class="ct-vista"><div id="certificado" class="cert"></div></div>
+  <!-- U-75 (v0.45.0): en el celular, los datos del papel como texto (en escritorio se esconde por CSS) y el papel como vista previa que se amplia al tocarlo -->
+  <dl id="ctResumen" class="ct-resumen oculto"></dl>
+  <div class="ct-vista" tabindex="0" role="button" aria-pressed="false" aria-label="Papel del certificado: tócalo para ampliarlo o reducirlo"><div id="certificado" class="cert"></div></div>
   <!-- U-69 (v0.40.0): Sustituir abre estos campos precargados con lo que la gondola y el programa dicen HOY. Lo que se
        corrija entra al certificado nuevo; ticket y manifiesto se corrigen ademas en la gondola. El programa firmado no se toca. -->
   <div id="ctCorregir" class="ct-corregir oculto">

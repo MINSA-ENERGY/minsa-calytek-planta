@@ -797,6 +797,19 @@ button:not(:disabled):active { transform: scale(.98); }
 .ct-vista .cert { zoom: .92; }
 @media (max-width: 1100px) { .ct-vista .cert { zoom: .6; } }
 @media (max-width: 720px) { .ct-vista .cert { zoom: .34; } }
+/* U-75 (v0.45.0): a <= 720 px los datos van arriba como texto y el papel es vista previa; tocarlo lo amplia (se recorre de lado). */
+.dlg-cert .ct-resumen { display: none; }
+@media (max-width: 720px) {
+    .dlg-cert .ct-resumen:not(.oculto) { display: grid; grid-template-columns: max-content 1fr; gap: 2px var(--sp-2); margin: 0; font-size: .85rem; }
+    .dlg-cert .ct-resumen dt { color: var(--mute); }
+    .dlg-cert .ct-resumen dd { margin: 0; overflow-wrap: anywhere; }
+    .dlg-cert .ct-resumen dd.vacio { color: var(--warn-fg); }
+    .dlg-cert .ct-vista { cursor: zoom-in; max-height: 40dvh; }
+    .dlg-cert .ct-vista.ampliada { cursor: zoom-out; max-height: 70dvh; }
+    .ct-vista.ampliada .cert { zoom: .8; }
+}
+/* U-72 (v0.45.0): el borrador lleva sello azul, no el rojo de cancelado/sustituido */
+.cert.borrador .ct-sello { color: rgba(8, 51, 163, .35); border-color: rgba(8, 51, 163, .35); }
 .ct-marco { border: 1px solid #0833a3; padding: 6px; min-height: 760px; box-sizing: border-box; }
 .ct-hoja { border: 4px solid #0833a3; padding: 22px 56px 20px; min-height: 746px; box-sizing: border-box; position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; background: #fff; }
 .ct-agua { position: absolute; left: 50%; top: 50%; height: 4.3in; width: auto; transform: translate(-50%, -50%); pointer-events: none; }   /* v0.37.0: simbolo con el gris horneado (#F5F5F5), sin opacity */
