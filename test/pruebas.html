@@ -406,7 +406,7 @@ try {
     R.log('nota', `app importada · rol de prueba: ${ROL} · versión: ${$('pie').textContent}`);
     await esperar(() => $('entradaAviso').textContent.includes('No se pudo terminar'), 'aviso de entrada fallida');
     R.ok('U-08: el error de inicio de sesión sale dentro de la pantalla de entrada y no en #avisos; «Entrar» queda disponible',
-        visible('entradaAviso') && !$('btnEntrar').disabled && $('avisos').childElementCount === 0 && $('btnEntrar').textContent.includes('Entrar con cuenta'),
+        visible('entradaAviso') && !$('btnEntrar').disabled && $('avisos').childElementCount === 0 && $('btnEntrar').textContent.includes('Entrar con mi cuenta de MINSA'),
         `${$('entradaAviso').textContent.slice(0, 60)} · disabled ${$('btnEntrar').disabled}`);
     clic('btnEntrar');
     R.ok('U-20: el botón dice en qué va («Entrando…») y queda deshabilitado mientras entra', $('btnEntrar').disabled && $('btnEntrar').classList.contains('ocupado') && /Entrando|Abriendo|Leyendo/.test($('btnEntrar').textContent), $('btnEntrar').textContent);

@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas } from './reglas.js';
 
-const VERSION = '0.45.2';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.45.3';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -247,8 +247,9 @@ async function prepararMsal() {
 function pasoEntrada(texto) {
     const b = $('btnEntrar');
     b.disabled = !!texto; b.classList.toggle('ocupado', !!texto);
-    b.textContent = texto || 'Entrar con cuenta MINSA';
+    b.textContent = texto || 'Entrar con mi cuenta de MINSA';
     $('textoEntrar').textContent = texto || 'CALYTEK · Planta';
+    $('textoEntrar').classList.toggle('estado', !!texto);   // v0.45.3: como proyectos (U-05), un ESTADO se lee; la marca en reposo, chica
 }
 async function entrar() {
     pasoEntrada('Entrando…');

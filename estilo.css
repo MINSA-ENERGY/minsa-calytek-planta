@@ -282,18 +282,21 @@ body:has(#pantallaEntrar:not(.oculto)) #pie { display: none; }
 .entrada-abajo { display: flex; flex-direction: column; align-items: flex-start; gap: .8rem; }
 .entrada-titulo { margin: 0; font-family: var(--titulo); font-weight: 600; font-size: 2.1rem; line-height: 1.05; letter-spacing: .02em; color: #f2f6ff; text-wrap: balance; }
 .entrada-titulo em { font-style: normal; color: #61cd6a; }
-.entrada .lema { color: rgba(242, 246, 255, .62); max-width: 28ch; }
-.entrada .principal { width: 100%; max-width: none; margin-top: .4rem; background: #61cd6a; color: #04123d; border: 0; border-radius: .4rem; }
-.entrada .principal:hover:not(:disabled) { background: #61cd6a; color: #04123d; box-shadow: none; filter: brightness(1.06); }
+/* v0.45.3 (Carlos, 23-sep): boton, lema y pista copiados de minsa-proyectos-app (el .principal de aqui perdia el verde:
+   el :is() de los botones pesa (0,2,1) y le ganaba a .entrada .principal). */
+.entrada .lema { margin: 0; color: rgba(242, 246, 255, .62); max-width: 30ch; text-wrap: balance; }
+.entrada .mn-btn.is-primary, .entrada .mn-btn.is-primary:hover:not(:disabled), .entrada .mn-btn.is-primary:focus-visible { min-height: 44px; margin-top: .4rem; background: #61cd6a; color: #04123d; border-color: transparent; border-radius: .4rem; box-shadow: none; }
+.entrada .mn-btn.is-primary:hover:not(:disabled) { filter: brightness(1.06); }
 .entrada .mensaje { width: 100%; margin: 0; background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .25); color: #f2f6ff; }
 .entrada .mensaje.error { border-color: #ff6b61; color: #ffb4ad; }
 .entrada .mensaje.ojo { border-color: #f5ad2e; color: #f5ad2e; }
 /* U-20: el boton dice en que va el inicio de sesion, con un anillo girando; el texto al pie lo repite. */
-.entrada .principal.ocupado { opacity: .85; display: inline-flex; align-items: center; justify-content: center; gap: .55rem; }
-.entrada .principal.ocupado::before { content: ""; width: .9rem; height: .9rem; border-radius: 50%; border: 2px solid rgba(4, 18, 61, .35); border-top-color: #04123d; animation: girar .8s linear infinite; flex: none; }
+.entrada .mn-btn.is-primary.ocupado { opacity: .85; display: inline-flex; align-items: center; justify-content: center; gap: .55rem; }
+.entrada .mn-btn.is-primary.ocupado::before { content: ""; width: .9rem; height: .9rem; border-radius: 50%; border: 2px solid rgba(4, 18, 61, .35); border-top-color: #04123d; animation: girar .8s linear infinite; flex: none; }
 @keyframes girar { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .entrada .principal.ocupado::before { animation: none; } }
-.entrada .pista { align-self: center; color: rgba(242, 246, 255, .5); font-family: var(--mono); letter-spacing: .14em; text-transform: uppercase; font-size: .68rem; }
+@media (prefers-reduced-motion: reduce) { .entrada .mn-btn.is-primary.ocupado::before { animation: none; } }
+.entrada .pista { align-self: center; margin: 0; min-height: 1.2em; color: rgba(242, 246, 255, .5); font-family: var(--font-data); font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; }
+.entrada .pista.estado { color: rgba(242, 246, 255, .86); font-size: .85rem; letter-spacing: .02em; text-transform: none; }
 @media (min-width: 721px) {
     .entrada-caja { max-width: 64rem; flex-direction: row; align-items: center; gap: 4rem; padding: 1rem 2rem; }
     .entrada-arriba { flex: 1 1 0; padding: 0; }
