@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso } from './reglas.js';
 
-const VERSION = '0.47.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.48.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -36,6 +36,7 @@ const estado = {
     padronCarrier: null,     // id del carrier que filtra unidades y choferes en el padron
     ultimoCarrierPadron: null,   // U-46: el ultimo carrier dado de alta o usado en un alta de unidad/chofer (solo esta sesion)
     pestana: 'hoy',
+    vistaGondolas: 'planta', // tanda 3 (v0.48.0): la pestaña elegida dentro de Góndolas (planta · hoy · rechazos · historial)
     archivos: null,          // v0.33.0: { biblioteca, ramas: Map ruta -> hijos } de la seccion Archivos; null = se relee al pintar
     cargadoEl: 0,
     ventanaDesde: ''      // ISO: inicio de la ventana de carga (cubeta 3)
@@ -347,15 +348,17 @@ async function sesionIniciada() {
     irA(estado.rol === 'trazabilidad' ? 'bascula' : estado.rol === 'validador' ? 'prealtas' : 'hoy');
 }
 
-/** Un embarque esta "en planta" si paso la compuerta (o le autorizaron la excepcion) y no ha cerrado.
- *  Es LA definicion: la usan Bascula, Hoy y las insignias, para que los tres numeros coincidan. */
+/** Un embarque esta "en planta" si paso la compuerta (o le autorizaron la excepcion) y no ha cerrado: lo que se PESA.
+ *  Lo usan los botones de pesar, el Historial (lo que ya no esta en planta) y el KPI de Reportes. */
 function enPlanta(e) {
     return (e.Etapa === 'compuerta' && (e.Compuerta === 'pasa' || excepcionAutorizada(e)))
         || e.Etapa === 'bruto';
 }
-function excepcionesPendientes() {
-    return estado.embarques.filter(e => e.Etapa === 'compuerta' && e.Compuerta === 'excepcion-comercial' && !excepcionAutorizada(e));
-}
+const esperaAutorizacion = e => e.Etapa === 'compuerta' && e.Compuerta === 'excepcion-comercial' && !excepcionAutorizada(e);
+function excepcionesPendientes() { return estado.embarques.filter(esperaAutorizacion); }
+/** Tanda 3 (decision 10): la lista «En planta» de Góndolas = lo que se pesa + lo que espera la autorizacion de gerencia
+ *  (en ambar), por hora de llegada. Es LA definicion del numero del rail, de la pestaña y del subtitulo de Hoy. */
+const enListaPlanta = () => estado.embarques.filter(e => enPlanta(e) || esperaAutorizacion(e)).sort((a, b) => String(a.Arribo || '').localeCompare(String(b.Arribo || '')));
 
 /**
  * S-01, mitad del tenant (v0.24.0): la firma de la pre-alta y la autorizacion de la excepcion viven en PLANTA_Firmas,
@@ -427,7 +430,7 @@ async function firmar(tipo, objeto, motivo) {
     return f;
 }
 function pintarInsignias() {
-    const b = estado.embarques.filter(enPlanta).length;
+    const b = enListaPlanta().length;
     const p = estado.prealtas.filter(x => x.Estado === 'borrador').length;
     $('nGondolas').textContent = String(b); $('nGondolas').hidden = b === 0;
     $('nPrealtas').textContent = String(p); $('nPrealtas').hidden = p === 0 || !PUEDE.firmarPrealta(estado.rol);
@@ -571,7 +574,7 @@ async function recargar(silencioso = false) {
 
 // ---------------------------------------------------------------- navegacion
 
-const PINTORES = { hoy: () => pintarHoy(), puerta: () => pintarPuerta(), bascula: () => pintarBascula(), prealtas: () => pintarPrealtas(), padron: () => pintarPadron(), reportes: () => pintarReportes(), archivos: () => pintarArchivos() };
+const PINTORES = { hoy: () => pintarHoy(), puerta: () => pintarPuerta(), bascula: () => pintarGondolas(), prealtas: () => pintarPrealtas(), padron: () => pintarPadron(), reportes: () => pintarReportes(), archivos: () => pintarArchivos() };
 const SECCIONES = Object.keys(PINTORES);
 /** Los botones del rail: las pestañas de siempre más la sección aparte (Reportes, v0.32.0). */
 const botonesRail = () => [...$('pestanas').querySelectorAll('button'), ...$('pestanasExtra').querySelectorAll('button')];
@@ -593,7 +596,7 @@ async function soltarPesaje() {
     return true;
 }
 /** El clic en una pestana: sincrono salvo que haya que preguntar (la E2E y el usuario esperan la pestana pintada al soltar). */
-/** Tanda 2 (v0.47.0): el boton «Góndolas» del rail cubre las dos pantallas que la tanda 3 va a fundir; entra por la lista. */
+/** Tanda 2 (v0.47.0): el boton «Góndolas» del rail cubre la lista (p-bascula) y la llegada (p-puerta, hasta el asistente de la tanda 4); entra por la lista. */
 const RAIL_DE = { puerta: 'gondolas', bascula: 'gondolas' };
 const PESTANA_DE = { gondolas: 'bascula' };
 function irDesdePestana(p) {
@@ -891,8 +894,8 @@ async function registrarPuerta() {
         if (esRechazo) await asegurarFolioUnico(nuevo, 'R', av);
         anclar('embarques', nuevo);   // C-23: sin duplicar el id si el refresco ya lo trajo
         avisar(esRechazo ? `Rechazo registrado con folio ${nuevo.Title}. La góndola no entra.` :
-            r.resultado === 'pasa' ? 'Registrado. Ya aparece en Báscula › En planta.' :
-            'Registrado. Gerencia lo ve en Báscula › Excepciones por autorizar.', 'bien');
+            r.resultado === 'pasa' ? 'Registrado. Ya aparece en Góndolas › En planta.' :
+            'Registrado. Gerencia lo ve en Hoy › Pendiente revisar; en Góndolas queda en ámbar hasta que autorice.', 'bien');
         for (const id of ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo']) $(id).value = '';
         $('pu79').checked = false;
         // U-02 (v0.21.0): tambien el chofer (la siguiente gondola heredaba su ChoferId) y se repintan chips y vista
@@ -935,84 +938,170 @@ async function asegurarFolioUnico(renglon, tipo, avisar) {
     return nuevoFolio;
 }
 
-// ================================================================ BASCULA
+// ================================================================ GONDOLAS (rediseño tanda 3, v0.48.0)
 
-function pintarBascula() {
-    // Las excepciones por autorizar ya no viven aqui: estan en «Hoy», que es donde gerencia mira.
-    const lista2 = $('baLista'); lista2.textContent = '';
-    const activos = estado.embarques.filter(enPlanta);
-    if (!activos.length) lista2.appendChild(el('p', 'pista', 'Nada en planta.'));
-    for (const e of activos) {
-        const faseBruto = e.Etapa === 'compuerta';
-        lista2.appendChild(renglon(`${e.Title || '(sin folio)'} · ${e.PlacaTractor}${e.Manifiesto ? ' · ' + e.Manifiesto : ''}`,
-            faseBruto ? `Pasó la compuerta ${horaCorta(e.Arribo)} · falta el BRUTO` : `Bruto ${e.BrutoKg} kg ${horaCorta(e.BrutoHora)} · falta la TARA`,
-            PUEDE.puerta(estado.rol) ? (faseBruto ? 'Pesar bruto' : 'Pesar tara') : null,
-            () => abrirPesaje(vivo('embarques', e), faseBruto ? 'bruto' : 'tara'),
-            botonCorreccion(e)));
+/**
+ * Tanda 3 (decisiones 5, 6 y 10): una sección con cuatro pestañas —En planta · Cerradas hoy · Rechazos · Historial— que
+ * funde la lista de báscula, la Fila del día (tanda 2) y Cerrados. Las cuatro se pintan en cada repintado y solo se ve la
+ * elegida (estado.vistaGondolas), así los conteos de las pestañas nunca se quedan viejos.
+ */
+const VISTAS_GONDOLAS = { planta: 'gpPlanta', hoy: 'gpHoy', rechazos: 'gpRechazos', historial: 'gpHistorial' };
+function elegirVistaGondolas(v) {
+    estado.vistaGondolas = VISTAS_GONDOLAS[v] ? v : 'planta';
+    for (const b of $('gTabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.g === estado.vistaGondolas));
+    for (const [k, id] of Object.entries(VISTAS_GONDOLAS)) $(id).hidden = k !== estado.vistaGondolas;
+}
+
+/**
+ * Una tabla de Góndolas. Un solo DOM para los dos anchos: tabla en escritorio y tarjeta en celular, donde cada celda cae en
+ * su lugar por su letra `m` (a · b arriba, c · d en medio, e a lo ancho, x solo en escritorio; estilo.css .gtabla). La
+ * última celda, sin encabezado, lleva los botones. `columnas`: [{ t, m, v: e => texto | Node, num, clase }].
+ */
+function tablaGondolas(caja, columnas, filas, botonesDe, vacio, claseDe = () => '') {
+    caja.textContent = '';
+    if (!filas.length) { caja.appendChild(el('p', 'vacio', vacio)); return; }
+    const t = el('table', 'gtabla'), thead = el('thead'), cab = el('tr'), tb = el('tbody');
+    for (const c of columnas) cab.appendChild(el('th', c.num ? 'num' : '', c.t));
+    cab.appendChild(el('th'));
+    thead.appendChild(cab); t.appendChild(thead);
+    for (const e of filas) {
+        const tr = el('tr', `gfila ${claseDe(e)}`.trim());
+        for (const c of columnas) {
+            const td = el('td', `m-${c.m}${c.num ? ' num' : ''}${c.clase ? ' ' + c.clase : ''}`);
+            const v = c.v(e);
+            if (v instanceof Node) td.appendChild(v); else td.textContent = v === null || v === undefined || v === '' ? '—' : v;
+            tr.appendChild(td);
+        }
+        const ac = el('td', 'm-f acciones-g');
+        for (const b of botonesDe(e)) ac.appendChild(botonAccion(b));
+        tr.appendChild(ac);
+        tb.appendChild(tr);
     }
+    t.appendChild(tb); caja.appendChild(t);
+}
+const folioG = e => el('span', e.Title ? 'folio' : 'folio sin', e.Title || 'sin folio');
+/** El programa y, debajo, el manifiesto: es lo que se busca con el papel en la mano. */
+function programaG(e) {
+    const s = el('span', 'prog', nombreDe(estado.prealtas, e.PreAltaId));
+    if (e.Manifiesto) s.appendChild(el('small', 'mono', e.Manifiesto));
+    return s;
+}
+const kgG = n => `${Number(n).toLocaleString('es-MX')} kg`;
+/** Lo último que se capturó de una góndola en planta: el peso bruto, o la hora a la que pasó (o llegó, si espera). */
+function ultimoDatoG(e) {
+    if (e.Etapa === 'bruto') return `bruto ${kgG(e.BrutoKg)}`;
+    return `${esperaAutorizacion(e) ? 'arribo' : 'pasó'} ${horaMexico(e.Arribo, 'hora')}`;
+}
+/** Ticket (si hay folio), el certificado de la góndola cerrada y Anular/Eliminar. `lista` es la que recorre el ticket con ‹ ›. */
+function botonesCerrada(e, lista) {
+    const bs = [];
+    if (e.Title) bs.push({ texto: 'Ticket', accion: 'ticket', alClic: () => abrirTicketPop(lista, lista.indexOf(e)) });
+    // v0.39.0: el certificado es de ESTA góndola y se emite desde su renglón cerrado (decisión 9: solo gerencia emite).
+    // U-70 (v0.40.0): una anulada con certificado lo sigue mostrando, para que gerencia llegue a cancelarlo.
+    const certs = certificadosDe(e), vig = certs.find(x => x.Estado === 'vigente');
+    if (e.Etapa === 'cerrado' && !vig && PUEDE.emitirCertificado(estado.rol)) bs.push({ texto: 'Emitir certificado', accion: 'certificado', clase: 'si', alClic: () => abrirCertificadoDeEmbarque(vivo('embarques', e)) });
+    else if (certs.length) bs.push({ texto: 'Certificado', accion: 'certificado', alClic: () => abrirCertificadoDeEmbarque(vivo('embarques', e)) });
+    return bs.concat(botonCorreccion(e));
+}
+function estadoCertificadoG(e) {
+    const vig = certificadoVigente(e);
+    return vig ? el('span', 'paso e-ok', `${vig.Title} vigente`) : el('span', 'paso e-warn', 'sin emitir');
+}
+
+/** La sección entera: las listas y, cerradas, las tarjetas de pesaje y de ticket (como al entrar). */
+function pintarGondolas() {
     $('baPesar').classList.add('oculto');
     $('baTicketCaja').classList.add('oculto');
-    $('btnNuevaGondola').classList.toggle('oculto', !PUEDE.puerta(estado.rol));   // tanda 2: la llegada se abre desde aquí; quien no captura no la ve
-    pintarCerrados();
-    pintarFilaDiaGondolas();
+    pintarListasGondolas();
 }
-/** La Fila del día vivió en «Hoy» hasta la tanda 2 (v0.47.0); aquí espera a que la tanda 3 la funda en las pestañas. */
-function pintarFilaDiaGondolas() {
-    const { hoy, dia } = cortesDia();
-    pintarFilaDia(hoy, dia);
-    // Exportar lo cargado a CSV (F4): para el reporte al cliente y la bitacora, sin copiar cifras de la pantalla.
+/** Solo las cuatro listas y sus conteos: tras emitir un certificado no se toca el pesaje abierto. */
+function pintarListasGondolas() {
+    const { hoy, dia, diaCierre } = cortesDia();
+    const planta = enListaPlanta();
+    const porCierre = (a, b) => String(b.TaraHora || '').localeCompare(String(a.TaraHora || ''));
+    const cerradasHoy = estado.embarques.filter(e => e.Etapa === 'cerrado' && diaCierre(e) === hoy).sort(porCierre);
+    const rechazosHoy = estado.embarques.filter(e => e.Etapa === 'rechazado' && dia(e) === hoy).sort((a, b) => b.id - a.id);
+    const cuenta = (id, n, alerta) => { $(id).textContent = n ? String(n) : ''; $(id).classList.toggle('alerta', !!alerta && n > 0); };
+    const esperan = planta.filter(esperaAutorizacion).length;
+    cuenta('gnPlanta', planta.length, esperan > 0); cuenta('gnHoy', cerradasHoy.length); cuenta('gnRechazos', rechazosHoy.length, true);
+    elegirVistaGondolas(estado.vistaGondolas);
+    $('btnNuevaGondola').classList.toggle('oculto', !PUEDE.puerta(estado.rol));   // tanda 2: la llegada se abre desde aquí; quien no captura no la ve
+
+    // En planta: el siguiente paso de cada góndola en texto (reglas.siguientePaso). La que espera a gerencia sale en ámbar,
+    // sin «Pesar» (decisión 10): se autoriza en Hoy › Pendiente revisar.
+    const captura = PUEDE.puerta(estado.rol);
+    tablaGondolas($('baLista'), [
+        { t: 'Folio', m: 'a', v: folioG },
+        { t: 'Placa', m: 'b', v: e => e.PlacaTractor, clase: 'mono' },
+        { t: 'Programa', m: 'c', v: programaG },
+        { t: 'Carrier', m: 'x', v: e => nombreDe(estado.carriers, e.CarrierId) },
+        { t: 'Siguiente paso', m: 'e', v: e => { const s = siguientePaso(e, excepcionAutorizada(e)); return el('span', 'paso e-' + s.tono, s.texto); } },
+        { t: 'Último dato', m: 'd', num: true, v: ultimoDatoG, clase: 'mono' }
+    ], planta, e => {
+        const bs = [];
+        if (captura && enPlanta(e)) { const bruto = e.Etapa === 'compuerta'; bs.push({ texto: bruto ? 'Pesar bruto' : 'Pesar tara', accion: 'pesar', clase: 'si', alClic: () => abrirPesaje(vivo('embarques', e), bruto ? 'bruto' : 'tara') }); }
+        return bs.concat(botonCorreccion(e));
+    }, 'Nada en planta.', e => (esperaAutorizacion(e) ? 'espera' : ''));
+    $('gPiePlanta').textContent = planta.length ? `${plural(planta.length, 'góndola en planta', 'góndolas en planta')}${esperan ? ` · ${esperan === 1 ? 'una espera' : `${esperan} esperan`} la autorización de gerencia` : ''}.` : '';
+
+    // Cerradas hoy: el día de cierre es el de la tara (F1), y aquí vive el certificado (decisión 9).
+    tablaGondolas($('gHoy'), [
+        { t: 'Folio', m: 'a', v: folioG },
+        { t: 'Placa', m: 'b', v: e => e.PlacaTractor, clase: 'mono' },
+        { t: 'Programa', m: 'c', v: programaG },
+        { t: 'Tara', m: 'x', v: e => horaMexico(e.TaraHora, 'hora'), clase: 'mono mudo' },
+        { t: 'Neto', m: 'd', num: true, v: e => kgG(e.NetoKg), clase: 'mono' },
+        { t: 'Ticket báscula', m: 'x', v: e => e.TicketBascula, clase: 'mono' },
+        { t: 'Certificado', m: 'e', v: estadoCertificadoG }
+    ], cerradasHoy, e => botonesCerrada(e, cerradasHoy), 'Ninguna góndola ha cerrado hoy.');
+    const kgHoy = cerradasHoy.reduce((a, e) => a + (Number(e.NetoKg) || 0), 0);
+    $('gPieHoy').textContent = cerradasHoy.length ? `${plural(cerradasHoy.length, 'cerrada', 'cerradas')} hoy · ${kgG(kgHoy)}${PUEDE.emitirCertificado(estado.rol) ? '' : ' · el certificado lo emite gerencia'}.` : '';
+
+    // Rechazos de hoy: la causa sale de CompuertaDetalle (las reglas legales que fallaron).
+    const causa = e => { try { return JSON.parse(e.CompuertaDetalle || '[]').filter(h => h.clase === 'legal').map(h => h.regla).join(', '); } catch (_) { return ''; } };
+    tablaGondolas($('gRechazos'), [
+        { t: 'Folio', m: 'a', v: folioG },
+        { t: 'Placa', m: 'b', v: e => e.PlacaTractor, clase: 'mono' },
+        { t: 'Carrier', m: 'c', v: e => nombreDe(estado.carriers, e.CarrierId) },
+        { t: 'Hora', m: 'd', num: true, v: e => horaMexico(e.Arribo, 'hora'), clase: 'mono' },
+        { t: 'Causa', m: 'e', v: e => el('span', 'paso e-bad', causa(e) || 'no entró') }
+    ], rechazosHoy, e => botonesCerrada(e, rechazosHoy.filter(x => x.Title)), 'Ningún rechazo hoy.');
+
+    pintarHistorial();
+    // F4: el CSV de todo lo cargado, para el reporte al cliente y la bitácora, sin copiar cifras de la pantalla.
     $('btnExportar').classList.toggle('oculto', !estado.embarques.length);
-    // Que la pantalla diga hasta donde alcanza lo que muestra: sin esta linea, «4 rechazos esta
-    // semana» y «0 hace cuatro meses» se leen igual y el segundo es solo que no se cargo.
-    // U-14 (v0.22.0): va en #tbAlcance, fuera de la tabla, que en el celular esta oculta: ahi nunca se veia.
+    // U-14: que la pantalla diga hasta dónde alcanza lo que muestra; «0 hace cuatro meses» es solo que no se cargó.
     $('tbAlcance').textContent = `Se cargan los últimos ${CONFIG.ventanaDias} días (desde el ${fechaCorta(estado.ventanaDesde)}) más todo lo que sigue abierto. El historial completo vive en SharePoint.`;
 }
 
 /**
- * Cerrados (2026-09-08): todo embarque con folio que ya no esta en planta — cerrado, anulado o
- * rechazado — dentro de la ventana cargada, del mas reciente al mas viejo, con su Ticket para
- * volver a verlo o reimprimirlo (el chofer que vuelve por el ticket perdido, gerencia cotejando un
- * neto de la semana pasada). No es archivo: el completo vive en SharePoint, y la linea «Emitido»
- * del ticket lleva la hora de la reimpresion. Fuera de la ventana no se busca (decision 8-sep:
- * se agrega cuando aparezca el primer caso real).
+ * Historial (antes Cerrados, 2026-09-08): todo folio que ya no está en planta —cerrado, anulado o rechazado— dentro de la
+ * ventana cargada, del más reciente al más viejo, con su Ticket para reimprimir (la línea «Emitido» del ticket lleva la hora
+ * de la reimpresión) y su certificado. El buscador filtra por folio, placa, manifiesto, carrier, ticket y folio CT (U-76).
  */
-function pintarCerrados() {
-    const caja = $('baCerrados'); caja.textContent = '';
+function pintarHistorial() {
     const q = normaliza($('baBusca').value.trim());
     const pega = filtroTexto(q);   // C-26
     const momento = e => e.TaraHora || e.AnuladoEl || e.Arribo || '';
     const todos = estado.embarques.filter(e => e.Title && !enPlanta(e)).sort((a, b) => momento(b).localeCompare(momento(a)));
-    const cerrados = todos.filter(e => e.Etapa === 'cerrado');
-    const res = $('baResCerrados'); res.textContent = '';
-    const sinCert = cerrados.filter(e => !certificadoVigente(e)).length;   // U-76 (v0.42.0)
-    res.appendChild(document.createTextNode(`${cerrados.length} con neto${sinCert ? ` · ${sinCert} sin certificado` : ''}${todos.length - cerrados.length ? ` · ${plural(todos.length - cerrados.length, 'anulado o rechazado', 'anulados o rechazados')}` : ''} · últimos ${CONFIG.ventanaDias} días`));
-    let n = 0;
-    const visibles = [];
-    for (const e of todos) {
-        if (!pega(e.Title, e.PlacaTractor, e.PlacaPlana, e.Manifiesto, nombreDe(estado.carriers, e.CarrierId), e.TicketBascula, ...certificadosDe(e).map(c => c.Title))) continue;   // U-76 (v0.42.0): también folio CT y ticket
-        n++;
-        // Solo el titular por hilera (Carlos, 8-sep): el detalle vive en el ticket. Ticket abre la
-        // ventana sobre la lista tal como quedó filtrada, para recorrerla con ‹ ›.
-        visibles.push(e);
-        const i = visibles.length - 1;
-        // v0.39.0: el certificado de tratamiento es de ESTA gondola y se emite desde aqui, que es donde vive cerrada.
-        // U-70 (v0.40.0): una gondola ANULADA con certificado tambien lo muestra: si quedo uno vigente de antes de esta
-        // version, gerencia tiene por donde llegar a cancelarlo. Emitir sigue siendo solo para cerradas (datosCertificado).
-        const certs = certificadosDe(e);
-        const vigC = certs.find(x => x.Estado === 'vigente') || null;
-        const extras = [];
-        if ((e.Etapa === 'cerrado' && PUEDE.emitirCertificado(estado.rol)) || certs.length) {
-            extras.push({ texto: vigC || e.Etapa !== 'cerrado' ? 'Certificado' : 'Certificar', accion: 'certificado',
-                alClic: () => abrirCertificadoDeEmbarque(vivo('embarques', e)) });
-        }
-        const r = renglon(`${e.Title} · ${e.PlacaTractor || ''}${e.Manifiesto ? ' · ' + e.Manifiesto : ''}`, null, 'Ticket',
-            () => abrirTicketPop(visibles, i), extras);
-        if (e.Etapa !== 'cerrado') { r.classList.add(e.Etapa); r.firstChild.firstChild.appendChild(etiqueta(e.Etapa, e.Etapa)); if (vigC) r.firstChild.firstChild.appendChild(etiqueta(`${vigC.Title} vigente`, 'aviso')); }
-        else if (vigC) r.firstChild.firstChild.appendChild(etiqueta(vigC.Title, 'ok'));
-        caja.appendChild(r);
-    }
-    if (!n) caja.appendChild(el('p', 'pista', q ? 'Nada coincide en los últimos ' + CONFIG.ventanaDias + ' días.' : 'Ningún folio cerrado en la ventana cargada.'));
-    $('baBuscaCuenta').textContent = q ? plural(n, 'resultado') : '';
+    const visibles = todos.filter(e => pega(e.Title, e.PlacaTractor, e.PlacaPlana, e.Manifiesto, nombreDe(estado.carriers, e.CarrierId), e.TicketBascula, ...certificadosDe(e).map(c => c.Title)));
+    const estadoH = e => {
+        if (e.Etapa !== 'cerrado') return el('span', 'paso e-' + siguientePaso(e).tono, siguientePaso(e).texto);
+        const vig = certificadoVigente(e);
+        return vig ? el('span', 'paso e-ok', `cerrada · ${vig.Title}`) : el('span', 'paso e-ok', 'cerrada');
+    };
+    tablaGondolas($('baCerrados'), [
+        { t: 'Folio', m: 'a', v: folioG },
+        { t: 'Placa', m: 'b', v: e => e.PlacaTractor, clase: 'mono' },
+        { t: 'Programa', m: 'c', v: programaG },
+        { t: 'Estado', m: 'e', v: estadoH },
+        { t: 'Neto', m: 'd', num: true, v: e => (e.NetoKg ? kgG(e.NetoKg) : null), clase: 'mono' },
+        { t: 'Fecha', m: 'x', v: e => horaMexico(momento(e)), clase: 'mono mudo' }
+    ], visibles, e => botonesCerrada(e, visibles), q ? `Nada coincide en los últimos ${CONFIG.ventanaDias} días.` : 'Ningún folio cerrado en la ventana cargada.', e => e.Etapa);
+    $('baBuscaCuenta').textContent = q ? plural(visibles.length, 'resultado') : '';
+    // U-76 (v0.42.0): cuántas cerradas siguen sin certificado, sobre todo lo cargado (no sobre lo filtrado).
+    const cerradas = todos.filter(e => e.Etapa === 'cerrado'), sinCert = cerradas.filter(e => !certificadoVigente(e)).length, otras = todos.length - cerradas.length;
+    $('gPieHistorial').textContent = todos.length ? `${cerradas.length} con neto${sinCert ? ` · ${sinCert} sin certificado` : ''}${otras ? ` · ${plural(otras, 'anulado o rechazado', 'anulados o rechazados')}` : ''}.` : '';
 }
 
 /** El boton de deshacer que le toca a un embarque segun su etapa (reglas.accionCorreccion), o ninguno. */
@@ -1200,7 +1289,7 @@ async function guardarPeso() {
         else await guardarTara(e, kg, ahora, aviso, paso);
         $('baPesar').classList.add('oculto'); soltarFotoPrevia();
         pintarTicket(e);
-        pintarBascula();
+        pintarGondolas();
         $('baTicketCaja').classList.remove('oculto');
         $('baTicketCaja').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) {
@@ -1720,14 +1809,14 @@ function pintarCertificadoEnDetalle(p) {
     if (!certs.length) {
         const li = el('li', '', 'Certificados de tratamiento ');
         li.appendChild(etiqueta('ninguno', pendientes ? 'aviso' : ''));
-        li.appendChild(el('span', 'd', `Se emiten por góndola cerrada, desde Báscula › Cerrados${faltan}.`));
+        li.appendChild(el('span', 'd', `Se emiten por góndola cerrada, desde Góndolas › Cerradas hoy o Historial${faltan}.`));
         ul.appendChild(li); return;
     }
     const vigentes = certs.filter(c => c.Estado === 'vigente');
     const kg = vigentes.reduce((s, c) => s + (Number(c.Kg) || 0), 0);
     const li = el('li', '', `Certificados de tratamiento: ${certs.length} `);
     li.appendChild(etiqueta(plural(vigentes.length, 'vigente'), pendientes ? 'aviso' : vigentes.length ? 'ok' : ''));
-    li.appendChild(el('span', 'd', `${toneladas(kg)} t certificadas · ${certs.map(c => c.Title).join(', ')}${faltan} · uno por góndola: se emiten y se ven desde Báscula › Cerrados.`));
+    li.appendChild(el('span', 'd', `${toneladas(kg)} t certificadas · ${certs.map(c => c.Title).join(', ')}${faltan} · uno por góndola: se emiten y se ven desde Góndolas › Cerradas hoy o Historial.`));
     ul.appendChild(li);
 }
 
@@ -1914,7 +2003,7 @@ async function emitirCertificado(sustituye = null, motivoSust = '', corr = null)
 /** C-50 (v0.42.0): lo que se repinta tras emitir, sustituir o cancelar: el diálogo, Cerrados y, si está abierto, el detalle del programa. */
 function repintarTrasCertificado() {
     pintarCertificadoDeEmbarque();
-    pintarCerrados();
+    if (estado.pestana === 'bascula') pintarListasGondolas();   // tanda 3: las pestañas, sin tocar un pesaje abierto
     if (estado.prealtaAbierta) pintarCertificadoEnDetalle(estado.prealtaAbierta);
 }
 /** U-69 (v0.40.0): Sustituir ya no es un confirm con motivo: abre el panel de correccion precargado. */
@@ -2457,33 +2546,12 @@ async function altaVigencia(titulo, titular, rol, fuente, vence, folio) {
 
 // ================================================================ HOY (la consola)
 
-// C-07 (v0.23.0): pintarHoy se parte por tarjeta (franja, KPI, fila del dia, pendientes, rechazos, vigencias) y la fila
-// del dia se pinta dos veces —tarjetas en celular, tabla en escritorio— con ESTAS mismas piezas. Antes cada vista traia
-// su copia de ETAPAS, los segmentos y la etiqueta de compuerta, y un cambio de etapa habia que hacerlo en dos sitios.
-const ETAPAS_FILA = { compuerta: 1, bruto: 2, cerrado: 3, rechazado: 0, anulado: 0 };
-function segmentosEtapa(e) {
-    const seg = el('span', 'etapa');
-    for (let i = 0; i < 3; i++) { const s = el('i'); if (e.Etapa === 'rechazado' && i === 0) s.className = 'x'; else if (i < (ETAPAS_FILA[e.Etapa] ?? 0)) s.className = 'f'; seg.appendChild(s); }
-    return seg;
-}
+// Tanda 3 (v0.48.0): la Fila del dia se fundio en Gondolas; de sus piezas queda la etiqueta de compuerta (Hoy y Reportes).
 function etiquetaCompuertaDe(e) {
     if (e.Etapa === 'anulado') return etiqueta('anulado', 'anulado');
     return etiqueta(e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'no entró' : excepcionAutorizada(e) ? 'excepción ok' : 'espera',
                     e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'rechazo-legal' : 'excepcion-comercial');
 }
-/** «neto 21,220» / «bruto 44,600» / null; `rotuloNeto` vacio deja el neto solo (la tabla ya tiene la columna). */
-function pesoFila(e, rotuloNeto = 'neto ') {
-    return e.NetoKg ? `${rotuloNeto}${Number(e.NetoKg).toLocaleString('es-MX')}` : e.BrutoKg ? `bruto ${Number(e.BrutoKg).toLocaleString('es-MX')}` : null;
-}
-/** Ticket (si hay folio) + Anular/Eliminar. `detener` frena la propagacion: en la tarjeta el clic tambien la despliega. */
-function botonesFila(e, abrirTicket, detener) {
-    const bf = el('div', 'botones-fila');
-    if (e.Title) { const b = el('button', '', 'Ticket'); b.type = 'button'; b.addEventListener('click', ev => { if (detener) ev.stopPropagation(); abrirTicket(e); }); bf.appendChild(b); }
-    for (const b of botonCorreccion(e)) { const x = botonAccion(b); if (detener) x.addEventListener('click', ev => ev.stopPropagation()); bf.appendChild(x); }
-    return bf;
-}
-const horaFila = e => horaMexico(e.Arribo, 'hora');
-
 // Franja: la excepcion que espera a gerencia es la unica decision que «Hoy» le pide a alguien.
 function pintarFranjaHoy(pendientes, botonesExcepcion) {
     const fr = $('hoyFranja'); fr.textContent = '';
@@ -2695,58 +2763,6 @@ function filtrarArbol() {
     $('arVacio').classList.toggle('oculto', !hayFiltro || [...caja.children].some(x => !x.classList.contains('oculto')));
 }
 
-// Fila del dia: los embarques de hoy; si no hay, los ultimos 5. Tarjetas (celular) y tabla (escritorio) de la MISMA lista
-// y con las mismas piezas de arriba. I3 (7-sep): en celular la tabla de 8 columnas escondia seis; tocar la tarjeta muestra sus botones.
-function pintarFilaDia(hoy, dia) {
-    const deHoy = estado.embarques.filter(e => dia(e) === hoy).sort((a, b) => a.id - b.id);
-    const fila = deHoy.length ? deHoy : [...estado.embarques].sort((a, b) => b.id - a.id).slice(0, 5);
-    // v0.19.2 (Carlos, 8-sep): Ticket abre la misma ventana que Cerrados, sin salir de Hoy; ‹ › recorren los de la fila con folio.
-    const conFolio = fila.filter(x => x.Title);
-    const abrirTicketDeHoy = e => abrirTicketPop(conFolio, conFolio.indexOf(e));
-    const tw = $('tbFila'); tw.textContent = '';
-    const tt = $('tbFilaTarjetas'); tt.textContent = '';
-    if (!fila.length) { tw.appendChild(el('p', 'vacio', 'Ninguna góndola registrada todavía.')); tt.appendChild(el('p', 'vacio', 'Ninguna góndola registrada todavía.')); return; }
-    if (!deHoy.length) { tw.appendChild(el('p', 'vacio', 'Hoy no ha llegado ninguna; estos son los últimos.')); tt.appendChild(el('p', 'vacio', 'Hoy no ha llegado ninguna; estos son los últimos.')); }
-    for (const e of fila) {
-        const t = el('div', 'ftar' + (e.Etapa === 'anulado' ? ' anulado' : ''));
-        // U-58 (v0.29.0): la tarjeta era role=button con botones adentro (interactivo anidado, deuda de U-15). Ahora el que
-        // despliega es el FOLIO, un <button> con aria-expanded y aria-controls a la zona de botones; la tarjeta entera sigue
-        // abriendo al toque (sin role ni tabindex) porque con guante el dedo no apunta al folio.
-        const bf = botonesFila(e, abrirTicketDeHoy, true);
-        const f = el(bf.childElementCount ? 'button' : 'span', 'f' + (e.Title ? '' : ' mudo'), e.Title || 'sin folio');
-        t.appendChild(f);
-        t.appendChild(segmentosEtapa(e));
-        const c = el('span', 'c');
-        c.textContent = [e.PlacaTractor || '—', nombreDe(estado.carriers, e.CarrierId), pesoFila(e), horaFila(e)].filter(Boolean).join(' · ');
-        c.appendChild(etiquetaCompuertaDe(e));
-        t.appendChild(c);
-        if (bf.childElementCount) {
-            bf.id = `ftarBotones${e.id}`; t.appendChild(bf);
-            f.type = 'button'; f.setAttribute('aria-expanded', 'false'); f.setAttribute('aria-controls', bf.id);
-            const alternar = () => { t.classList.toggle('abierta'); f.setAttribute('aria-expanded', String(t.classList.contains('abierta'))); };
-            f.addEventListener('click', ev => { ev.stopPropagation(); alternar(); });
-            t.addEventListener('click', alternar);
-        }
-        tt.appendChild(t);
-    }
-    const t = el('table', 'fila'); const th = el('tr');
-    for (const c of ['Folio', 'Unidad', 'Transportista', 'Etapa', 'Compuerta', 'Neto kg', 'Arribo', '']) th.appendChild(el('th', '', c));
-    t.appendChild(th);
-    for (const e of fila) {
-        const tr = el('tr', e.Etapa === 'anulado' ? 'anulado' : '');
-        tr.appendChild(el('td', 'mono' + (e.Title ? '' : ' mudo'), e.Title || '—'));
-        tr.appendChild(el('td', 'mono', e.PlacaTractor || '—'));
-        tr.appendChild(el('td', '', nombreDe(estado.carriers, e.CarrierId)));
-        const et = el('td'); et.appendChild(segmentosEtapa(e)); tr.appendChild(et);
-        const co = el('td'); co.appendChild(etiquetaCompuertaDe(e)); tr.appendChild(co);
-        tr.appendChild(el('td', 'num mono' + (e.NetoKg ? '' : ' mudo'), pesoFila(e, '') || '—'));
-        tr.appendChild(el('td', 'mono', horaFila(e)));
-        const ac = el('td'); ac.appendChild(botonesFila(e, abrirTicketDeHoy, false)); tr.appendChild(ac);
-        t.appendChild(tr);
-    }
-    tw.appendChild(t);
-}
-
 // Pendiente revisar: pre-altas por firmar, excepciones y programas dormidos. Con algo, la tarjeta se pinta en ambar
 // con el conteo en rojo (Carlos, 2026-09-08: es lo primero que hay que atender).
 function pintarPendientesHoy(borradores, pendientes, botonesExcepcion) {
@@ -2830,7 +2846,7 @@ function cortesDia() {
     return { hoy, ayer, lunes, dia, diaCierre, cerrados };
 }
 function pintarHoy() {
-    const activos = estado.embarques.filter(enPlanta);
+    const activos = enListaPlanta();   // tanda 3: el mismo número que el rail y la pestaña En planta
     const pendientes = excepcionesPendientes();
     const borradores = estado.prealtas.filter(p => p.Estado === 'borrador');
 
@@ -2874,7 +2890,8 @@ function exportarCsv() {
 }
 $('btnExportar').addEventListener('click', exportarCsv);
 $('pdBusca').addEventListener('input', () => { estado.padronFicha = null; pintarPadron(); });
-$('baBusca').addEventListener('input', pintarCerrados);
+$('baBusca').addEventListener('input', pintarHistorial);
+for (const b of $('gTabs').querySelectorAll('button')) b.addEventListener('click', () => elegirVistaGondolas(b.dataset.g));
 
 // ================================================================ arranque
 

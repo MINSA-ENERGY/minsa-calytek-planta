@@ -263,6 +263,26 @@ export function accionCorreccion(embarque) {
     return embarque.Etapa === 'compuerta' && !embarque.Title ? 'eliminar' : 'anular';
 }
 
+/**
+ * Rediseño tanda 3 (decisión 5, 23-sep): el SIGUIENTE PASO de una góndola, en texto, para la lista de Góndolas. Los pasos
+ * del asistente son 1 Programa y documentos · 2 Veredicto · 3 Peso bruto · 4 Tara · 5 Ticket; `paso` es el que toca
+ * (0 = ninguno: cerró, no entró o se anuló). `autorizada` la decide app.js: la firma vive en PLANTA_Firmas, no aquí.
+ * `tono` es el color del texto en la lista: warn · acc · info · ok · bad · mute.
+ */
+export function siguientePaso(e, autorizada = false) {
+    const x = e || {};
+    if (x.Etapa === 'bruto') return { paso: 4, texto: `falta tara${x.BrutoHora ? ` · descarga desde ${horaMexico(x.BrutoHora, 'hora')}` : ''}`, tono: 'info' };
+    if (x.Etapa === 'compuerta') {
+        if (x.Compuerta === 'pasa') return { paso: 3, texto: 'falta peso bruto', tono: 'acc' };
+        if (x.Compuerta === 'excepcion-comercial') return autorizada ? { paso: 3, texto: 'autorizada · falta peso bruto', tono: 'acc' } : { paso: 2, texto: 'espera autorización de gerencia', tono: 'warn' };
+        return { paso: 2, texto: 'sin veredicto', tono: 'mute' };
+    }
+    if (x.Etapa === 'cerrado') return { paso: 0, texto: 'cerrada', tono: 'ok' };
+    if (x.Etapa === 'rechazado') return { paso: 0, texto: 'no entró', tono: 'bad' };
+    if (x.Etapa === 'anulado') return { paso: 0, texto: 'anulada', tono: 'mute' };
+    return { paso: 0, texto: x.Etapa ? `etapa ${x.Etapa}` : 'sin etapa', tono: 'mute' };
+}
+
 // ---------------------------------------------------------------- C-25 (v0.28.0): la frontera de fechas y utilerias puras
 // Vivian en app.js, que no se importa desde node: la E2E solo pegaba ISO y nadie probaba «16/03/26», «31/04/2026» ni el
 // mensaje de error. Fechas: el estandar de la casa es dd/mm/aaaa (Carlos, 2026-09-05), en pantalla, en el ticket y al

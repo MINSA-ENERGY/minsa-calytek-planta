@@ -40,7 +40,7 @@
     <nav id="pestanas" aria-label="Secciones">
       <button type="button" data-p="hoy"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 15l5-5 4 4 7-7"/></svg><span>Hoy</span></button>
       <!-- Rediseño tanda 2 (v0.47.0): Puerta + Báscula son UNA sección, Góndolas (decisión 5). Por dentro siguen siendo
-           p-puerta (la llegada, «+ Nueva góndola») y p-bascula (la lista) hasta que la tanda 3 las funda. -->
+           p-puerta (la llegada, «+ Nueva góndola») y p-bascula (la lista con sus cuatro pestañas, tanda 3) hasta el asistente de la tanda 4. -->
       <button type="button" data-p="gondolas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 17V8h12v9"/><path d="M14 11h4l3 3v3h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Góndolas</span><b class="n" id="nGondolas" hidden></b></button>
       <button type="button" data-p="prealtas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><span>Pre-altas</span><b class="n" id="nPrealtas" hidden></b></button>
       <button type="button" data-p="padron"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h13l5 5v5H3z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Padrón</span></button>
@@ -162,21 +162,26 @@
     <!-- BASCULA -->
     <section id="p-bascula" class="oculto">
       <header class="cabecera"><span class="titulo-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2 17V8h12v9"/><path d="M14 11h4l3 3v3h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></span><h1>Góndolas</h1><button id="btnNuevaGondola" class="principal mn-btn oculto" type="button">+ Nueva góndola</button></header>
-      <div class="tarjeta">
-        <h2>En planta</h2>
-        <p class="pista sin-margen">Góndolas que pasaron la compuerta y no han cerrado su folio.</p>
-        <div id="baLista"></div>
+      <!-- Tanda 3 (v0.48.0, decisión 6): cuatro pestañas con conteo que funden la lista En planta, la Fila del día y Cerrados.
+           Las cuatro se pintan en cada repintado (pintarGondolas) y solo se ve la elegida. Un solo DOM por renglón: tabla
+           en escritorio, tarjeta en celular (estilo.css .gtabla). -->
+      <div class="gtabs" id="gTabs" role="group" aria-label="Vista de góndolas">
+        <button type="button" data-g="planta" aria-pressed="true">En planta<i id="gnPlanta"></i></button>
+        <button type="button" data-g="hoy" aria-pressed="false">Cerradas hoy<i id="gnHoy"></i></button>
+        <button type="button" data-g="rechazos" aria-pressed="false">Rechazos<i id="gnRechazos"></i></button>
+        <button type="button" data-g="historial" aria-pressed="false">Historial</button>
       </div>
-      <!-- Cerrados (2026-09-08): el ticket ya emitido se vuelve a ver e imprimir desde aquí, dentro de la
-           ventana cargada (CONFIG.ventanaDias). El archivo completo vive en SharePoint; esto es reimpresión. -->
-      <div class="padron">
-        <details class="grupo" id="baGrupoCerrados">
-          <summary><span class="ic ce">CE</span><span class="t"><b>Cerrados</b><small id="baResCerrados"></small></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-          <div class="gcuerpo">
-            <div class="busca destacada"><input type="search" id="baBusca" placeholder="Buscar folio, placa o manifiesto" autocomplete="off" aria-label="Buscar entre los cerrados"><span class="cuenta" id="baBuscaCuenta"></span></div>
-            <div id="baCerrados"></div>
-          </div>
-        </details>
+      <div class="gpanel" id="gpPlanta"><div id="baLista"></div><p class="pista" id="gPiePlanta"></p></div>
+      <div class="gpanel" id="gpHoy" hidden><div id="gHoy"></div><p class="pista" id="gPieHoy"></p></div>
+      <div class="gpanel" id="gpRechazos" hidden><div id="gRechazos"></div><p class="pista">Los rechazos de hoy. Los anteriores están en Historial.</p></div>
+      <!-- Historial = el buscador de Cerrados (2026-09-08): todo folio que ya no está en planta dentro de la ventana cargada
+           (CONFIG.ventanaDias), para reimprimir el ticket o llegar al certificado. El archivo completo vive en SharePoint. -->
+      <div class="gpanel" id="gpHistorial" hidden>
+        <div class="busca"><input type="search" id="baBusca" placeholder="Buscar folio, placa o manifiesto" autocomplete="off" aria-label="Buscar en el historial"><span class="cuenta" id="baBuscaCuenta"></span><button id="btnExportar" class="alta mn-btn is-sm oculto" type="button" title="Descarga en CSV todo lo cargado (la ventana de días más lo abierto)">Exportar CSV</button></div>
+        <div id="baCerrados"></div>
+        <p class="pista" id="gPieHistorial"></p>
+        <!-- U-14: hasta dónde alcanza lo cargado. -->
+        <p class="pista" id="tbAlcance"></p>
       </div>
       <div class="tarjeta oculto pesaje" id="baPesar">
         <h2 id="baTitulo"></h2>
@@ -219,14 +224,6 @@
         <h2>Ticket de báscula</h2>
         <div id="ticket" class="ticket"></div>
         <button id="btnImprimir" class="principal enviar" type="button">Imprimir / guardar PDF</button>
-      </div>
-      <!-- Tanda 2 (v0.47.0): la Fila del día se mudó de Hoy aquí; la tanda 3 la funde en las pestañas En planta · Cerradas hoy · Rechazos · Historial. -->
-      <div class="tarjeta ancha">
-        <div class="h2-con-boton"><h2>Fila del día</h2><button id="btnExportar" class="alta mn-btn is-sm oculto" type="button" title="Descarga en CSV todo lo cargado (la ventana de días más lo abierto)">Exportar CSV</button></div>
-        <div class="tabla-scroll" id="tbFila"></div>
-        <div class="fila-tarjetas" id="tbFilaTarjetas"></div>
-        <!-- U-14: hasta dónde alcanza lo cargado, fuera de la tabla (que en el celular está oculta). -->
-        <p class="pista" id="tbAlcance"></p>
       </div>
     </section>
 

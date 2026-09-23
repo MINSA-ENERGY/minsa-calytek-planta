@@ -115,7 +115,7 @@ button:disabled { opacity: .45; cursor: default; }
 h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-transform: uppercase; color: var(--mute); font-weight: 600; }
 
 /* Etiqueta pequeña en mayúsculas con espaciado: el idioma de las cabeceras de campo, de columna y de sección (mn-label). */
-.k, .etiqueta-campo, label, .lbl, .revisa .lbl, .fila th, .kpi .l, .ctx span, .ta small, .guion small {
+.k, .etiqueta-campo, label, .lbl, .revisa .lbl, .gtabla th, .kpi .l, .ctx span, .ta small, .guion small {
     font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; color: var(--mute);
 }
 
@@ -345,13 +345,13 @@ textarea { min-height: 4.5rem; resize: vertical; }
 /* Botones: el mismo mn-btn de la piel. El PRIMARIO es contorno verde que se llena al pasar (Proyectos v0.30.0, B5).
    :where y no :is (rediseño 23-sep): :is toma la especificidad de su argumento más fuerte (.ftar .botones-fila button = 0,2,1)
    y le ganaba a .principal y a .btn.tono — el primario salía gris y el botón del veredicto sin el color de su encabezado. */
-:where(.principal, .secundario, .alta, .salir, .renglon button, .fila button, .ftar .botones-fila button, .franja .botones button, .foto-fila button, .nueva-version button, .dlg .dlg-botones button, .btn, .h2-con-boton .alta, .con-boton .alta) {
+:where(.principal, .secundario, .alta, .salir, .renglon button, .gtabla button, .franja .botones button, .foto-fila button, .nueva-version button, .dlg .dlg-botones button, .btn, .h2-con-boton .alta, .con-boton .alta) {
     display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
     min-height: var(--control-h); padding: 0 var(--sp-4); font: inherit; font-weight: 600; line-height: 1.2;
     border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surf); color: var(--ink-body);
     transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 }
-:where(.principal, .secundario, .alta, .salir, .renglon button, .fila button, .ftar .botones-fila button, .franja .botones button, .foto-fila button, .dlg .dlg-botones button, .btn):hover:not(:disabled) { background: var(--rail-hover); }
+:where(.principal, .secundario, .alta, .salir, .renglon button, .gtabla button, .franja .botones button, .foto-fila button, .dlg .dlg-botones button, .btn):hover:not(:disabled) { background: var(--rail-hover); }
 .principal { width: 100%; background: transparent; color: var(--ok-fg); border: 2px solid var(--ok); box-shadow: var(--sombra-pri); }   /* sombra ligera en reposo: rediseño 23-sep */
 .principal:hover:not(:disabled) { background: var(--ok); color: var(--acc-ink); box-shadow: 0 3px 10px rgba(44, 138, 55, .28); }
 .secundario { width: 100%; margin-top: var(--sp-2); }
@@ -362,13 +362,12 @@ button:not(:disabled):active { transform: scale(.98); }
 .principal.incompleto:hover:not(:disabled) { background: var(--surf2); color: var(--mute); box-shadow: none; }
 .principal small { display: block; font-size: .72rem; font-weight: 500; opacity: .9; letter-spacing: 0; text-transform: none; }
 .principal.incompleto small { color: var(--warn-fg); opacity: 1; }
-.secundario.peligro, .renglon button.peligro, .fila button.peligro, .ftar .botones-fila button.peligro, .franja .botones .peligro { color: var(--bad-fg); border-color: transparent; background: transparent; }
-:is(.secundario.peligro, .renglon button.peligro, .fila button.peligro, .ftar .botones-fila button.peligro, .franja .botones .peligro):hover:not(:disabled) { background: var(--bad-soft); }
-.alta, .renglon button, .fila button, .ftar .botones-fila button, .franja .botones button, .foto-fila button, .h2-con-boton .alta, .con-boton .alta, .nueva-version button { min-height: var(--control-h-sm); padding: 0 var(--sp-3); font-size: .82rem; }
-.fila button { border-color: transparent; background: transparent; color: var(--acc); padding: 0 var(--sp-2); }
+.secundario.peligro, .renglon button.peligro, .gtabla button.peligro, .franja .botones .peligro { color: var(--bad-fg); border-color: transparent; background: transparent; }
+:is(.secundario.peligro, .renglon button.peligro, .gtabla button.peligro, .franja .botones .peligro):hover:not(:disabled) { background: var(--bad-soft); }
+.alta, .renglon button, .gtabla button, .franja .botones button, .foto-fila button, .h2-con-boton .alta, .con-boton .alta, .nueva-version button { min-height: var(--control-h-sm); padding: 0 var(--sp-3); font-size: .82rem; }
 .renglon button.suave { color: var(--mute); }
-.franja .botones .si { background: transparent; color: var(--ok-fg); border: 2px solid var(--ok); }
-.franja .botones .si:hover:not(:disabled) { background: var(--ok); color: var(--acc-ink); }
+.franja .botones .si, .gtabla button.si { background: transparent; color: var(--ok-fg); border: 2px solid var(--ok); }
+:is(.franja .botones .si, .gtabla button.si):hover:not(:disabled) { background: var(--ok); color: var(--acc-ink); }
 
 /* renglones de lista (= .mini .it de Proyectos): hairline entre renglones, sin filete de color; el dato mono a la derecha
    lleva el color del estado. app.js arma `<div>` (texto) + botones o `.acciones`. */
@@ -380,10 +379,8 @@ button:not(:disabled):active { transform: scale(.98); }
 .renglon .acciones { display: flex; flex-direction: column; gap: var(--sp-1); flex: 0 0 auto; margin: 0; padding: 0; }
 .renglon .acciones button { width: 100%; }
 #p-padron .renglon.plegado > button, #p-padron .renglon.plegado > .acciones { display: none; }
-.renglon.baja .t, .fila tr.anulado td { color: var(--mute); }
+.renglon.baja .t { color: var(--mute); }
 .renglon.baja .t { text-decoration: line-through; }
-.fila tr.anulado td.mono:first-child { text-decoration: line-through; }
-.fila td .botones-fila { display: flex; gap: var(--sp-2); justify-content: flex-end; white-space: nowrap; }
 .sesion-botones { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
 
 /* diálogos (mn-dialog): hairline, radio medio, la sombra reservada a lo que flota */
@@ -555,20 +552,6 @@ button:not(:disabled):active { transform: scale(.98); }
 .kpi .medidor i { display: block; height: 100%; background: var(--acc); }
 .cols { display: flex; flex-direction: column; }
 .pila { display: flex; flex-direction: column; }
-.tabla-scroll { overflow-x: auto; margin: 0 calc(-1 * var(--sp-4)); padding: 0 var(--sp-4); }
-.fila { width: 100%; border-collapse: collapse; font-size: .86rem; min-width: 34rem; }
-.fila th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; color: var(--faint); font-size: .66rem; letter-spacing: .08em; }
-.fila td { padding: 8px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
-.fila tbody tr:nth-child(even) td { background: var(--banda); }
-.fila td.mono, .fila td.num { white-space: nowrap; font-family: var(--mono); font-size: .8rem; font-variant-numeric: tabular-nums; }
-.fila tr:last-child td { border-bottom: 0; }
-.fila td.num { text-align: right; }
-.fila td .mudo { color: var(--mute); }
-.fila tr:hover td { background: var(--rail-hover); }
-.etapa { display: inline-grid; grid-auto-flow: column; gap: .15rem; vertical-align: middle; }
-.etapa i { width: .7rem; height: .28rem; border-radius: 1px; background: var(--dim); }
-.etapa i.f { background: var(--acc); }
-.etapa i.x { background: var(--bad); }
 /* vigencias a 30 días: el dato mono a la derecha lleva el color; sin barra (Proyectos) */
 .vig { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--line-soft); align-items: center; font-size: .85rem; }
 .vig:first-child { border-top: 0; padding-top: 0; }
@@ -585,23 +568,52 @@ button:not(:disabled):active { transform: scale(.98); }
 /* U-10 (v0.23.0): select + botón en un mismo campo (el carrier de la pre-alta con su «+ Alta de carrier»). */
 .con-boton { display: flex; gap: var(--sp-2); align-items: stretch; }
 .con-boton select { flex: 1; min-width: 0; }
-/* I3 (7-sep): en celular la fila del día son tarjetas; la tabla solo en escritorio */
-.fila-tarjetas { display: flex; flex-direction: column; gap: 0; }
-.ftar { background: transparent; border-top: 1px solid var(--line-soft); border-radius: 0; padding: var(--sp-2) 0; display: grid; grid-template-columns: 1fr auto; gap: .15rem var(--sp-3); font-size: .85rem; cursor: pointer; }
-.ftar:first-child { border-top: 0; }
-.ftar .f { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
-.ftar button.f { background: none; border: 0; padding: 0; color: inherit; text-align: left; font-size: inherit; min-height: 0; }   /* U-58: el folio es el desplegable */
-.ftar button.f::after { content: "▾"; display: inline-block; margin-left: .35rem; color: var(--mute); font-size: .7rem; }
-.ftar.abierta button.f::after { content: "▴"; }
-.ftar .f.mudo { color: var(--mute); font-weight: 500; }
-.ftar.anulado .f { text-decoration: line-through; color: var(--mute); }
-.ftar .etapa { align-self: center; }
-.ftar .c { grid-column: 1 / -1; color: var(--mute); font-size: .78rem; overflow-wrap: anywhere; }
-.ftar .c .etiqueta { margin-left: .25rem; vertical-align: middle; }
-.ftar .botones-fila { grid-column: 1 / -1; justify-content: flex-start; margin-top: .35rem; display: none; }
-.ftar.abierta .botones-fila { display: flex; }
-#tbFila { display: none; }
-@media (min-width: 900px) { #tbFila { display: block; } .fila-tarjetas { display: none; } }
+
+/* ---------------------------------------------------------------- GÓNDOLAS (rediseño tanda 3, v0.48.0): pestañas con conteo y una tabla
+   que en el celular se vuelve tarjeta. Un solo DOM: cada celda trae su letra (m-a … m-f, m-x) y el celular la acomoda en
+   «a b / c d / e / f»; m-x solo se ve en escritorio. La góndola que espera a gerencia va en ámbar (decisión 10). */
+.gtabs { display: flex; gap: 1.4rem; border-bottom: 1px solid var(--line); margin: 0 0 var(--sp-3); overflow-x: auto; scrollbar-width: none; }
+.gtabs::-webkit-scrollbar { display: none; }
+.gtabs button { all: unset; cursor: pointer; padding: 0 0 .6rem; margin-bottom: -1px; border-bottom: 2px solid transparent; font-weight: 500; color: var(--mute); white-space: nowrap; }
+.gtabs button[aria-pressed="true"] { color: var(--ink); font-weight: 600; border-color: var(--acc); }
+.gtabs button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
+.gtabs i { font-style: normal; font-family: var(--mono); font-size: .78rem; margin-left: .4rem; color: var(--faint); }
+.gtabs i:empty { display: none; }
+.gtabs i.alerta { color: var(--warn-fg); font-weight: 600; }
+.gpanel > .pista:empty { display: none; }
+.gpanel > .vacio { padding: var(--sp-2) 0; }
+.gtabla { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surf); border: 1px solid var(--line-soft); border-radius: var(--r-md); overflow: hidden; font-size: .88rem; }
+.gtabla th { text-align: left; padding: .7rem .9rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.gtabla td { padding: .75rem .9rem; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+.gtabla tr:last-child td { border-bottom: 0; }
+.gtabla .num { text-align: right; }
+.gtabla .mono { font-family: var(--mono); font-size: .82rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gtabla .mudo { color: var(--mute); }
+.gtabla .folio { font-family: var(--mono); font-weight: 500; color: var(--ink); white-space: nowrap; }
+.gtabla .folio.sin { color: var(--faint); font-weight: 400; }
+.gtabla .prog small { display: block; font-size: .74rem; color: var(--mute); }
+.gtabla .paso { font-family: var(--mono); font-size: .8rem; font-weight: 500; }
+.e-warn { color: var(--warn-fg); } .e-info { color: var(--info-fg); } .e-acc { color: var(--acc); } .e-ok { color: var(--ok-fg); } .e-bad { color: var(--bad-fg); } .e-mute { color: var(--mute); }
+.gtabla tr:not(.espera):hover td { background: var(--rail-hover); }
+.gtabla tr.espera td { background: var(--warn-soft); }
+.gtabla tr.anulado .folio { text-decoration: line-through; color: var(--mute); }
+.gtabla .acciones-g { text-align: right; white-space: nowrap; }
+.gtabla .acciones-g button + button { margin-left: var(--sp-1); }
+@media (max-width: 899px) {
+    .gtabla, .gtabla tbody { display: block; }
+    .gtabla thead { display: none; }
+    .gtabla tr.gfila { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "a b" "c d" "e e" "f f"; gap: .15rem var(--sp-3); padding: .75rem .9rem; border-bottom: 1px solid var(--line-soft); }
+    .gtabla tr.gfila:last-child { border-bottom: 0; }
+    .gtabla td { display: block; padding: 0; border: 0; min-width: 0; }
+    .gtabla td.m-a { grid-area: a; }
+    .gtabla td.m-b { grid-area: b; text-align: right; }
+    .gtabla td.m-c { grid-area: c; color: var(--mute); font-size: .84rem; }
+    .gtabla td.m-d { grid-area: d; text-align: right; }
+    .gtabla td.m-e { grid-area: e; margin-top: .2rem; }
+    .gtabla td.m-f { grid-area: f; text-align: left; white-space: normal; }
+    .gtabla td.m-f:not(:empty) { margin-top: .45rem; }
+    .gtabla td.m-x { display: none; }
+}
 
 /* ---------------------------------------------------------------- REPORTES (v0.32.0): los KPI que salieron de Hoy + avance por programa y por carrier + toneladas por semana */
 
@@ -753,7 +765,6 @@ select, .archivos-filtros select, .con-boton select {
     .rail .tema.seg .mn-btn { min-height: 26px; height: 26px; }   /* U-59: el segmento Claro | Oscuro compacto de Proyectos, solo con ratón */
     /* Formularios y listas no se estiran a todo lo ancho: leen mejor en una columna acotada. */
     #p-puerta .tarjeta, #p-puerta .bloque, #p-bascula .tarjeta, #p-prealtas .tarjeta { max-width: 40rem; }
-    #p-bascula .tarjeta.ancha { max-width: none; }   /* la Fila del día (8 columnas) no cabe en 40rem: se desbordaba */
     /* Padrón en tres columnas: los tres grupos abiertos (lo fija app.js), sin chevron, el carrier elegido filtra las otras dos. */
     #p-padron .padron { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: var(--sp-4); align-items: start; }
     #p-padron .padron details { margin-bottom: 0; }
@@ -764,8 +775,6 @@ select, .archivos-filtros select, .con-boton select {
     #avisos { max-width: 40rem; }   /* U-42: sigue sticky */
     .cols { display: grid; grid-template-columns: minmax(0, 1.8fr) 1fr; gap: var(--sp-4); align-items: start; }
     .cols.pares { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }   /* Hoy sin la Fila del día: vigencias | rechazos */
-    .fila { min-width: 0; }
-    .tabla-scroll { margin: 0; padding: 0; }
     .franja .item { grid-template-columns: auto 1fr auto; }
     .franja .item .botones { grid-column: 3; grid-row: 1 / 3; margin: 0; align-self: center; }
     /* Veredicto: panel centrado sobre un velo, misma anatomía */

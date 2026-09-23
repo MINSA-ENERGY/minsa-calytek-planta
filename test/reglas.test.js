@@ -1,6 +1,6 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -238,4 +238,19 @@ assert.equal(residuoDe(''), 'RECORTES DE PERFORACIÓN');
     // El PreAltaId puede llegar como cadena desde Graph.
     assert.equal(datosCertificado(p5, { ...cerrado, PreAltaId: '5' }).ok, true);
     assert.equal(toneladas(41020), '41.02'); assert.equal(toneladas(1234567), '1,234.57'); assert.equal(toneladas(0), '0.00');
+}
+
+// Rediseño tanda 3 (v0.48.0): el siguiente paso de cada góndola, en texto, para la lista de Góndolas.
+{
+    assert.deepEqual(siguientePaso({ Etapa: 'compuerta', Compuerta: 'pasa' }), { paso: 3, texto: 'falta peso bruto', tono: 'acc' });
+    assert.deepEqual(siguientePaso({ Etapa: 'compuerta', Compuerta: 'excepcion-comercial' }), { paso: 2, texto: 'espera autorización de gerencia', tono: 'warn' });
+    assert.deepEqual(siguientePaso({ Etapa: 'compuerta', Compuerta: 'excepcion-comercial' }, true), { paso: 3, texto: 'autorizada · falta peso bruto', tono: 'acc' });
+    // La descarga empieza con el bruto: la hora va en hora de México (15:42 UTC = 09:42 CST).
+    assert.deepEqual(siguientePaso({ Etapa: 'bruto', BrutoHora: '2026-10-15T15:42:00Z' }), { paso: 4, texto: 'falta tara · descarga desde 09:42', tono: 'info' });
+    assert.equal(siguientePaso({ Etapa: 'bruto' }).texto, 'falta tara');
+    assert.equal(siguientePaso({ Etapa: 'cerrado' }).tono, 'ok');
+    assert.equal(siguientePaso({ Etapa: 'rechazado' }).texto, 'no entró');
+    assert.equal(siguientePaso({ Etapa: 'anulado' }).paso, 0);
+    assert.equal(siguientePaso({ Etapa: 'descargando' }).texto, 'etapa descargando');   // la etapa retirada el 7-sep no revienta
+    assert.equal(siguientePaso(null).texto, 'sin etapa');
 }

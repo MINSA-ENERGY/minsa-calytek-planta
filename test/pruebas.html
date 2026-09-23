@@ -279,6 +279,11 @@ const clic = id => {
 // (p-puerta) se abre con «+ Nueva góndola», como lo haría el operador.
 const irGondolas = () => document.querySelector('#pestanas button[data-p="gondolas"]').click();
 const irPuerta = () => { irGondolas(); $('btnNuevaGondola').click(); };
+// Tanda 3 (v0.48.0): Góndolas trae cuatro pestañas (planta · hoy · rechazos · historial); las cuatro se pintan siempre y
+// `vistaG` elige la visible. `filaG` es el renglón de una de sus tablas; `sePesa` dice si la góndola ofrece «Pesar».
+const vistaG = g => document.querySelector(`#gTabs button[data-g="${g}"]`).click();
+const filaG = (caja, texto) => [...document.querySelectorAll(`#${caja} .gfila`)].find(r => r.textContent.includes(texto));
+const sePesa = texto => { const r = filaG('baLista', texto); return !!r && !!r.querySelector('button[data-accion="pesar"]'); };
 const poner = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('input', { bubbles: true })); $(id).dispatchEvent(new Event('change', { bubbles: true })); };
 const elegirPorTexto = (id, texto) => { const o = [...$(id).options].find(x => x.textContent.includes(texto)); if (!o) throw new Error(`no hay opción "${texto}" en ${id}`); poner(id, o.value); };
 const filas = clave => DB.listas[clave].items;
@@ -434,7 +439,7 @@ try {
     {
         const rail = [...document.querySelectorAll('#pestanas button')].map(b => b.dataset.p).join(' ') + ' | ' + [...document.querySelectorAll('#pestanasExtra button')].map(b => b.dataset.p).join(' ');
         R.ok('tanda 2: el rail es Hoy · Góndolas · Pre-altas · Padrón | Reportes · Archivos', rail === 'hoy gondolas prealtas padron | reportes archivos', rail);
-        R.ok('tanda 2: sin carril Puerta → Báscula → Ticket en ninguna sección, y Hoy sin Fila del día', !document.querySelector('.flujo') && !$('p-hoy').querySelector('#tbFila') && !!$('p-bascula').querySelector('#tbFila'));
+        R.ok('tanda 2/3: sin carril Puerta → Báscula → Ticket en ninguna sección, Hoy sin Fila del día y la Fila fundida en las pestañas de Góndolas', !document.querySelector('.flujo') && !$('tbFila') && !$('p-hoy').querySelector('.gtabla') && !!$('gTabs'));
         irGondolas();
         R.ok('tanda 2: «Góndolas» abre la lista con su botón marcado', visible('p-bascula') && document.querySelector('#pestanas button[data-p="gondolas"]').getAttribute('aria-current') === 'page' && $('p-bascula').querySelector('.cabecera h1').textContent === 'Góndolas');
         const capturo = ['trazabilidad', 'gerencia'].includes(ROL);
@@ -718,7 +723,7 @@ try {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
         R.ok('U-16: Tab desde el último botón vuelve al primero y Shift+Tab desde el primero va al último', trasTab === 'btnRegistrarPuerta' && document.activeElement.id === 'btnVolverVeredicto', `${trasTab} · ${document.activeElement.id}`);
         clic('btnRegistrarPuerta');
-        await esperar(() => avisoCon('Ya aparece en Báscula'), 'registro de puerta');
+        await esperar(() => avisoCon('Ya aparece en Góndolas'), 'registro de puerta');
         const emb1 = filas('embarques')[0];
         R.ok('embarque registrado en etapa compuerta, sin folio, con hallazgos JSON', emb1.fields.Etapa === 'compuerta' && !emb1.fields.Title && JSON.parse(emb1.fields.CompuertaDetalle).length > 3);
         // U-02 (v0.21.0): la puerta vuelve a cero tras registrar — chofer sin elegir, chips sin marcar, bloques sin «Listo».
@@ -745,8 +750,12 @@ try {
 
         // 6. Bascula: bruto (nace E-) con foto; colision de folio con "otro celular".
         irGondolas();
-        R.ok('la góndola aparece en planta', $('baLista').textContent.includes('55XY9K') && $('baLista').textContent.includes('falta el BRUTO'));
-        document.querySelector('#baLista .renglon button').click();
+        R.ok('la góndola aparece en planta', $('baLista').textContent.includes('55XY9K') && $('baLista').textContent.includes('falta peso bruto'));
+        {   // Tanda 3: un solo DOM; en celular (<= 899 px) el encabezado de la tabla se esconde y el renglón es tarjeta.
+            const movil = window.matchMedia('(max-width: 899px)').matches, th = document.querySelector('#baLista thead');
+            R.ok('tanda 3: la tabla de En planta es tarjeta en celular y tabla en escritorio (el mismo DOM)', !!th && getComputedStyle(th).display === (movil ? 'none' : 'table-header-group'), `${window.innerWidth}px · thead ${th && getComputedStyle(th).display}`);
+        }
+        document.querySelector('#baLista .gfila button[data-accion="pesar"]').click();
         await esperar(() => visible('baPesar'), 'pesaje abierto');
         poner('baKg', '44600');
         // U-24 (v0.26.0): Cancelar con peso tecleado (o foto) pregunta antes de tirarlo; al no confirmar, el pesaje sigue con su peso.
@@ -787,7 +796,7 @@ try {
 
         // 7. Tara: fallo del PATCH tras subir la foto -> no debe quedar lote huérfano.
         irGondolas();
-        const btnTara = [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(emb1.fields.Title)).querySelector('button');
+        const btnTara = filaG('baLista', emb1.fields.Title).querySelector('button');
         R.ok('la góndola espera la TARA', btnTara.textContent === 'Pesar tara');
         btnTara.click(); await esperar(() => visible('baPesar'), 'pesaje tara');
         // C-01 (v0.21.0): un refresco con el pesaje abierto sustituye estado.embarques; el embarque en la mano
@@ -821,11 +830,11 @@ try {
         clic('btnRegistrarPuerta'); await esperar(() => filas('embarques').length === 3, 'segundo embarque');
         const emb2 = filas('embarques')[2];
         irGondolas();
-        [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('falta el BRUTO')).querySelector('button').click();
+        filaG('baLista', 'falta peso bruto').querySelector('button').click();
         await esperar(() => visible('baPesar'), 'pesaje 2'); poner('baKg', '44600'); await foto(); clic('btnGuardarPeso');
         await esperar(() => avisoCon(`Folio E-${aa}-00003`), 'bruto 2');
         irGondolas();
-        [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(emb2.fields.Title)).querySelector('button').click();
+        filaG('baLista', emb2.fields.Title).querySelector('button').click();
         await esperar(() => visible('baPesar'), 'tara 2');
         poner('baKg', '40000'); await dormir(30);
         R.ok('neto 4,600 kg (< 30 % de 25 t) dispara el aviso y pide motivo', visible('baAvisoNeto') && visible('baMotivoNetoCampo'));
@@ -866,7 +875,8 @@ try {
             await esperar(() => avisoCon('Gerencia lo ve'), 'excepción registrada');
             const exc = filas('embarques').find(e => e.fields.Compuerta === 'excepcion-comercial');
             irGondolas();
-            R.ok('la excepción NO está en planta hasta que se autorice', !$('baLista').textContent.includes(exc.fields.Manifiesto));
+            { const rE = filaG('baLista', exc.fields.Manifiesto);
+              R.ok('decisión 10: la excepción sale en Góndolas en ámbar («espera autorización de gerencia»), sin «Pesar» hasta que se autorice', !!rE && rE.classList.contains('espera') && rE.textContent.includes('espera autorización de gerencia') && !sePesa(exc.fields.Manifiesto) && $('gnPlanta').classList.contains('alerta'), rE ? rE.textContent.slice(0, 120) : 'sin renglón'); }
             document.querySelector('#pestanas button[data-p="hoy"]').click();
             R.ok('Hoy muestra la franja de excepción con su motivo', visible('hoyFranja') && $('hoyFranja').textContent.includes('Póliza renovada'));
             R.ok('U-52: en la franja, Anular/Eliminar llevan la clase peligro (no la neutral «no»)', !!$('hoyFranja').querySelector('.botones button.peligro') && !$('hoyFranja').querySelector('.botones button.no'), [...$('hoyFranja').querySelectorAll('.botones button')].map(b => b.textContent + ':' + b.className).join(' '));
@@ -883,7 +893,7 @@ try {
                 exc.fields.ExcepcionAutorizo = 'intruso@example.invalid'; exc.fields.ExcepcionEl = new Date().toISOString();
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con sello sin firma');
                 irGondolas();
-                const fueraBascula = !$('baLista').textContent.includes(exc.fields.Manifiesto);
+                const fueraBascula = !sePesa(exc.fields.Manifiesto);
                 document.querySelector('#pestanas button[data-p="hoy"]').click();
                 R.ok('S-01: un sello ExcepcionAutorizo sin firma en PLANTA_Firmas NO mete la góndola a báscula y Hoy lo señala', fueraBascula && visible('hoyFranja') && $('hoyFranja').textContent.includes('sin firma registrada'), $('hoyFranja').textContent.slice(0, 120));
                 delete exc.fields.ExcepcionAutorizo; delete exc.fields.ExcepcionEl;
@@ -898,7 +908,7 @@ try {
                         filas('firmas').push(firmaDe(firmante)); exc.fields.ExcepcionAutorizo = sello; exc.fields.ExcepcionEl = new Date().toISOString();
                         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), `recarga S-11 ${firmante}`);
                         irGondolas();
-                        const enBascula = $('baLista').textContent.includes(exc.fields.Manifiesto);
+                        const enBascula = sePesa(exc.fields.Manifiesto);
                         document.querySelector('#pestanas button[data-p="hoy"]').click();
                         const franja = visible('hoyFranja') ? $('hoyFranja').textContent : '';
                         filas('firmas').splice(0, filas('firmas').length, ...filas('firmas').filter(f => f.fields.Title !== 'excepcion · x'));
@@ -926,13 +936,13 @@ try {
                 R.ok('excepción autorizada queda en el embarque con quién y cuándo', exc.fields.ExcepcionAutorizo === window.__CUENTA.username && !!exc.fields.ExcepcionEl);
                 R.ok('S-01: la autorización deja su renglón en PLANTA_Firmas (Tipo excepcion, ObjetoId, motivo de la caseta)', filas('firmas').some(x => x.fields.Tipo === 'excepcion' && Number(x.fields.ObjetoId) === exc.id && x.fields.Firmante === window.__CUENTA.username && String(x.fields.Motivo).includes('Póliza renovada')));
                 irGondolas();
-                R.ok('ya autorizada, la góndola aparece en planta', $('baLista').textContent.includes('55XY9K'));
+                R.ok('ya autorizada, la góndola se pesa y dice «autorizada · falta peso bruto»', sePesa(exc.fields.Manifiesto) && filaG('baLista', exc.fields.Manifiesto).textContent.includes('autorizada · falta peso bruto') && !filaG('baLista', exc.fields.Manifiesto).classList.contains('espera'));
                 // S-07 (v0.25.0): la compuerta falla CERRADA. Si PLANTA_Firmas no se puede leer (404: la lista no se ve para
                 // esta cuenta), la app no acepta ningun sello, no ofrece Autorizar y lo dice en Hoy. Antes volvia al sello solo.
                 DB.fallas.push({ metodo: 'GET', incluye: 'lista-firmas/items', status: 404, veces: 1 });
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga sin PLANTA_Firmas');
                 irGondolas();
-                const excFuera = !$('baLista').textContent.includes(exc.fields.Manifiesto);
+                const excFuera = !sePesa(exc.fields.Manifiesto);
                 document.querySelector('#pestanas button[data-p="hoy"]').click();
                 const btnAutS07 = $('hoyFranja').querySelector('button.si');
                 R.ok('S-07: sin PLANTA_Firmas legible la excepción autorizada sale de báscula, «Autorizar» queda deshabilitado con motivo y Hoy lo dice',
@@ -940,7 +950,7 @@ try {
                     `fuera ${excFuera} · disabled ${btnAutS07 && btnAutS07.disabled} · ${$('tbPendientes').textContent.slice(0, 80)}`);
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con PLANTA_Firmas de vuelta');
                 irGondolas();
-                R.ok('S-07: con la lista de vuelta, la autorización vuelve a valer', $('baLista').textContent.includes(exc.fields.Manifiesto));
+                R.ok('S-07: con la lista de vuelta, la autorización vuelve a valer', sePesa(exc.fields.Manifiesto));
             }
         }
 
@@ -980,8 +990,17 @@ try {
         // La poliza vencida del paso 10 se restaura para lo que sigue.
         filas('unidades')[0].fields.PolizaVigencia = '2027-03-01T18:00:00.000Z';
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga 11');
-        irGondolas();   // tanda 2: la Fila del día vive en Góndolas
-        R.ok('fila del día lista los embarques de hoy con folio y neto', $('tbFila').textContent.includes(emb1.fields.Title) && $('tbFila').textContent.includes('21,220'));
+        irGondolas();
+        R.ok('tanda 3: Cerradas hoy lista la góndola cerrada con folio y neto, y su pestaña la cuenta', !!filaG('gHoy', emb1.fields.Title) && filaG('gHoy', emb1.fields.Title).textContent.includes('21,220') && Number($('gnHoy').textContent) === document.querySelectorAll('#gHoy .gfila').length, $('gHoy').textContent.slice(0, 120));
+        {   // Tanda 3 (decisión 6): cuatro pestañas con conteo; se ve una a la vez.
+            vistaG('hoy');
+            const soloHoy = !$('gpHoy').hidden && $('gpPlanta').hidden && $('gpRechazos').hidden && $('gpHistorial').hidden && document.querySelector('#gTabs button[data-g="hoy"]').getAttribute('aria-pressed') === 'true';
+            vistaG('planta');
+            R.ok('tanda 3: En planta · Cerradas hoy · Rechazos · Historial se ven de una en una (aria-pressed)', soloHoy && !$('gpPlanta').hidden && $('gpHoy').hidden);
+            R.ok('tanda 3: el conteo de En planta es el del rail', $('gnPlanta').textContent === ($('nGondolas').hidden ? '' : $('nGondolas').textContent), `${$('gnPlanta').textContent} · rail ${$('nGondolas').textContent}`);
+            R.ok('tanda 3: cada renglón de En planta dice su siguiente paso', [...document.querySelectorAll('#baLista .gfila')].every(r => r.querySelector('.paso')), $('baLista').textContent.slice(0, 100));
+            R.ok('tanda 3: Rechazos cuenta lo que lista', document.querySelectorAll('#gRechazos .gfila').length === Number($('gnRechazos').textContent || 0), `${document.querySelectorAll('#gRechazos .gfila').length} · ${$('gnRechazos').textContent}`);
+        }
         // C-02 (v0.21.0): el CSV de «Exportar» se parsea del Blob (se intercepta createObjectURL; el <a download> no se dispara).
         {
             const urlReal = URL.createObjectURL; let blobCsv = null;
@@ -1016,7 +1035,7 @@ try {
         clic('btnRegistrarPuerta'); await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/109/2025'), 'embarque 109');
         const emb109 = filas('embarques').find(e => e.fields.Manifiesto === 'MINSA/RME/109/2025');
         irGondolas();
-        const r109 = [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/109'));
+        const r109 = filaG('baLista', 'MINSA/RME/109');
         const btnElim = r109 && r109.querySelector('button[data-accion="eliminar"]');
         R.ok('embarque en compuerta (sin folio) ofrece Eliminar', !!btnElim);
         if (btnElim) {
@@ -1028,8 +1047,8 @@ try {
             R.ok('C-14: «Captura eliminada» se queda en pantalla y la lista ya no trae el renglón', !!avisoCon('Captura eliminada') && !filas('embarques').some(e => e.id === emb109.id) && !$('baLista').textContent.includes('109'));
         }
         // 12b. Embarque cerrado con folio E-: se ANULA con motivo, el folio no se reutiliza.
-        irGondolas();   // tanda 2: la Fila del día vive en Góndolas
-        const filaEmb2 = [...document.querySelectorAll('#tbFila tr')].find(tr => tr.textContent.includes(emb2.fields.Title));
+        irGondolas();
+        const filaEmb2 = filaG('gHoy', emb2.fields.Title);
         const btnAnular = filaEmb2 && filaEmb2.querySelector('button[data-accion="anular"]');
         R.ok('embarque cerrado con folio ofrece Anular (no eliminar)', !!btnAnular && !(filaEmb2 && filaEmb2.querySelector('button[data-accion="eliminar"]')));
         if (btnAnular) {
@@ -1039,7 +1058,7 @@ try {
             R.ok('anular sin motivo no procede (el diálogo sigue abierto)', emb2.fields.Etapa === 'cerrado' && $('dlg').open, `etapa ${emb2.fields.Etapa} · abierto ${$('dlg').open} · motivo "${$('dlgMotivo').value}"`);
             if ($('dlg').open) clic('dlgCancelar');
             await dormir(30);
-            const btnAnular2 = [...document.querySelectorAll('#tbFila tr')].find(tr => tr.textContent.includes(emb2.fields.Title)).querySelector('button[data-accion="anular"]');
+            const btnAnular2 = filaG('gHoy', emb2.fields.Title).querySelector('button[data-accion="anular"]');
             btnAnular2.click(); await confirmar('Se tecleó la tara de otra góndola; se repesa con folio nuevo');
             await esperar(() => emb2.fields.Etapa === 'anulado', 'anulado');
             R.ok('etapa anulado + motivo y quién en Notas', emb2.fields.Etapa === 'anulado' && String(emb2.fields.Notas).includes('ANULADO') && String(emb2.fields.Notas).includes(window.__CUENTA.username));
@@ -1055,7 +1074,7 @@ try {
             clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 110'); clic('btnRegistrarPuerta');
             await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/110/2025'), 'embarque 110');
             irGondolas();
-            [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/110')).querySelector('button').click();
+            filaG('baLista', 'MINSA/RME/110').querySelector('button').click();
             await esperar(() => visible('baPesar'), 'pesaje 110'); poner('baKg', '41000'); await foto(); clic('btnGuardarPeso');
             await esperar(() => avisoCon('Bruto guardado'), 'bruto 110');
             const e110 = filas('embarques').find(e => e.fields.Manifiesto === 'MINSA/RME/110/2025');
@@ -1080,11 +1099,11 @@ try {
             clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 111'); clic('btnRegistrarPuerta');
             await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/111/2025'), 'embarque 111');
             irGondolas();
-            [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/111')).querySelector('button').click();
+            filaG('baLista', 'MINSA/RME/111').querySelector('button').click();
             await esperar(() => visible('baPesar') && $('baTitulo').textContent.includes('Bruto'), 'pesaje A (111) abierto');
             clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con pesaje A abierto');
             R.ok('C-12: el refresco con captura a medias no repinta la lista (sigue el DOM viejo con el pesaje abierto)', visible('baPesar'));
-            const btnTaraB = [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e110.fields.Title)).querySelector('button');
+            const btnTaraB = filaG('baLista', e110.fields.Title).querySelector('button');
             btnTaraB.click(); await esperar(() => $('baTitulo').textContent.includes('Tara') && $('baTitulo').textContent.includes(e110.fields.Title), 'pesaje B (110) abierto desde el DOM viejo');   // U-44: el título trae placa y folio
             // C-13 (v0.25.0): entre abrir la tara y guardar, OTRA sesion anula la gondola (mutacion directa del Graph falso).
             // La app relee el renglon antes de subir la foto: no cierra, no sube lote y lo dice.
@@ -1196,7 +1215,7 @@ try {
         filas('embarques').push(viejoCerrado, viejoAbierto);
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga 15');
         irGondolas();
-        R.ok('el cerrado de hace 120 días NO se carga (fuera de la ventana)', !$('tbFila').textContent.includes('VIEJA01') && !$('baLista').textContent.includes('VIEJA01'));
+        R.ok('el cerrado de hace 120 días NO se carga (fuera de la ventana)', !$('gHoy').textContent.includes('VIEJA01') && !$('baLista').textContent.includes('VIEJA01'));
         R.ok('el ABIERTO de hace 120 días SÍ se carga (la fosa sigue ocupada)', $('baLista').textContent.includes('MINSA/RME/099'));
         // Cerrados (v0.19.0): el folio cerrado hoy se vuelve a ver desde Báscula y su ticket se reimprime.
         R.ok('Cerrados lista el folio cerrado', $('baCerrados').textContent.includes(emb1.fields.Title), $('baCerrados').textContent.slice(0, 160));
@@ -1205,43 +1224,36 @@ try {
         poner('baBusca', 'zzz-no-existe'); await esperar(() => $('baCerrados').textContent.includes('Nada coincide'), 'busca cerrados vacia');
         poner('baBusca', emb1.fields.Title.slice(-3)); await esperar(() => $('baBuscaCuenta').textContent.includes('resultado'), 'busca cerrados por folio');
         R.ok('el buscador filtra por folio', $('baCerrados').textContent.includes(emb1.fields.Title));
-        [...document.querySelectorAll('#baCerrados .renglon')].find(r => r.textContent.includes(emb1.fields.Title)).querySelector('button').click();
+        [...document.querySelectorAll('#baCerrados .gfila')].find(r => r.textContent.includes(emb1.fields.Title)).querySelector('button').click();
         R.ok('Ticket desde Cerrados abre la ventana con el folio y su neto', $('dlgTicket').open && $('ticketPop').textContent.includes(emb1.fields.Title) && $('ticketPop').textContent.includes('21220'));
-        R.ok('Cerrados no trae subtítulo por hilera', ![...document.querySelectorAll('#baCerrados .renglon .s')].length);
+        vistaG('historial');
+        R.ok('tanda 3: Historial (antes Cerrados) se abre desde su pestaña, con su buscador y su resumen', !$('gpHistorial').hidden && $('gpPlanta').hidden && /\d+ con neto/.test($('gPieHistorial').textContent), $('gPieHistorial').textContent);
         clic('tkCerrar'); poner('baBusca', '');
-        const nCerr = document.querySelectorAll('#baCerrados .renglon').length;
-        document.querySelector('#baCerrados .renglon button').click();
+        const nCerr = document.querySelectorAll('#baCerrados .gfila').length;
+        document.querySelector('#baCerrados .gfila button').click();
         const primero = $('tkPos').textContent;
         clic('tkSig');
         R.ok('› pasa al siguiente ticket de la lista', nCerr > 1 && $('tkPos').textContent.startsWith('2 de') && $('tkPos').textContent !== primero, `${nCerr} · ${primero} → ${$('tkPos').textContent}`);
         clic('tkAnt');
         R.ok('‹ regresa al primero y se deshabilita', $('tkPos').textContent === primero && $('tkAnt').disabled);
         clic('tkCerrar');
-        irGondolas();   // tanda 2: la Fila del día y su alcance viven en Góndolas
-        // U-14 (v0.22.0): la linea vive en #tbAlcance, fuera de la tabla que el celular oculta.
-        R.ok('«Góndolas» dice hasta dónde alcanza lo cargado, fuera de la tabla (U-14)', $('tbAlcance').textContent.includes('últimos 90 días') && !$('tbFila').textContent.includes('últimos 90 días'), $('tbAlcance').textContent.slice(0, 80));
-        // U-15 (v0.22.0) / U-58 (v0.29.0): el FOLIO de la tarjeta de la fila del dia (celular) es el <button> que la abre; la tarjeta
-        // ya no es role=button (tenia botones adentro).
+        irGondolas();
+        // U-14 (v0.22.0): la linea vive en #tbAlcance, al pie del Historial, fuera de la tabla.
+        R.ok('«Góndolas» dice hasta dónde alcanza lo cargado, fuera de la tabla (U-14)', $('tbAlcance').textContent.includes('últimos 90 días') && !$('baCerrados').textContent.includes('últimos 90 días'), $('tbAlcance').textContent.slice(0, 80));
+        // Tanda 3: la Fila del día (y su tarjeta desplegable, U-58) se fundió en las pestañas; cada renglón trae sus botones a la vista.
         {
-            const tar = [...document.querySelectorAll('#tbFilaTarjetas .ftar')].find(t => t.querySelector('.botones-fila'));
-            const cabF = tar && tar.querySelector('button.f');
-            const antes = cabF && cabF.getAttribute('aria-expanded');
-            if (cabF) cabF.click();
-            R.ok('U-58: el folio es un <button> con aria-expanded/aria-controls que abre la tarjeta; la tarjeta no es role=button', !!cabF && !tar.hasAttribute('role') && antes === 'false' && cabF.getAttribute('aria-expanded') === 'true' && cabF.getAttribute('aria-controls') === tar.querySelector('.botones-fila').id && tar.classList.contains('abierta'), `${antes} → ${cabF && cabF.getAttribute('aria-expanded')}`);
-            // U-07: los botones de la tarjeta llevan la clase de peligro (Anular/Eliminar) que el CSS pinta; Ticket no.
-            const pel = tar && tar.querySelector('.botones-fila button.peligro');
-            R.ok('U-07: Anular/Eliminar de la tarjeta llevan clase peligro y Ticket no', !!pel && !!tar.querySelector('.botones-fila button:not(.peligro)'), tar ? [...tar.querySelectorAll('.botones-fila button')].map(b => b.textContent + ':' + b.className).join(' ') : '');
+            const r = filaG('gHoy', emb1.fields.Title);
+            const pel = r && r.querySelector('button.peligro');
+            R.ok('U-07: en Cerradas hoy, Anular lleva la clase peligro y Ticket no', !!pel && pel.dataset.accion === 'anular' && !!r.querySelector('button[data-accion="ticket"]:not(.peligro)'), r ? [...r.querySelectorAll('button')].map(b => b.textContent + ':' + b.className).join(' ') : 'sin renglón');
+            if (r) { r.querySelector('button[data-accion="ticket"]').click();
+                R.ok('Ticket de Cerradas hoy abre la ventana y se queda en Góndolas', $('dlgTicket').open && visible('p-bascula') && /\d+ de \d+/.test($('tkPos').textContent), $('tkPos').textContent);
+                clic('tkCerrar'); }
         }
-        // v0.19.2: Ticket de la Fila del día abre la ventana sin cambiar de pestaña (tanda 2: la Fila vive en Góndolas).
-        const btnTkHoy = [...document.querySelectorAll('#tbFila button')].find(b => b.textContent === 'Ticket');
-        if (btnTkHoy) { btnTkHoy.click();
-            R.ok('Ticket de la Fila del día abre la ventana y se queda en Góndolas', $('dlgTicket').open && !$('p-bascula').classList.contains('oculto') && /\d+ de \d+/.test($('tkPos').textContent), $('tkPos').textContent);
-            clic('tkCerrar'); }
 
         // 15b. El folio mira el ANIO entero, no la ventana: si mirara la ventana repetiria E-..-00099.
         if (mismoAnio) {
             irGondolas();
-            [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/099')).querySelector('button').click();
+            filaG('baLista', 'MINSA/RME/099').querySelector('button').click();
             await esperar(() => visible('baPesar'), 'pesaje viejo'); poner('baKg', '40000'); await foto(); clic('btnGuardarPeso');
             await esperar(() => avisoCon('Bruto guardado'), 'bruto viejo');
             R.ok('el folio salta el E-00099 que quedó fuera de la ventana (mira el año)', viejoAbierto.fields.Title === `E-${aa}-00100`, viejoAbierto.fields.Title);
@@ -1295,7 +1307,7 @@ try {
             R.ok('C-19: PATCH fallido sobre la vigencia del tablero → el carrier queda actualizado y el aviso «no se sincronizó» lo dice', filas('carriers')[0].fields.FolioOficio === 'UGI-DEMO-0001-2025' && fallaVig.veces === 0 && !$('pdFormaCarrier').open && !!avisoCon('no se sincronizó'), (avisoCon('no se sincronizó') || {}).textContent);
             // (d) las flechas del teclado mueven el ticket.
             irGondolas();
-            document.querySelector('#baCerrados .renglon button').click(); await esperar(() => $('dlgTicket').open, 'ticket para flechas');
+            document.querySelector('#baCerrados .gfila button').click(); await esperar(() => $('dlgTicket').open, 'ticket para flechas');
             const pos0 = $('tkPos').textContent;
             $('dlgTicket').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
             R.ok('C-19: ArrowRight en el ticket pasa al siguiente (tkPos cambia a «2 de»)', $('tkPos').textContent !== pos0 && $('tkPos').textContent.startsWith('2 de'), `${pos0} → ${$('tkPos').textContent}`);
@@ -1313,7 +1325,7 @@ try {
             R.ok('C-19: al aceptar, Salir llama logoutRedirect con la cuenta', !!logoutCon && !!logoutCon.account && logoutCon.account.username === window.__CUENTA.username, JSON.stringify(logoutCon));
             // (f) C-15: un 401 al anular sube como sesion caducada; hasta v0.26.0 «invalid|no existe» lo leia como lista sin actualizar.
             document.querySelector('#pestanas button[data-p="hoy"]').click();
-            const trEmb1 = [...document.querySelectorAll('#tbFila tr')].find(tr => tr.textContent.includes(emb1.fields.Title));
+            const trEmb1 = filaG('gHoy', emb1.fields.Title);
             const btnAn1 = trEmb1 && trEmb1.querySelector('button[data-accion="anular"]');
             if (btnAn1) {
                 const falla401 = { metodo: 'PATCH', incluye: 'lista-embarques', status: 401, veces: 1 }; DB.fallas.push(falla401);
@@ -1337,11 +1349,11 @@ try {
             await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/112/2025'), 'embarque 112');
             const e112 = filas('embarques').find(e => e.fields.Manifiesto === 'MINSA/RME/112/2025');
             irGondolas();
-            [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes('MINSA/RME/112')).querySelector('button').click();
+            filaG('baLista', 'MINSA/RME/112').querySelector('button').click();
             await esperar(() => visible('baPesar'), 'pesaje 112'); poner('baKg', '43000'); await foto(); clic('btnGuardarPeso');
             await esperar(() => avisoCon('Bruto guardado'), 'bruto 112');
             // Pesaje de la tara a medias (kg + foto) y cambio de pestana.
-            [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e112.fields.Title)).querySelector('button').click();
+            filaG('baLista', e112.fields.Title).querySelector('button').click();
             await esperar(() => visible('baPesar') && $('baTitulo').textContent.includes('Tara'), 'tara 112 abierta');
             R.ok('U-53: en escritorio el foco va a los kilos al abrir el pesaje (en celular no aplica: teclado propio)', !window.matchMedia('(min-width: 900px)').matches || document.activeElement === $('baKg'), `${window.innerWidth}px · foco ${document.activeElement && document.activeElement.id}`);
             R.ok('U-44: la tarjeta de la tara titula con placa y folio y el subtítulo trae el manifiesto', $('baTitulo').textContent.includes('55XY9K') && /E-\d\d-\d{5}/.test($('baTitulo').textContent) && $('baSub').textContent.includes('MINSA/RME/112/2025'), `${$('baTitulo').textContent} · ${$('baSub').textContent.slice(0, 40)}`);
@@ -1359,13 +1371,13 @@ try {
             irGondolas();
             R.ok('C-27: al descartar se suelta la foto (blob URL revocado) y, de vuelta en Báscula, la tarjeta no reaparece; la góndola sigue esperando la tara', revocadosC27 >= 1 && !visible('baPesar') && $('baLista').textContent.includes(e112.fields.Title) && !e112.fields.TaraKg, `revocados ${revocadosC27}`);
             // Sin nada capturado, cambiar de pestana no pregunta (como Cancelar vacio).
-            [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e112.fields.Title)).querySelector('button').click();
+            filaG('baLista', e112.fields.Title).querySelector('button').click();
             await esperar(() => visible('baPesar'), 'tara 112 abierta otra vez');
             document.querySelector('#pestanas button[data-p="hoy"]').click();
             R.ok('C-27: con el pesaje vacío cambiar de pestaña no pregunta y sale directo', !$('dlg').open && visible('p-hoy'));
             irGondolas();
             // C-23: Anular desde Bascula con el confirm abierto; Actualizar en medio no debe recargar ni cerrar el dialogo.
-            const r112 = [...document.querySelectorAll('#baLista .renglon')].find(r => r.textContent.includes(e112.fields.Title));
+            const r112 = filaG('baLista', e112.fields.Title);
             const btnAn112 = r112 && r112.querySelector('button[data-accion="anular"]');
             R.ok('C-23: la góndola en planta con folio ofrece Anular', !!btnAn112);
             if (btnAn112) {
@@ -1408,15 +1420,15 @@ try {
             const g1 = gondolas.find(e => e.fields.TicketBascula) || gondolas[0];
             const conTicket = !!g1.fields.TicketBascula;
             irGondolas();
-            $('baGrupoCerrados').open = true; await dormir(20);
-            const filaDe = folio => [...document.querySelectorAll('#baCerrados .renglon')].find(r => r.textContent.includes(folio));
+            vistaG('historial'); await dormir(20);
+            const filaDe = folio => [...document.querySelectorAll('#baCerrados .gfila')].find(r => r.textContent.includes(folio));
             const botonDe = (folio, texto) => { const r = filaDe(folio); return r && [...r.querySelectorAll('button')].find(b => b.textContent === texto); };
-            // El boton del certificado dice «Certificar» mientras la gondola no tenga uno VIGENTE, y «Certificado» cuando lo tiene.
-            const botonCert = folio => botonDe(folio, 'Certificado') || botonDe(folio, 'Certificar');
-            await esperar(() => filaDe(g1.fields.Title), 'góndola cerrada en Cerrados');
+            // El boton del certificado dice «Emitir certificado» mientras la gondola no tenga uno VIGENTE, y «Certificado» cuando lo tiene.
+            const botonCert = folio => botonDe(folio, 'Certificado') || botonDe(folio, 'Emitir certificado');
+            await esperar(() => filaDe(g1.fields.Title), 'góndola cerrada en Historial');
             if (ROL === 'gerencia') {
-                R.ok('v0.39.0: una góndola cerrada sin certificado ofrece «Certificar» en Cerrados', !!botonDe(g1.fields.Title, 'Certificar'), [...filaDe(g1.fields.Title).querySelectorAll('button')].map(b => b.textContent).join(' | '));
-                botonDe(g1.fields.Title, 'Certificar').click();
+                R.ok('v0.39.0: una góndola cerrada sin certificado ofrece «Emitir certificado» en Historial', !!botonDe(g1.fields.Title, 'Emitir certificado'), [...filaDe(g1.fields.Title).querySelectorAll('button')].map(b => b.textContent).join(' | '));
+                botonDe(g1.fields.Title, 'Emitir certificado').click();
                 await esperar(() => $('dlgCertificado').open, 'diálogo del certificado');
                 R.ok('v0.39.0: sin certificado, el diálogo lo dice, ofrece Emitir y no ofrece Imprimir', $('ctEstado').textContent.includes('sin certificado') && visible('btnEmitirCertificado') && !$('btnEmitirCertificado').disabled && !visible('btnSustituirCertificado') && !visible('btnCancelarCertificado') && !visible('ctImprimir'));
                 // U-72 (v0.45.0): antes de emitir, gerencia ve el papel como BORRADOR (sello, sin QR, sin folio) y qué renglones saldrían vacíos.
@@ -1457,11 +1469,11 @@ try {
                   R.ok('v0.36.1: Imprimir pone el folio en document.title durante print() y lo restaura en afterprint', tituloEnPrint === `Certificado de tratamiento ${c1.fields.Title}` && conHoja && document.title === tituloAntes && $('cssImpresionCert').media === 'not all', `en print «${tituloEnPrint}» · despues «${document.title}»`); }
                 R.ok('v0.39.0: con uno vigente, Emitir se esconde y aparecen Sustituir / Cancelar', !visible('btnEmitirCertificado') && visible('btnSustituirCertificado') && visible('btnCancelarCertificado'));
                 clic('ctCerrar'); await dormir(20);
-                R.ok('v0.39.0: la góndola certificada lleva su folio como etiqueta en Cerrados y el botón pasa a «Certificado»', filaDe(g1.fields.Title).textContent.includes(c1.fields.Title) && !!botonDe(g1.fields.Title, 'Certificado'));
+                R.ok('v0.39.0: la góndola certificada lleva su folio como etiqueta en Historial y el botón pasa a «Certificado»', filaDe(g1.fields.Title).textContent.includes(c1.fields.Title) && !!botonDe(g1.fields.Title, 'Certificado'));
                 // S-11 sobre el certificado: si la firma desaparece (o la creo alguien sin rol), se ve pero no se imprime.
                 const idxF = filas('firmas').indexOf(firmaC); filas('firmas').splice(idxF, 1);
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga sin la firma');
-                $('baGrupoCerrados').open = true; await dormir(20);
+                vistaG('historial'); await dormir(20);
                 botonCert(g1.fields.Title).click(); await esperar(() => $('dlgCertificado').open, 'vista sin firma');
                 R.ok('v0.39.0 / S-11: sin firma en PLANTA_Firmas el certificado se ve pero Imprimir queda deshabilitado', $('ctImprimir').disabled && $('ctEstado').textContent.includes('SIN FIRMA'));
                 filas('firmas').push(firmaC);
@@ -1497,7 +1509,7 @@ try {
                 clic('ctCerrar'); await dormir(20);
                 const netoReal = g1.fields.NetoKg; g1.fields.NetoKg = 0;
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga sin neto');
-                $('baGrupoCerrados').open = true; await dormir(20);
+                vistaG('historial'); await dormir(20);
                 botonCert(g1.fields.Title).click(); await esperar(() => $('dlgCertificado').open, 'vista sin neto');
                 R.ok('v0.39.0: sin neto la góndola no se certifica y el botón dice por qué', $('btnEmitirCertificado').disabled && $('btnEmitirCertificado').title.includes('no tiene neto'), $('btnEmitirCertificado').title);
                 g1.fields.NetoKg = netoReal;
@@ -1508,9 +1520,9 @@ try {
                 filas('certificados').push(viejo); const nLlC = DB.llamadas.length;
                 clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con neto');
                 const getsCert = DB.llamadas.slice(nLlC).filter(x => x.startsWith('GET /sites/sitio-falso/lists/lista-certificados/items?'));
-                R.ok('C-45 (v0.44.0): PLANTA_Certificados se lee con filtro EmbarqueId ge (nunca entera) y deja fuera los de góndolas no cargadas', getsCert.length === 1 && /EmbarqueId%20ge%20[0-9]+/.test(getsCert[0]) && !$('baGrupoCerrados').textContent.includes('CT-26-0900') && !$('paDetalleCertificado').textContent.includes('CT-26-0900'), getsCert.join(' | ').slice(0, 160));
+                R.ok('C-45 (v0.44.0): PLANTA_Certificados se lee con filtro EmbarqueId ge (nunca entera) y deja fuera los de góndolas no cargadas', getsCert.length === 1 && /EmbarqueId%20ge%20[0-9]+/.test(getsCert[0]) && !$('baCerrados').textContent.includes('CT-26-0900') && !$('paDetalleCertificado').textContent.includes('CT-26-0900'), getsCert.join(' | ').slice(0, 160));
                 filas('certificados').splice(filas('certificados').indexOf(viejo), 1);
-                $('baGrupoCerrados').open = true; await dormir(20);
+                vistaG('historial'); await dormir(20);
                 botonCert(g1.fields.Title).click(); await esperar(() => $('dlgCertificado').open, 'vista para el tercero');
                 // C-38 (v0.40.0): otra sesión emitió mientras el diálogo estaba abierto (el renglón existe en la lista pero no en
                 // la memoria de la app): la lista FRESCA manda y no nace un segundo vigente.
@@ -1549,20 +1561,20 @@ try {
                 // U-70 (v0.40.0): anular una góndola con certificado vigente lo CANCELA con el mismo motivo (antes quedaba
                 // vigente y sin botón para llegar a él), y el certificado sigue a la mano desde Cerrados.
                 document.querySelector('#pestanas button[data-p="hoy"]').click(); await dormir(20);
-                const filaG1 = [...document.querySelectorAll('#tbFila tr')].find(tr => tr.textContent.includes(g1.fields.Title));
+                const filaG1 = filaG('baCerrados', g1.fields.Title);
                 const btnAn = filaG1 && filaG1.querySelector('button[data-accion="anular"]');
-                R.ok('U-70: la góndola certificada ofrece Anular en Hoy', !!btnAn, filaG1 ? filaG1.textContent.slice(0, 80) : 'sin fila en Hoy');
+                R.ok('U-70: la góndola certificada ofrece Anular en el Historial', !!btnAn, filaG1 ? filaG1.textContent.slice(0, 80) : 'sin fila en el Historial');
                 if (btnAn) {
                     btnAn.click(); await esperar(() => $('dlg').open, 'confirm de anular');
                     const textoConf = $('dlgTexto').textContent;
                     poner('dlgMotivo', 'Góndola duplicada'); clic('dlgOk');
                     await esperar(() => g1.fields.Etapa === 'anulado', 'góndola anulada');
                     R.ok('U-70: el confirm lo avisa y el certificado vigente queda CANCELADO con el motivo de la anulación', textoConf.includes(c3.fields.Title) && c3.fields.Estado === 'cancelado' && String(c3.fields.Motivo).includes('Góndola duplicada'), `${c3.fields.Estado} · ${c3.fields.Motivo}`);
-                    irGondolas(); $('baGrupoCerrados').open = true; await dormir(20);
-                    R.ok('U-70: la góndola anulada sigue mostrando «Certificado» en Cerrados', !!botonDe(g1.fields.Title, 'Certificado'), filaDe(g1.fields.Title) ? [...filaDe(g1.fields.Title).querySelectorAll('button')].map(b => b.textContent).join(' | ') : 'sin fila');
+                    irGondolas(); vistaG('historial'); await dormir(20);
+                    R.ok('U-70: la góndola anulada sigue mostrando «Certificado» en Historial', !!botonDe(g1.fields.Title, 'Certificado'), filaDe(g1.fields.Title) ? [...filaDe(g1.fields.Title).querySelectorAll('button')].map(b => b.textContent).join(' | ') : 'sin fila');
                 }
             } else {
-                R.ok(`v0.39.0: el rol ${ROL} NO puede certificar una góndola (solo gerencia)`, !botonDe(g1.fields.Title, 'Certificar') && !botonDe(g1.fields.Title, 'Certificado'), [...filaDe(g1.fields.Title).querySelectorAll('button')].map(b => b.textContent).join(' | '));
+                R.ok(`v0.39.0: el rol ${ROL} NO puede certificar una góndola (solo gerencia)`, !botonDe(g1.fields.Title, 'Emitir certificado') && !botonDe(g1.fields.Title, 'Certificado'), [...filaDe(g1.fields.Title).querySelectorAll('button')].map(b => b.textContent).join(' | '));
             }
         }
 
@@ -1596,13 +1608,13 @@ try {
     if (params.get('vista') === 'certificado') {
         // v0.39.0: para la captura y el print-to-pdf del formato — la GONDOLA certificada, desde Bascula > Cerrados.
         $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close();
-        irGondolas(); $('baGrupoCerrados').open = true; await dormir(30);
+        irGondolas(); vistaG('historial'); await dormir(30);
         const vigente = filas('certificados').find(c => c.fields.Estado === 'vigente');
         const emb = vigente && filas('embarques').find(e => e.id === Number(vigente.fields.EmbarqueId));
-        const r = emb && [...document.querySelectorAll('#baCerrados .renglon')].find(x => x.textContent.includes(emb.fields.Title));
+        const r = emb && [...document.querySelectorAll('#baCerrados .gfila')].find(x => x.textContent.includes(emb.fields.Title));
         const btn = r && [...r.querySelectorAll('button')].find(b => b.textContent === 'Certificado');
         if (btn) { btn.click(); await dormir(30); if (params.get('imprimir')) { document.body.classList.add('imprimiendo-certificado'); $('cssImpresionCert').media = 'print'; } }
-    } else if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); const v = params.get('vista'); if (v === 'puerta') irPuerta(); else if (v === 'bascula' || v === 'gondolas') irGondolas(); else document.querySelector(`#pestanas button[data-p="${v}"], #pestanasExtra button[data-p="${v}"]`).click(); }
+    } else if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); const v = params.get('vista'); if (v === 'puerta') irPuerta(); else if (v === 'bascula' || v === 'gondolas') { irGondolas(); if (params.get('g')) vistaG(params.get('g')); } else document.querySelector(`#pestanas button[data-p="${v}"], #pestanasExtra button[data-p="${v}"]`).click(); }
 }
 </script>
 </body>
