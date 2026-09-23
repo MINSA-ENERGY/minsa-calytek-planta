@@ -12,7 +12,8 @@
 
      Modo SOLO MIRAR (obs. 569): `?rol=gerencia&vista=puerta` oculta este <pre> al terminar la
      corrida y deja abierta esa pestana (puerta · gondolas · hoy · padron · prealtas; bascula = gondolas), asi la captura
-     headless muestra la UI y no el log:
+     headless muestra la UI y no el log. Tanda 4: con vista=puerta, `&s=1|2|3` abre esa pantalla del asistente y
+     `&vk=1` (o `&vk=rechazo`) llena la llegada y abre el veredicto:
        msedge --headless=new --virtual-time-budget=30000 --window-size=1280,900 --screenshot=captura.png "http://localhost:8080/?rol=gerencia&vista=puerta"
 
      El resultado queda en <pre id="resultados"> y se manda a POST /guardar (_salida-dev.json).
@@ -701,7 +702,35 @@ try {
             R.ok('U-21: el chofer autorizado va primero sin marca y el otro al final como «fuera del programa»', ops[1] === 'JUAN PEREZ DEMO' && ops[2] === 'PEDRO FUERA DEMO · fuera del programa' && ops.length === 3, ops.join(' | '));
             filas('choferes').splice(filas('choferes').indexOf(fuera), 1); clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga sin chofer fuera');
         }
+        // Solo para capturas (`&corte=puerta`): la corrida se detiene aquí, con el programa firmado y el padrón completos.
+        if (params.get('corte') === 'puerta') throw new Error('CORTE');
         irPuerta();
+        // Tanda 4 (v0.49.0): el paso 1 del asistente en tres pantallas, eligiendo con renglones tocables — con CLICS, como el operador.
+        {
+            // El programa ya viene elegido de U-21, así que la llegada arrancó en el vehículo: se regresa a Programa por la fila de subpasos.
+            R.ok('tanda 4: con el programa ya elegido la llegada arranca en el vehículo', visible('puBloque2'), $('puPasoK').textContent);
+            document.querySelector('#puSubpasos button[data-s="1"]').click();
+            const firmadasN = $('puPrealta').options.length - 1;
+            R.ok('tanda 4: un renglón por programa firmado (el select queda oculto como fuente de verdad)', document.querySelectorAll('#puProgramas .o').length === firmadasN && !visible('puBloque2') && visible('puBloque1') && $('puPrealta').classList.contains('oculto'), `${document.querySelectorAll('#puProgramas .o').length} renglones · ${firmadasN} firmadas`);
+            const rProg = [...document.querySelectorAll('#puProgramas .o')].find(b => b.textContent.includes('CLIENTE DEMO'));
+            rProg.click(); await dormir(20);
+            R.ok('tanda 4: tocar el programa lo elige (select + renglón marcado) y la pantalla dice «Listo»', $('puPrealta').value === rProg.dataset.v && rProg.classList.contains('sel') && rProg.getAttribute('aria-pressed') === 'true' && $('puEst1').textContent === 'Listo');
+            clic('btnPuSiguiente');
+            R.ok('tanda 4: «Siguiente» lleva al vehículo (una pantalla a la vez; la barra en el segundo tercio)', visible('puBloque2') && !visible('puBloque1') && $('puPasoK').textContent.includes('Vehículo') && $('puPaso1').dataset.tercio === '2' && visible('btnPuAtras') && !visible('btnCompuerta'), $('puPasoK').textContent);
+            const rUni = document.querySelector('#puUnidades .o.u[data-placa="55XY9K"]');
+            rUni.click(); await dormir(20);
+            R.ok('tanda 4: tocar la unidad llena las dos placas y el encabezado dice la góndola', $('puPlaca').value === '55XY9K' && $('puPlacaPlana').value === '66ZW3M' && rUni.classList.contains('sel') && $('puQuien').textContent === '55XY9K · 66ZW3M', `${$('puPlaca').value} / ${$('puPlacaPlana').value} · ${$('puQuien').textContent}`);
+            [...document.querySelectorAll('#puChoferes .o')].find(b => b.textContent.includes('JUAN')).click(); await dormir(20);
+            R.ok('tanda 4: tocar el chofer lo elige y llena el nombre de la licencia', $('puChofer').value !== '' && $('puChoferNombre').value.includes('JUAN') && $('puEst2').textContent === 'Listo', `${$('puChofer').value} · ${$('puChoferNombre').value} · ${$('puEst2').textContent}`);
+            R.ok('M3: la línea viva cuenta lo que ya se revisa y dice qué falta, sin decir «no pasa» por lo que no se ha tecleado', $('puVivo').textContent.startsWith('Hasta ahora') && /\d+ en verde/.test($('puVivo').textContent) && $('puVivo').textContent.includes('falta el manifiesto') && !$('puVivo').textContent.includes('no pasa'), $('puVivo').textContent);
+            clic('btnPuSiguiente');
+            [...document.querySelectorAll('#puCorrientes .o')].find(b => b.dataset.v === 'base-aceite').click(); await dormir(20);
+            R.ok('tanda 4: la carga — la corriente se elige tocando y el botón de la compuerta aparece en esta pantalla', visible('puBloque3') && $('puCorriente').value === 'base-aceite' && visible('btnCompuerta') && !visible('btnPuSiguiente') && $('puPaso1').dataset.tercio === '3');
+            clic('btnPuAtras');
+            R.ok('tanda 4: «‹ Vehículo y chofer» regresa sin perder lo capturado', visible('puBloque2') && $('puPlaca').value === '55XY9K' && document.querySelector('#puUnidades .o.sel') === document.querySelector('#puUnidades .o.u[data-placa="55XY9K"]'));
+            document.querySelector('#puSubpasos button[data-s="3"]').click();
+            R.ok('tanda 4: la fila de subpasos salta directo a una pantalla', visible('puBloque3') && document.querySelector('#puSubpasos button[data-s="3"]').getAttribute('aria-current') === 'step');
+        }
         elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
         poner('puManifiesto', 'MINSA/RME/000/2026'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M');
         elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
@@ -715,7 +744,15 @@ try {
         clic('btnCompuerta');
         await esperar(() => visible('veredicto'), 'veredicto');
         R.ok('compuerta caso 3: PASA (semáforo verde)', $('veredicto').classList.contains('v-ok') && $('vkW').textContent === 'Pasa', $('vkW').textContent);
-        // U-16 (v0.22.0): Tab cicla dentro del veredicto (Registrar ↔ Corregir), no se sale a la puerta de atras.
+        // M4 (tanda 4): el veredicto dice qué hacer después — el paso y la placa arriba, el guion para el chofer, las verdes plegadas.
+        R.ok('M4: «Pasa» trae paso y placa, la cuenta en verde, el guion «a la báscula» y el botón «Seguir a peso bruto»', $('vkK').textContent.includes('Paso 2 de 5') && $('vkK').textContent.includes('55XY9K') && /\d+ en verde/.test($('vkM').textContent) && visible('vkGuion') && $('vkGuion').textContent.includes('báscula') && $('btnRegistrarPuerta').textContent.startsWith('Seguir a peso bruto') && !visible('vkNota'), `${$('vkK').textContent} · ${$('vkM').textContent} · ${$('btnRegistrarPuerta').textContent}`);
+        {
+            const verdes = () => [...$('puHallazgos').querySelectorAll('li.ok')].filter(li => li.offsetParent !== null).length;
+            const antes = verdes();
+            R.ok('M4: las reglas verdes salen plegadas y «Ver las N reglas» las muestra', antes === 0 && visible('btnVerReglas') && (clic('btnVerReglas'), verdes() > 0) && !visible('btnVerReglas'), `visibles antes ${antes}, después ${verdes()}`);
+        }
+        // U-16 (v0.22.0): Tab cicla dentro del veredicto (su primer enfocable ↔ Corregir), no se sale a la puerta de atras.
+        // Tanda 4: el primero puede ser «Ver las N reglas»; ya abierto se oculta y el ciclo vuelve a Registrar ↔ Corregir.
         $('btnVolverVeredicto').focus();
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
         const trasTab = document.activeElement && document.activeElement.id;
@@ -723,9 +760,13 @@ try {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
         R.ok('U-16: Tab desde el último botón vuelve al primero y Shift+Tab desde el primero va al último', trasTab === 'btnRegistrarPuerta' && document.activeElement.id === 'btnVolverVeredicto', `${trasTab} · ${document.activeElement.id}`);
         clic('btnRegistrarPuerta');
-        await esperar(() => avisoCon('Ya aparece en Góndolas'), 'registro de puerta');
+        await esperar(() => avisoCon('Sigue el peso bruto'), 'registro de puerta');
         const emb1 = filas('embarques')[0];
         R.ok('embarque registrado en etapa compuerta, sin folio, con hallazgos JSON', emb1.fields.Etapa === 'compuerta' && !emb1.fields.Title && JSON.parse(emb1.fields.CompuertaDetalle).length > 3);
+        R.ok('M4: «Seguir a peso bruto» deja la puerta y abre el bruto de ESA góndola en Góndolas', !visible('veredicto') && visible('p-bascula') && visible('baPesar') && $('baTitulo').textContent === 'Bruto · 55XY9K' && $('baSub').textContent.includes('MINSA/RME/000/2026'), `${$('baTitulo').textContent} · ${$('baSub').textContent}`);
+        // Tanda 4: la siguiente góndola del mismo programa arranca en el vehículo (el programa se queda, U-02).
+        irPuerta();
+        R.ok('tanda 4: con el programa ya elegido, «+ Nueva góndola» arranca en el vehículo', visible('puBloque2') && !visible('puBloque1'), $('puPasoK').textContent);
         // U-02 (v0.21.0): la puerta vuelve a cero tras registrar — chofer sin elegir, chips sin marcar, bloques sin «Listo».
         R.ok('U-02: tras registrar, la puerta queda en cero (chofer sin elegir, bloque de placa sin «Listo», botón «Faltan»)',
             $('puChofer').value === '' && $('puEst2').textContent !== 'Listo' && $('btnCompuerta').classList.contains('incompleto') && !document.querySelector('#puUnidades .u.sel'),
@@ -747,6 +788,7 @@ try {
         R.ok('U-01: con datos faltantes el botón NO abre el veredicto y enfoca el primer campo que falta',
             !visible('veredicto') && document.activeElement && document.activeElement.id === 'puPlaca' && !!avisoCon('Falta la placa'),
             `veredicto ${visible('veredicto')} · foco ${document.activeElement && document.activeElement.id}`);
+        R.ok('tanda 4: el faltante de otra pantalla lleva a ella y abre «Teclear otra placa» para enfocarlo', visible('puBloque2') && $('puTeclear').open, `bloque2 ${visible('puBloque2')} · teclear ${$('puTeclear').open}`);
 
         // 6. Bascula: bruto (nace E-) con foto; colision de folio con "otro celular".
         irGondolas();
@@ -853,9 +895,15 @@ try {
         clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto rechazo');
         R.ok('compuerta caso 4: NO ENTRA (rojo) por placa no transcrita', $('veredicto').classList.contains('v-bad') && $('puHallazgos').querySelector('li.culpable') && $('puHallazgos').querySelector('li.culpable').textContent.includes('Placa'));
         R.ok('guion para el chofer visible', visible('vkGuion') && $('vkGuion').textContent.includes('placa'));
+        R.ok('M4: «No entra» dice «sin dispensa», la salida para el error de dedo y el botón del rechazo', $('vkM').textContent.includes('sin dispensa') && visible('vkNota') && $('vkNota').textContent.includes('error al teclear') && $('btnRegistrarPuerta').textContent === 'Registrar el rechazo');
+        // Tanda 4: «Corregir lo capturado» regresa a la pantalla de la regla que decidió (la placa → el vehículo).
+        clic('btnVolverVeredicto');
+        R.ok('tanda 4: «Corregir lo capturado» cierra el veredicto y lleva a la pantalla del culpable (Placa → vehículo)', !visible('veredicto') && visible('puBloque2') && $('puPlaca').value === 'XX1234', $('puPasoK').textContent);
+        clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto rechazo (otra vez)');
         clic('btnRegistrarPuerta'); await esperar(() => avisoCon('Rechazo registrado'), 'rechazo');
         const rech = filas('embarques').find(e => e.fields.Etapa === 'rechazado');
         R.ok('folio R- asignado y E- no consumido', rech && rech.fields.Title === `R-${aa}-0001` && !filas('embarques').some(e => e.fields.Title === `E-${aa}-00004`), rech && rech.fields.Title);
+        R.ok('M4: tras registrar el rechazo se ve Góndolas › Rechazos con su folio', visible('p-bascula') && visible('gpRechazos') && !visible('gpPlanta') && !!filaG('gRechazos', rech.fields.Title));
 
         // 10. Caso 5: poliza vencida -> excepcion comercial -> autorizar desde Hoy.
         filas('unidades')[0].fields.PolizaVigencia = '2026-01-01T12:00:00Z';
@@ -874,6 +922,7 @@ try {
             poner('puMotivo', 'Póliza renovada, el carrier manda el PDF hoy'); clic('btnRegistrarPuerta');
             await esperar(() => avisoCon('Gerencia lo ve'), 'excepción registrada');
             const exc = filas('embarques').find(e => e.fields.Compuerta === 'excepcion-comercial');
+            R.ok('M4: «Mandar a gerencia y volver a la lista» deja la puerta en Góndolas › En planta, sin pesaje abierto', visible('p-bascula') && visible('gpPlanta') && !visible('baPesar'));
             irGondolas();
             { const rE = filaG('baLista', exc.fields.Manifiesto);
               R.ok('decisión 10: la excepción sale en Góndolas en ámbar («espera autorización de gerencia»), sin «Pesar» hasta que se autorice', !!rE && rE.classList.contains('espera') && rE.textContent.includes('espera autorización de gerencia') && !sePesa(exc.fields.Manifiesto) && $('gnPlanta').classList.contains('alerta'), rE ? rE.textContent.slice(0, 120) : 'sin renglón'); }
@@ -1597,7 +1646,7 @@ try {
         await probarArchivos(null);   // v0.33.0: Archivos la ven todos los roles
     }
 } catch (e) {
-    R.ok('la corrida terminó sin excepción', false, (e && e.stack) || String(e));
+    if (!(e && e.message === 'CORTE')) R.ok('la corrida terminó sin excepción', false, (e && e.stack) || String(e));
 } finally {
     R.ok('ningún texto > 255 llegó a Graph en toda la corrida (el falso lo rechaza como SharePoint)', window.__DB.textoLargo.length === 0, window.__DB.textoLargo.join('|'));
     R.ok('U-36: ningún «(s)» en el texto que quedó pintado', !/\w\(s\)/.test($('app-real').textContent), ($('app-real').textContent.match(/.{0,20}\w\(s\).{0,10}/g) || []).join(' | '));
@@ -1614,7 +1663,7 @@ try {
         const r = emb && [...document.querySelectorAll('#baCerrados .gfila')].find(x => x.textContent.includes(emb.fields.Title));
         const btn = r && [...r.querySelectorAll('button')].find(b => b.textContent === 'Certificado');
         if (btn) { btn.click(); await dormir(30); if (params.get('imprimir')) { document.body.classList.add('imprimiendo-certificado'); $('cssImpresionCert').media = 'print'; } }
-    } else if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); const v = params.get('vista'); if (v === 'puerta') irPuerta(); else if (v === 'bascula' || v === 'gondolas') { irGondolas(); if (params.get('g')) vistaG(params.get('g')); } else document.querySelector(`#pestanas button[data-p="${v}"], #pestanasExtra button[data-p="${v}"]`).click(); }
+    } else if (params.get('vista')) { $('resultados').hidden = true; for (const d of document.querySelectorAll('dialog[open]')) d.close(); const v = params.get('vista'); if (v === 'puerta') { irPuerta(); if (params.get('s')) document.querySelector(`#puSubpasos button[data-s="${params.get('s')}"]`).click(); if (params.get('vk')) { poner('puManifiesto', 'MINSA/RME/900/2026'); poner('puPlaca', params.get('vk') === 'rechazo' ? 'XX1234' : '55XY9K'); poner('puPlacaPlana', params.get('vk') === 'rechazo' ? '' : '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true; clic('btnCompuerta'); } } else if (v === 'bascula' || v === 'gondolas') { irGondolas(); if (params.get('g')) vistaG(params.get('g')); } else document.querySelector(`#pestanas button[data-p="${v}"], #pestanasExtra button[data-p="${v}"]`).click(); }
 }
 </script>
 </body>

@@ -109,53 +109,79 @@
       <p id="puPendientes" class="mensaje ojo oculto" role="status"></p>
       <!-- U-38 (v0.26.0): el rol de lectura se dice aquí, fijo, no como aviso: el refresco silencioso lo repetía cada 2 min. -->
       <p id="puSoloLectura" class="mensaje ojo oculto">Tu rol es de lectura: puedes ver, no capturar.</p>
-      <!-- Tres bloques numerados (G3) + la lista viva de reglas (G4), elegidas por Carlos 2026-09-05.
-           Los ids de los campos no cambiaron: solo se agruparon. -->
-      <div class="tarjeta forma">
-        <div class="bloque" id="puBloque1">
-          <div class="bt"><span class="bn">1</span><h2>Programa</h2><span class="est" id="puEst1"></span></div>
-          <div class="campo">
-            <label for="puPrealta">Programa (pre-alta firmada)</label>
-            <select id="puPrealta"></select>
-            <p class="pista">Solo salen las firmadas. Si el programa no está, se captura y se firma primero.</p>
+      <!-- Tanda 4 del rediseño (v0.49.0, M1–M3 del artifact 3Jnv6cT49BgMbNsNEvRvKu): el paso 1 del asistente en tres pantallas
+           —Programa · Vehículo y chofer · Carga—, una pregunta a la vez, eligiendo con renglones tocables. Los ids de los campos
+           NO cambiaron: los selects siguen siendo la fuente de verdad (ocultos) y los renglones solo los llenan, así que
+           evaluarPuerta() y la compuerta no se tocaron. puEst1–3 siguen diciendo qué falta en cada pantalla. -->
+      <div class="asis">
+        <div class="asis-cab">
+          <div class="pasos5" aria-hidden="true">
+            <div class="ahora" id="puPaso1"><i></i><span>Programa y documentos</span></div>
+            <div><i></i><span>Veredicto</span></div>
+            <div><i></i><span>Peso bruto</span></div>
+            <div><i></i><span>Tara</span></div>
+            <div><i></i><span>Ticket</span></div>
           </div>
+          <div class="asis-quien"><div><b id="puQuien">Góndola nueva</b><small id="puQuienSub">sin programa todavía</small></div><span class="asis-k" id="puPasoK">Paso 1 de 5 · Programa</span></div>
+          <nav class="subpasos" id="puSubpasos" aria-label="Paso 1: programa y documentos">
+            <button type="button" data-s="1" id="puSub1"><span>Programa</span><span class="est" id="puEst1"></span></button>
+            <button type="button" data-s="2" id="puSub2"><span>Vehículo y chofer</span><span class="est" id="puEst2"></span></button>
+            <button type="button" data-s="3" id="puSub3"><span>Carga</span><span class="est" id="puEst3"></span></button>
+          </nav>
         </div>
-        <div class="bloque" id="puBloque2">
-          <div class="bt"><span class="bn">2</span><h2>Vehículo y chofer</h2><span class="est" id="puEst2"></span></div>
+        <div class="asis-pantalla" id="puBloque1" data-s="1">
+          <p class="pregunta" id="puPreg1">¿De qué programa viene?</p>
+          <p class="sub">Solo salen las pre-altas firmadas.</p>
+          <div class="opciones" id="puProgramas" role="group" aria-labelledby="puPreg1"></div>
+          <select id="puPrealta" class="oculto" aria-hidden="true" tabindex="-1"></select>
+          <p class="pista">¿No está el programa? Se captura y se firma primero en Pre-altas.</p>
+        </div>
+        <div class="asis-pantalla" id="puBloque2" data-s="2" hidden>
+          <p class="pregunta" id="puPreg2">¿Qué unidad es?</p>
+          <p class="sub" id="puUnidadesTitulo">Tocar la unidad llena las dos placas.</p>
           <!-- I6 (7-sep): las unidades que la pre-alta autorizó; tocar una llena las dos placas. Teclearlas sigue siendo posible. -->
-          <div class="campo"><span class="etiqueta-campo" id="puUnidadesTitulo">Unidad del carrier</span><div id="puUnidades" class="unidades-puerta"></div></div>
-          <div class="dos">
-            <div class="campo"><label for="puPlaca">Placa tractor</label><input type="text" id="puPlaca" class="mono" autocapitalize="characters" placeholder="teclea o elige una unidad"></div>
-            <div class="campo"><label for="puPlacaPlana">Placa plana / caja</label><input type="text" id="puPlacaPlana" class="mono" autocapitalize="characters" placeholder="teclea o elige una unidad"></div>
-          </div>
-          <div class="campo"><label for="puChofer">Chofer</label><select id="puChofer"></select></div>
-          <div class="campo"><label for="puChoferNombre">Nombre como aparece en la licencia</label><input type="text" id="puChoferNombre" autocapitalize="words"></div>
+          <div id="puUnidades" class="opciones" role="group" aria-labelledby="puPreg2"></div>
+          <details class="teclear" id="puTeclear">
+            <summary>Teclear otra placa</summary>
+            <div class="dos">
+              <div class="campo"><label for="puPlaca">Placa tractor</label><input type="text" id="puPlaca" class="mono" autocapitalize="characters" placeholder="teclea o elige una unidad"></div>
+              <div class="campo"><label for="puPlacaPlana">Placa plana / caja</label><input type="text" id="puPlacaPlana" class="mono" autocapitalize="characters" placeholder="teclea o elige una unidad"></div>
+            </div>
+          </details>
+          <p class="pregunta chica" id="puPreg2b">¿Quién la maneja?</p>
+          <div id="puChoferes" class="opciones" role="group" aria-labelledby="puPreg2b"></div>
+          <select id="puChofer" class="oculto" aria-hidden="true" tabindex="-1"></select>
+          <details class="teclear" id="puChoferOtro">
+            <summary>El nombre de la licencia es otro, o no está en el padrón</summary>
+            <div class="campo"><label for="puChoferNombre">Nombre como aparece en la licencia</label><input type="text" id="puChoferNombre" autocapitalize="words"></div>
+          </details>
         </div>
-        <div class="bloque" id="puBloque3">
-          <div class="bt"><span class="bn">3</span><h2>Carga</h2><span class="est" id="puEst3"></span></div>
+        <div class="asis-pantalla" id="puBloque3" data-s="3" hidden>
+          <p class="pregunta">¿Qué dice el manifiesto?</p>
           <div class="campo">
             <label for="puManifiesto">No. de manifiesto</label>
             <input type="text" id="puManifiesto" class="mono" autocapitalize="characters" placeholder="MINSA/RME/000/2026">
           </div>
-          <div class="campo">
-            <label for="puCorriente">Corriente declarada en el manifiesto</label>
-            <select id="puCorriente">
-              <option value="">— elige —</option>
-              <option value="base-agua">Recorte base agua</option>
-              <option value="base-aceite">Recorte base aceite</option>
-              <option value="fluidos-base-agua">Fluido agotado base agua</option>
-              <option value="fluidos-base-aceite">Fluido agotado base aceite</option>
-            </select>
-          </div>
+          <span class="etiqueta-campo" id="puCorrienteTitulo">Corriente declarada en el manifiesto</span>
+          <div class="opciones" id="puCorrientes" role="group" aria-labelledby="puCorrienteTitulo"></div>
+          <select id="puCorriente" class="oculto" aria-hidden="true" tabindex="-1">
+            <option value="">— elige —</option>
+            <option value="base-agua">Recorte base agua</option>
+            <option value="base-aceite">Recorte base aceite</option>
+            <option value="fluidos-base-agua">Fluido agotado base agua</option>
+            <option value="fluidos-base-aceite">Fluido agotado base aceite</option>
+          </select>
           <label class="chk"><input type="checkbox" id="pu79"> El residuo viene identificado, etiquetado y envasado (art. 79)</label>
         </div>
-      </div>
-      <!-- La MISMA evaluacion que corre el boton, en vivo. No decide nada: solo adelanta lo que va a salir. -->
-      <div class="tarjeta revisa" id="puPrevio">
-        <span class="lbl">Lo que va a revisar</span>
-        <ul class="reglas" id="puPrevioReglas"></ul>
-        <p class="cuenta" id="puPrevioCuenta"></p>
-        <button id="btnCompuerta" class="principal enviar" type="button">Correr la compuerta</button>
+        <!-- M3: la MISMA evaluación que corre el botón, en vivo y en un renglón. No decide nada: solo adelanta lo que va a salir. -->
+        <div class="asis-pie">
+          <p class="vivo" id="puVivo" aria-live="polite"></p>
+          <div class="asis-botones">
+            <button id="btnPuAtras" class="secundario" type="button" hidden>‹ Programa</button>
+            <button id="btnPuSiguiente" class="principal" type="button">Siguiente · el vehículo ›</button>
+            <button id="btnCompuerta" class="principal" type="button" hidden>Revisar documentos ›</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -322,13 +348,16 @@
     </div>
     <div class="cuerpo">
       <div class="ctx" id="vkCtx"></div>
+      <!-- Tanda 4 (M4): «qué le dices al chofer» en los tres colores, arriba; la regla que decidió va después y las verdes plegadas. -->
+      <div id="vkGuion" class="guion"><small>Qué le dices al chofer</small><span></span></div>
+      <p class="pista oculto" id="vkNota"></p>
       <div class="lbl" id="vkLbl">Qué lo decidió</div>
       <ul class="reglas" id="puHallazgos"></ul>
+      <button id="btnVerReglas" class="enlace oculto" type="button"></button>
       <div id="puExcepcion" class="oculto">
         <label class="ta" for="puMotivo"><small>Motivo · lo lee gerencia</small><textarea id="puMotivo" maxlength="300" placeholder="Por qué debería entrar aunque falte este documento"></textarea></label>
         <p class="quien-autoriza">Lo autoriza <b>gerencia</b> desde su propia sesión, en «Hoy».</p>
       </div>
-      <div id="vkGuion" class="guion oculto"><small>Qué le dices al chofer</small><span></span></div>
       <!-- U-39 (v0.29.0): con el veredicto abierto avisar() pinta aquí; #avisos queda detrás de esta pantalla fija. -->
       <div class="dlg-avisos" id="vkAvisos" aria-live="assertive"></div>
       <div class="acciones">

@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso } from './reglas.js';
 
-const VERSION = '0.48.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.49.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -37,6 +37,7 @@ const estado = {
     ultimoCarrierPadron: null,   // U-46: el ultimo carrier dado de alta o usado en un alta de unidad/chofer (solo esta sesion)
     pestana: 'hoy',
     vistaGondolas: 'planta', // tanda 3 (v0.48.0): la pestaña elegida dentro de Góndolas (planta · hoy · rechazos · historial)
+    subpasoPuerta: 1,        // tanda 4 (v0.49.0): la pantalla del paso 1 del asistente (1 programa · 2 vehículo y chofer · 3 carga)
     archivos: null,          // v0.33.0: { biblioteca, ramas: Map ruta -> hijos } de la seccion Archivos; null = se relee al pintar
     cargadoEl: 0,
     ventanaDesde: ''      // ISO: inicio de la ventana de carga (cubeta 3)
@@ -626,12 +627,103 @@ function pintarPuerta() {
     if (borradores.length) pp.textContent = `${borradores.length === 1 ? 'Hay 1 pre-alta por firmar' : `Hay ${borradores.length} pre-altas por firmar`}: ${borradores.map(p => p.Title).join(' · ')}. Sus góndolas no pueden entrar hasta que el validador firme.`;
     opciones($('puPrealta'), firmadas, p => p.id, p => `${p.Title} · ${p.Corriente || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}`);
     if (!$('puPrealta').value && firmadas.length === 1) $('puPrealta').value = String(firmadas[0].id);   // U-40: una sola firmada no se hace elegir
+    pintarProgramasPuerta(firmadas);
     pintarChoferesPuerta();
     pintarUnidadesPuerta();
     $('btnCompuerta').disabled = !PUEDE.puerta(estado.rol);
     $('puSoloLectura').classList.toggle('oculto', PUEDE.puerta(estado.rol));   // U-38 (v0.26.0): texto fijo, no avisar(): el refresco silencioso lo repetía cada 2 min y pisaba el aviso que se leía
     $('puSoloLectura').textContent = estado.rol === 'validador' ? 'Tu rol es validador: aquí solo ves; capturas y firmas en Pre-altas.' : 'Tu rol es de lectura: puedes ver, no capturar.';   // U-50: al validador no se le dice «lectura»
+    irSubpaso(estado.subpasoPuerta);   // el repintado (refresco de 2 min) no mueve de pantalla: solo la repinta
     pintarPrevioPuerta();
+}
+
+// ---------------------------------------------------------------- tanda 4: el asistente de la llegada (M1–M3)
+
+/** Las tres pantallas del paso 1. La barra de cinco pasos avanza por tercios dentro del primero. */
+const SUBPASOS = { 1: 'Programa', 2: 'Vehículo y chofer', 3: 'Carga' };
+const SIGUIENTE_SUBPASO = { 1: 'Siguiente · el vehículo ›', 2: 'Siguiente · la carga ›' };
+function irSubpaso(s, enfocar = false) {
+    s = SUBPASOS[s] ? Number(s) : 1;
+    const cambio = s !== estado.subpasoPuerta;
+    estado.subpasoPuerta = s;
+    for (const n of [1, 2, 3]) $('puBloque' + n).hidden = n !== s;
+    for (const b of $('puSubpasos').querySelectorAll('button')) { if (Number(b.dataset.s) === s) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); }
+    $('puPaso1').dataset.tercio = String(s);
+    $('puPasoK').textContent = `Paso 1 de 5 · ${SUBPASOS[s]}`;
+    $('btnPuAtras').hidden = s === 1;
+    if (s > 1) $('btnPuAtras').textContent = `‹ ${SUBPASOS[s - 1]}`;
+    $('btnPuSiguiente').hidden = s === 3;
+    if (s < 3) $('btnPuSiguiente').textContent = SIGUIENTE_SUBPASO[s];
+    $('btnCompuerta').hidden = s !== 3;
+    if (cambio && estado.pestana === 'puerta') window.scrollTo({ top: 0 });
+    if (enfocar) { const q = $('puBloque' + s).querySelector('.pregunta'); if (q) { q.tabIndex = -1; q.focus({ preventScroll: true }); } }
+}
+/** Una empieza nueva: con el programa ya elegido (las góndolas del mismo programa llegan en fila) arranca en el vehículo. */
+const subpasoInicial = () => ($('puPrealta').value ? 2 : 1);
+
+/**
+ * M2: un renglón tocable que actúa como radio. `valor` va en data-v; el que está elegido lleva .sel y aria-pressed, como los
+ * chips de unidad de siempre (U-33). `dato` es la columna derecha: texto o un nodo (la etiqueta de vigencia).
+ */
+function renglonOpcion({ valor, sel, titulo, mono = false, detalle, dato, clase = '' }) {
+    const b = el('button', `o ${clase}${sel ? ' sel' : ''}`.trim()); b.type = 'button';
+    b.dataset.v = String(valor);
+    b.setAttribute('aria-pressed', String(!!sel));
+    b.appendChild(el('span', 'r'));
+    const t = el('span', 't'); t.appendChild(el('b', mono ? 'mono' : '', titulo));
+    if (detalle) t.appendChild(el('small', '', detalle));
+    b.appendChild(t);
+    if (dato instanceof Node) { dato.classList.add('d'); b.appendChild(dato); } else if (dato) b.appendChild(el('span', 'd', dato));
+    return b;
+}
+function marcarOpcion(cont, valor) {
+    for (const x of cont.querySelectorAll('.o')) { const on = valor !== '' && x.dataset.v === String(valor); x.classList.toggle('sel', on); x.setAttribute('aria-pressed', String(on)); }
+}
+/** Elegir en un renglón es elegir en el select oculto: el listener de `change` de siempre repinta lo que depende de él. */
+function elegirEnSelect(id, v) { $(id).value = String(v); $(id).dispatchEvent(new Event('change', { bubbles: true })); }
+
+function pintarProgramasPuerta(firmadas) {
+    const cont = $('puProgramas'); cont.textContent = '';
+    if (!firmadas.length) { cont.appendChild(el('p', 'pista', 'No hay programas firmados todavía.')); return; }
+    for (const p of firmadas) {
+        const { rec, esp } = gondolasDe(p);
+        const b = renglonOpcion({ valor: p.id, sel: String(p.id) === $('puPrealta').value, titulo: p.Title,
+            detalle: [nombreDe(estado.carriers, p.CarrierId), p.Corriente].filter(Boolean).join(' · '),
+            dato: esp ? `${rec} de ${esp}` : plural(rec, 'recibida') });
+        b.addEventListener('click', () => elegirEnSelect('puPrealta', p.id));
+        cont.appendChild(b);
+    }
+}
+function pintarCorrientesPuerta() {
+    const cont = $('puCorrientes'); cont.textContent = '';
+    for (const o of [...$('puCorriente').options].filter(x => x.value)) {
+        const b = renglonOpcion({ valor: o.value, sel: o.value === $('puCorriente').value, titulo: o.textContent });
+        b.addEventListener('click', () => elegirEnSelect('puCorriente', o.value));
+        cont.appendChild(b);
+    }
+}
+/** Arriba del asistente, la góndola que se está capturando: placas o «Góndola nueva», y el programa y el chofer debajo. */
+function pintarQuienPuerta() {
+    const placa = placaNormal($('puPlaca').value), plana = placaNormal($('puPlacaPlana').value);
+    $('puQuien').textContent = placa ? (plana ? `${placa} · ${plana}` : placa) : 'Góndola nueva';
+    $('puQuien').classList.toggle('mono', !!placa);
+    const pre = porId(estado.prealtas, $('puPrealta').value);
+    const chofer = $('puChoferNombre').value.trim() || (porId(estado.choferes, $('puChofer').value) || {}).Title;
+    $('puQuienSub').textContent = pre ? [pre.Title, pre.CarrierId ? nombreDe(estado.carriers, pre.CarrierId) : null, chofer].filter(Boolean).join(' · ') : 'sin programa todavía';
+}
+/** Dónde vive cada campo que la compuerta necesita, y qué recibe el foco cuando falta (el select oculto no puede). */
+const PANTALLA_DE = { puPrealta: 1, puPlaca: 2, puPlacaPlana: 2, puChofer: 2, puChoferNombre: 2, puManifiesto: 3, puCorriente: 3 };
+function enfocarCampoPuerta(id) {
+    irSubpaso(PANTALLA_DE[id] || 1);
+    if (id === 'puPlaca' || id === 'puPlacaPlana') $('puTeclear').open = true;
+    const destino = id === 'puPrealta' ? $('puProgramas').querySelector('.o') : id === 'puCorriente' ? $('puCorrientes').querySelector('.o') : $(id);
+    if (destino) destino.focus();
+}
+/** «Corregir lo capturado» lleva a la pantalla de la regla que decidió (la placa → el vehículo; el manifiesto → la carga). */
+function subpasoDeRegla(regla) {
+    if (/^(Pre-alta|Carrier|Autorizaci|CSF)/.test(regla)) return 1;
+    if (/^(Manifiesto|Corriente|Art)/.test(regla)) return 3;
+    return 2;
 }
 // I6 (7-sep): las unidades que la pre-alta autorizo (o, si no marco ninguna, todas las activas del carrier).
 // Tocar una llena placa tractor y plana; la seleccion se marca comparando con lo que hay en el campo, asi que
@@ -639,22 +731,23 @@ function pintarPuerta() {
 function pintarUnidadesPuerta() {
     const cont = $('puUnidades'); cont.textContent = '';
     const pre = porId(estado.prealtas, $('puPrealta').value);
+    $('puUnidadesTitulo').textContent = 'Tocar la unidad llena las dos placas.';
     if (!pre) { cont.appendChild(el('p', 'pista', 'Elige el programa para ver sus unidades.')); return; }
     const autorizadas = lista(pre.UnidadesIds).map(Number);
     let us = estado.unidades.filter(u => u.Activo !== false && Number(u.CarrierId) === Number(pre.CarrierId));
     if (autorizadas.length) us = us.filter(u => autorizadas.includes(u.id));
-    $('puUnidadesTitulo').textContent = us.length ? `Unidad del carrier · ${us.length} en este programa` : 'Unidad del carrier';
-    if (!us.length) { cont.appendChild(el('p', 'pista', 'Este programa no tiene unidades en el padrón: teclea la placa y saldrá como no amparada.')); return; }
+    $('puUnidadesTitulo').textContent = us.length ? `${plural(us.length, 'unidad', 'unidades')} en este programa; tocar una llena las dos placas.` : 'Tocar la unidad llena las dos placas.';
+    // Tanda 4: sin unidades en el padrón no hay renglón que tocar, así que las placas se teclean a la vista.
+    if (!us.length) { $('puTeclear').open = true; cont.appendChild(el('p', 'pista', 'Este programa no tiene unidades en el padrón: teclea la placa y saldrá como no amparada.')); return; }
     const actual = placaNormal($('puPlaca').value);
     for (const u of us) {
-        const b = el('button', 'u' + (placaNormal(u.Title) === actual ? ' sel' : '')); b.type = 'button';
-        b.setAttribute('aria-pressed', String(placaNormal(u.Title) === actual));   // U-33 (v0.26.0): el estado seleccionado existe para teclado y lector, no solo como clase
-        b.dataset.placa = placaNormal(u.Title);   // U-17: la seleccion al teclear compara contra esto, no contra el texto del chip
-        const t = el('span', 't', u.PlacaPlana ? `${u.Title} / ${u.PlacaPlana}` : u.Title);
+        // M2 (tanda 4): el chip de siempre como renglón tocable. Conserva .u y data-placa (U-17 / C-28) y el aria-pressed de U-33.
         const v = etiquetaVigencia('unidades', u);
-        t.appendChild(el('small', '', [u.TipoUnidad || 'unidad', u.CapacidadKg ? `${Number(u.CapacidadKg).toLocaleString('es-MX')} kg` : null, v ? null : 'vigencias al día'].filter(Boolean).join(' · ')));
-        b.appendChild(t);
-        if (v) b.appendChild(v);
+        const b = renglonOpcion({ valor: placaNormal(u.Title), sel: placaNormal(u.Title) === actual, clase: 'u', mono: true,
+            titulo: u.PlacaPlana ? `${u.Title} · ${u.PlacaPlana}` : u.Title,
+            detalle: [u.TipoUnidad || 'unidad', u.CapacidadKg ? `${Number(u.CapacidadKg).toLocaleString('es-MX')} kg` : null, v ? null : 'vigencias al día'].filter(Boolean).join(' · '),
+            dato: v });
+        b.dataset.placa = placaNormal(u.Title);   // U-17: la seleccion al teclear compara contra esto, no contra el texto del chip
         b.addEventListener('click', () => {
             $('puPlaca').value = u.Title; $('puPlacaPlana').value = u.PlacaPlana || '';
             marcarChip(cont, b.dataset.placa);   // C-28
@@ -677,6 +770,17 @@ function pintarChoferesPuerta() {
     const fuera = x => autorizados.length > 0 && !autorizados.includes(String(x.id));
     const orden = ch.filter(x => !fuera(x)).concat(ch.filter(fuera));
     opciones($('puChofer'), orden, x => x.id, x => fuera(x) ? `${x.Title} · fuera del programa` : x.Title, '— no está en el padrón —');
+    // M2 (tanda 4): los mismos choferes, en el mismo orden, como renglones; el select oculto sigue siendo lo que se evalúa.
+    const cont = $('puChoferes'); cont.textContent = '';
+    if (!pre) { cont.appendChild(el('p', 'pista', 'Elige el programa para ver sus choferes.')); return; }
+    if (!orden.length) { $('puChoferOtro').open = true; cont.appendChild(el('p', 'pista', 'El carrier no tiene choferes en el padrón: teclea el nombre como viene en la licencia; saldrá en Espera.')); return; }
+    for (const x of orden) {
+        const b = renglonOpcion({ valor: x.id, sel: String(x.id) === $('puChofer').value, titulo: x.Title,
+            detalle: fuera(x) ? 'fuera del programa' : 'licencia federal', dato: etiquetaVigencia('choferes', x) || el('span', 'e-ok', 'vigente'),
+            clase: fuera(x) ? 'fuera' : '' });
+        b.addEventListener('click', () => elegirEnSelect('puChofer', x.id));
+        cont.appendChild(b);
+    }
 }
 
 /**
@@ -709,10 +813,11 @@ function correrCompuerta() {
     // U-01 (v0.21.0): mientras falte un campo de CAMPOS_PUERTA el boton dice «Faltan N datos» y NO abre el
     // veredicto: enfoca el primer faltante. Antes con manifiesto o corriente vacios abria «No entra» y un toque
     // mas dejaba un folio R- por un dato que no se habia tecleado (reglas.js los cuenta como hallazgo legal).
+    // Tanda 4: el faltante puede estar en otra pantalla del asistente; se va a ella antes de enfocarlo.
     const falta = CAMPOS_PUERTA.find(([id]) => !String($(id).value).trim());
-    if (falta) { avisar(`Falta ${falta[1]}.`, 'error'); $(falta[0]).focus(); return; }
+    if (falta) { avisar(`Falta ${falta[1]}.`, 'error'); enfocarCampoPuerta(falta[0]); return; }
     const e = evaluarPuerta();
-    if (!e.placa) { avisar('Falta la placa del tractor.', 'error'); $('puPlaca').focus(); return; }
+    if (!e.placa) { avisar('Falta la placa del tractor.', 'error'); enfocarCampoPuerta('puPlaca'); return; }
     estado.ultimaCompuerta = e;
     pintarResultadoCompuerta();
 }
@@ -733,9 +838,10 @@ function pintarPrevioPuerta() {
     // licencia). El bloque 2 contaba solo la placa y decía «Listo» mientras la lista viva anunciaba Espera por el chofer;
     // el chofer sigue sin ser obligatorio para correr la compuerta (CAMPOS_PUERTA no cambia).
     const hay = alts => alts.some(id => String($(id).value).trim());
-    const bloques = [['puBloque1', 'puEst1', [['puPrealta', 'programa']], 'sin'],
-                     ['puBloque2', 'puEst2', [['puPlaca', 'la placa'], ['puChofer', 'puChoferNombre', 'el chofer']], 'falta'],
-                     ['puBloque3', 'puEst3', [['puManifiesto', 'el manifiesto'], ['puCorriente', 'la corriente']], 'falta']];
+    // Tanda 4: el estado de cada pantalla vive en su botón de la fila de subpasos (antes, en la cabecera de cada bloque).
+    const bloques = [['puSub1', 'puEst1', [['puPrealta', 'programa']], 'sin'],
+                     ['puSub2', 'puEst2', [['puPlaca', 'la placa'], ['puChofer', 'puChoferNombre', 'el chofer']], 'falta'],
+                     ['puSub3', 'puEst3', [['puManifiesto', 'el manifiesto'], ['puCorriente', 'la corriente']], 'falta']];
     for (const [bloque, est, datos, pendiente] of bloques) {
         const faltantes = datos.filter(d => !hay(d.slice(0, -1))).map(d => d[d.length - 1]);
         const ok = !faltantes.length, n = faltantes.length;
@@ -745,30 +851,41 @@ function pintarPrevioPuerta() {
         $(est).title = ok ? '' : `${pendiente} ${faltantes.join(' y ')}`;
     }
 
-    const decide = e.resultado === 'rechazo-legal' ? 'legal' : e.resultado === 'excepcion-comercial' ? 'comercial' : null;
-    pintarHallazgos($('puPrevioReglas'), e.hallazgos, faltan.length ? null : decide);
-
     // D2 (2026-09-08): el boton dice «Faltan 2 datos · el manifiesto, la corriente» hasta que todo esta capturado.
-    // Sigue siendo el mismo boton y sigue corriendo la compuerta: solo cambia lo que dice.
+    // Sigue siendo el mismo boton y sigue corriendo la compuerta: solo cambia lo que dice (tanda 4: «Revisar documentos»).
     const btn = $('btnCompuerta');
     btn.classList.toggle('incompleto', faltan.length > 0);
     btn.textContent = '';
     if (faltan.length) {
         btn.appendChild(document.createTextNode(faltan.length === 1 ? 'Falta 1 dato' : `Faltan ${faltan.length} datos`));
         btn.appendChild(el('small', '', faltan.join(', ')));
-    } else btn.textContent = 'Correr la compuerta';
+    } else btn.textContent = 'Revisar documentos ›';
 
-    const cuenta = $('puPrevioCuenta');
-    cuenta.classList.remove('v-ok', 'v-warn', 'v-bad');
-    $('puPrevio').classList.toggle('incompleto', faltan.length > 0);
-    if (faltan.length) { cuenta.textContent = `Falta ${faltan.join(', ')}. Hasta entonces esto no es un pronóstico.`; return; }
-    const def = VEREDICTOS[e.resultado];
-    cuenta.classList.add(def.clase);
-    const porque = decide ? ` — ${e.hallazgos.filter(h => h.clase === decide).map(h => h.regla.toLowerCase()).join(', ')}` : '';
-    cuenta.textContent = '';
-    cuenta.appendChild(document.createTextNode('Con lo capturado va a salir '));
-    cuenta.appendChild(el('b', '', def.palabra));
-    cuenta.appendChild(document.createTextNode(porque + '.'));
+    pintarVivoPuerta(e, faltan);
+    pintarQuienPuerta();
+}
+/**
+ * M3 (tanda 4): la lista larga «Lo que va a revisar» se vuelve un renglón al pie: «Hasta ahora · 6 en verde · 1 aviso».
+ * Mientras falte un dato no se cuentan las reglas que solo se quejan de ESE dato (el manifiesto vacío sale «legal» en
+ * reglas.js): contarlas diría «no entra» por algo que todavía no se teclea. Con todo capturado, dice qué va a salir.
+ */
+const REGLAS_DEL_CAMPO = { 'el programa': ['Pre-alta', 'Carrier'], 'la placa del tractor': ['Placa'], 'el manifiesto': ['Manifiesto'], 'la corriente': ['Corriente'] };
+function pintarVivoPuerta(e, faltan) {
+    const vivo = $('puVivo'); vivo.textContent = '';
+    if (faltan.includes('el programa')) { vivo.textContent = 'Elige el programa: la revisión en vivo empieza con él.'; return; }
+    const callar = new Set(faltan.flatMap(f => REGLAS_DEL_CAMPO[f] || []));
+    if (!String($('puChofer').value).trim() && !$('puChoferNombre').value.trim()) callar.add('Chofer');
+    if (faltan.length) callar.add('Art. 79');   // la casilla vive en la última pantalla: avisar antes de llegar a ella es ruido
+    const hs = e.hallazgos.filter(h => !callar.has(h.regla));
+    const n = c => hs.filter(h => h.clase === c).length;
+    const cifra = (texto, tono) => { vivo.appendChild(document.createTextNode(' · ')); vivo.appendChild(el('b', 'e-' + tono, texto)); };
+    if (faltan.length) vivo.appendChild(el('span', '', 'Hasta ahora'));
+    else { const def = VEREDICTOS[e.resultado]; vivo.appendChild(document.createTextNode('Va a salir ')); vivo.appendChild(el('b', def.clase.replace('v-', 'e-'), def.palabra)); }
+    cifra(`${n('ok')} en verde`, 'ok');
+    if (n('aviso')) cifra(plural(n('aviso'), 'aviso'), 'warn');
+    if (n('comercial')) cifra(`${n('comercial')} para gerencia`, 'warn');
+    if (n('legal')) cifra(`${n('legal')} no ${n('legal') === 1 ? 'pasa' : 'pasan'}`, 'bad');
+    if (faltan.length) vivo.appendChild(el('span', 'falta', ` · falta ${faltan.join(', ')}`));
 }
 
 /**
@@ -776,10 +893,12 @@ function pintarPrevioPuerta() {
  * cubre la cabecera, la palabra es enorme y la regla que decidio va primero y en negrita. Un chofer
  * a tres metros sabe si entra sin leer nada (mockup aprobado 2026-09-05).
  */
+// Tanda 4 (M4): cada veredicto dice qué hacer después — el guion para el chofer y un botón que dice a dónde lleva.
+// La frase de «Pasa» se arma con la cuenta de reglas (pintarResultadoCompuerta).
 const VEREDICTOS = {
-    pasa: { clase: 'v-ok', palabra: 'Pasa', frase: 'Todo lo legal está amparado. Que suba a la báscula.', boton: 'Registrar: la góndola pasa a báscula' },
-    'rechazo-legal': { clase: 'v-bad', palabra: 'No entra', frase: 'Rechazo legal. El residuo no se recibe y no hay dispensa.', boton: 'Registrar el rechazo' },
-    'excepcion-comercial': { clase: 'v-warn', palabra: 'Espera', frase: 'Excepción comercial. Puede entrar si gerencia lo autoriza con motivo.', boton: 'Registrar y pedir autorización' }
+    pasa: { clase: 'v-ok', palabra: 'Pasa', frase: '', boton: 'Seguir a peso bruto ›', guion: '«Pásate a la báscula.»' },
+    'rechazo-legal': { clase: 'v-bad', palabra: 'No entra', frase: 'Falta un requisito legal · sin dispensa', boton: 'Registrar el rechazo' },
+    'excepcion-comercial': { clase: 'v-warn', palabra: 'Espera', frase: 'Falta un documento comercial · lo autoriza gerencia', boton: 'Mandar a gerencia y volver a la lista', guion: '«Espérate en el patio; gerencia está autorizando.»' }
 };
 /**
  * Pinta una lista de hallazgos. Compartida por el veredicto y por la vista previa de la puerta:
@@ -815,8 +934,10 @@ function pintarResultadoCompuerta() {
     const v = $('veredicto');
     v.classList.remove('oculto', 'v-ok', 'v-bad', 'v-warn');
     v.classList.add(def.clase);
+    const verdes = r.hallazgos.filter(h => h.clase === 'ok').length, avisos = r.hallazgos.filter(h => h.clase === 'aviso').length;
+    $('vkK').textContent = `Paso 2 de 5 · Veredicto · ${placaNormal(r.campos.placaTractor) || '—'}`;
     $('vkW').textContent = def.palabra;
-    $('vkM').textContent = def.frase;
+    $('vkM').textContent = def.frase || `${verdes} en verde${avisos ? ` · ${plural(avisos, 'aviso')}` : ''}`;
     // El folio R- se conoce al registrar; el E- nace en el bruto: se anuncia con puntos, no con un numero que cambie.
     const aa = String(new Date().getFullYear()).slice(-2);
     $('vkFolio').textContent = r.resultado === 'pasa' ? `→ E-${aa}-·····` : r.resultado === 'rechazo-legal' ? `R-${aa}-····` : '';
@@ -831,15 +952,22 @@ function pintarResultadoCompuerta() {
     // Las reglas: primero las que decidieron (legal si es rechazo, comercial si es excepcion), luego el resto.
     const decide = r.resultado === 'rechazo-legal' ? 'legal' : r.resultado === 'excepcion-comercial' ? 'comercial' : null;
     pintarHallazgos($('puHallazgos'), r.hallazgos, decide);
-    $('vkLbl').textContent = decide ? 'Qué lo decidió' : `${r.hallazgos.length} reglas · ${plural(r.hallazgos.filter(h => h.clase === 'aviso').length, 'aviso')}`;
+    // M4 (tanda 4): lo único que hay que leer va arriba —la regla que decidió, o los avisos si pasa— y las verdes se pliegan
+    // detrás de «Ver las N reglas». Sin avisos ni culpable, la lista entera queda plegada: todo está en verde.
+    const plegables = r.hallazgos.filter(h => h.clase === 'ok').length;
+    $('puHallazgos').classList.toggle('plegada', plegables > 0);
+    $('btnVerReglas').classList.toggle('oculto', plegables === 0);
+    $('btnVerReglas').textContent = `Ver las ${r.hallazgos.length} reglas`;
+    $('vkLbl').textContent = decide ? 'Qué lo decidió' : avisos ? plural(avisos, 'aviso · no detiene', 'avisos · no detienen') : 'Todo en verde';
 
     $('puExcepcion').classList.toggle('oculto', r.resultado !== 'excepcion-comercial');
-    const guion = $('vkGuion');
-    guion.classList.toggle('oculto', r.resultado !== 'rechazo-legal');
+    const guion = $('vkGuion'), nota = $('vkNota');
+    nota.classList.toggle('oculto', r.resultado !== 'rechazo-legal');
     if (r.resultado === 'rechazo-legal') {
         const culpables = r.hallazgos.filter(h => h.clase === 'legal').map(h => h.regla.toLowerCase());
-        guion.lastElementChild.textContent = `Falta lo legal (${culpables.join(', ')}). Se corrige en el oficio o en la pre-alta, no aquí. Se lleva su constancia con el folio R-.`;
-    }
+        guion.lastElementChild.textContent = `«No puede descargar: falta lo legal (${culpables.join(', ')}).»`;
+        nota.textContent = '¿Fue un error al teclear? «Corregir lo capturado» antes de registrar. Si no, se corrige en el oficio o en la pre-alta, no aquí, y el chofer se lleva su constancia con el folio R-.';
+    } else guion.lastElementChild.textContent = def.guion;
     $('btnRegistrarPuerta').textContent = def.boton;
     v.scrollTop = 0;
     // Dialogo modal: el foco entra al veredicto y sale con Esc (F3). El boton principal recibe el foco.
@@ -893,19 +1021,25 @@ async function registrarPuerta() {
         const nuevo = await estado.cliente.crearRenglon(estado.siteId, L.embarques, campos, av);
         if (esRechazo) await asegurarFolioUnico(nuevo, 'R', av);
         anclar('embarques', nuevo);   // C-23: sin duplicar el id si el refresco ya lo trajo
-        avisar(esRechazo ? `Rechazo registrado con folio ${nuevo.Title}. La góndola no entra.` :
-            r.resultado === 'pasa' ? 'Registrado. Ya aparece en Góndolas › En planta.' :
-            'Registrado. Gerencia lo ve en Hoy › Pendiente revisar; en Góndolas queda en ámbar hasta que autorice.', 'bien');
         for (const id of ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo']) $(id).value = '';
         $('pu79').checked = false;
         // U-02 (v0.21.0): tambien el chofer (la siguiente gondola heredaba su ChoferId) y se repintan chips y vista
         // previa: antes los bloques seguian en «Listo» con los campos vacios. El programa y la corriente se quedan:
-        // las gondolas del mismo programa llegan en fila.
+        // las gondolas del mismo programa llegan en fila (tanda 4: por eso la siguiente arranca en el vehículo).
         $('puChofer').value = ''; delete $('puChoferNombre').dataset.auto;
+        $('puTeclear').open = false; $('puChoferOtro').open = false;
         cerrarVeredicto();
-        pintarInsignias();
         estado.ultimaCompuerta = null;
-        pintarUnidadesPuerta(); pintarPrevioPuerta();
+        pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta();
+        irSubpaso(subpasoInicial());
+        // M4 (tanda 4): cada veredicto lleva a lo que sigue. Pasa → el peso bruto de ESA góndola; Espera → la lista, donde queda
+        // en ámbar; No entra → Rechazos, con su folio R-. El aviso va después de irA(), que limpia los avisos.
+        irA('bascula');
+        elegirVistaGondolas(esRechazo ? 'rechazos' : 'planta');
+        if (r.resultado === 'pasa') abrirPesaje(vivo('embarques', nuevo), 'bruto');
+        avisar(esRechazo ? `Rechazo registrado con folio ${nuevo.Title}. La góndola no entra.` :
+            r.resultado === 'pasa' ? 'Registrado: pasa. Sigue el peso bruto, con la góndola llena en la báscula.' :
+            'Registrado. Gerencia lo ve en Hoy › Pendiente revisar; en Góndolas queda en ámbar hasta que autorice.', 'bien');
     } catch (e) {
         avisar('No se pudo registrar: ' + (e && e.message ? e.message : e), 'error');
     } finally { $('btnRegistrarPuerta').textContent = textoBoton; } });
@@ -2954,9 +3088,21 @@ if (CONFIG.refrescoMs > 0) setInterval(() => {
 }, CONFIG.refrescoMs);
 for (const b of botonesRail()) b.addEventListener('click', () => irDesdePestana(b.dataset.p));   // C-27 / U-41
 // Tanda 2 (v0.47.0): la llegada se abre con «+ Nueva góndola» y regresa por la miga «Góndolas».
-$('btnNuevaGondola').addEventListener('click', () => irDesdePestana('puerta'));
+// Tanda 4: una góndola nueva empieza en la primera pantalla que falta — el vehículo, si el programa ya está elegido. Si hay
+// una captura a medias (se salió a mirar la lista y se volvió), se retoma donde estaba.
+$('btnNuevaGondola').addEventListener('click', () => {
+    if (!['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre'].some(id => $(id).value.trim())) estado.subpasoPuerta = subpasoInicial();
+    irDesdePestana('puerta');
+});
 $('migaGondolasPuerta').addEventListener('click', () => irDesdePestana('bascula'));
-$('puPrealta').addEventListener('change', () => { pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta(); });
+$('puPrealta').addEventListener('change', () => { marcarOpcion($('puProgramas'), $('puPrealta').value); pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta(); });
+$('puChofer').addEventListener('change', () => marcarOpcion($('puChoferes'), $('puChofer').value));
+$('puCorriente').addEventListener('change', () => marcarOpcion($('puCorrientes'), $('puCorriente').value));
+for (const b of $('puSubpasos').querySelectorAll('button')) b.addEventListener('click', () => irSubpaso(Number(b.dataset.s), true));
+$('btnPuAtras').addEventListener('click', () => irSubpaso(estado.subpasoPuerta - 1, true));
+$('btnPuSiguiente').addEventListener('click', () => irSubpaso(estado.subpasoPuerta + 1, true));
+$('btnVerReglas').addEventListener('click', () => { $('puHallazgos').classList.remove('plegada'); $('btnVerReglas').classList.add('oculto'); });
+pintarCorrientesPuerta();
 // U-17 (v0.22.0): se compara con data-placa; el textContent del chip trae pegado el <small> («55XY9Kgóndola · 20,000 kg»)
 // y una unidad sin placa plana nunca se marcaba al teclear.
 $('puPlaca').addEventListener('input', () => marcarChip($('puUnidades'), placaNormal($('puPlaca').value)));   // C-28: clase y aria-pressed
@@ -2972,7 +3118,13 @@ for (const id of ['puChofer', 'puCorriente', 'pu79']) $(id).addEventListener('ch
 $('btnCompuerta').addEventListener('click', correrCompuerta);
 $('puMotivo').addEventListener('input', () => $('puMotivo').removeAttribute('aria-invalid'));   // U-39: al escribir el motivo se quita la marca
 $('btnRegistrarPuerta').addEventListener('click', registrarPuerta);
-$('btnVolverVeredicto').addEventListener('click', () => { cerrarVeredicto(); estado.ultimaCompuerta = null; });
+// Tanda 4: «Corregir lo capturado» regresa a la pantalla de la regla que decidió (o a la carga, si pasó).
+$('btnVolverVeredicto').addEventListener('click', () => {
+    const r = estado.ultimaCompuerta, decide = r && (r.resultado === 'rechazo-legal' ? 'legal' : r.resultado === 'excepcion-comercial' ? 'comercial' : null);
+    const culpable = decide && r.hallazgos.find(h => h.clase === decide);
+    cerrarVeredicto(); estado.ultimaCompuerta = null;
+    irSubpaso(culpable ? subpasoDeRegla(culpable.regla) : 3);
+});
 // Teclado numerico de la bascula (celular): digitos enteros, sin coma. En computadora se oculta por CSS.
 $('teclado').addEventListener('click', ev => {
     const b = ev.target.closest('button[data-k]'); if (!b) return;

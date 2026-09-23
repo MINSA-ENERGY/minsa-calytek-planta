@@ -115,7 +115,7 @@ button:disabled { opacity: .45; cursor: default; }
 h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-transform: uppercase; color: var(--mute); font-weight: 600; }
 
 /* Etiqueta pequeña en mayúsculas con espaciado: el idioma de las cabeceras de campo, de columna y de sección (mn-label). */
-.k, .etiqueta-campo, label, .lbl, .revisa .lbl, .gtabla th, .kpi .l, .ctx span, .ta small, .guion small {
+.k, .etiqueta-campo, label, .lbl, .gtabla th, .kpi .l, .ctx span, .ta small, .guion small {
     font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; color: var(--mute);
 }
 
@@ -696,18 +696,77 @@ button:not(:disabled):active { transform: scale(.98); }
 .bloque .bt h2 { margin: 0; flex: 1; font-family: var(--titulo); font-size: 1rem; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ink); }
 .bloque .bt .est { margin-left: auto; font-family: var(--mono); font-size: .68rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; text-align: right; color: var(--warn-fg); }
 .bloque.listo .bt .est { color: var(--ok-fg); }
-.tarjeta.forma { background: transparent; border: 0; padding: 0; margin: 0; }
-/* Puerta: la lista viva de reglas, la misma evaluación que corre el botón (G4). */
-.revisa { margin-top: 0; padding: 0; overflow: hidden; }
-.revisa .lbl { display: block; margin: 0; padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line-soft); }
-.revisa .reglas { padding: 0 var(--sp-4); }
-.revisa .cuenta { font-size: .85rem; color: var(--mute); line-height: 1.45; margin: 0; padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line-soft); }
-.revisa .cuenta b { color: var(--ink); }
-.revisa .cuenta.v-ok b { color: var(--ok-fg); }
-.revisa .cuenta.v-warn b { color: var(--warn-fg); }
-.revisa .cuenta.v-bad b { color: var(--bad-fg); }
-.revisa .principal { margin: 0 var(--sp-4) var(--sp-4); width: calc(100% - 2 * var(--sp-4)); }
-.revisa.incompleto .reglas { opacity: .55; }   /* con campos sin capturar la lista todavía no es un pronóstico */
+/* ---------------------------------------------------------------- ASISTENTE DE LA LLEGADA (tanda 4, v0.49.0)
+   El paso 1 en tres pantallas —Programa · Vehículo y chofer · Carga— con renglones tocables (M1–M3 del artifact
+   3Jnv6cT49BgMbNsNEvRvKu). Una columna de 44rem también en escritorio: es una pregunta a la vez, no un formulario. */
+.asis { max-width: 44rem; display: flex; flex-direction: column; gap: var(--sp-4); }
+.asis-cab { display: grid; gap: var(--sp-3); }
+/* La barra de los cinco pasos, sin burbujas (decisión 2): segmentos y, en escritorio, su nombre. El primero se llena por tercios. */
+.pasos5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.pasos5 div { display: grid; gap: 6px; min-width: 0; font-size: .8rem; color: var(--faint); }
+.pasos5 i { height: 4px; border-radius: 2px; background: var(--line); }
+.pasos5 span { line-height: 1.25; }   /* en escritorio el nombre entero, en dos renglones si hace falta */
+@media (max-width: 720px) { .pasos5 span { display: none; } }   /* en celular lo dice «Paso 1 de 5 · …» */
+.pasos5 .ahora { color: var(--ink); font-weight: 600; --lleno: 33%; }
+.pasos5 .ahora[data-tercio="2"] { --lleno: 66%; }
+.pasos5 .ahora[data-tercio="3"] { --lleno: 100%; }
+.pasos5 .ahora i { background: linear-gradient(90deg, var(--acc) var(--lleno), var(--line) var(--lleno)); }
+.asis-quien { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); }
+.asis-quien > div { min-width: 0; }
+.asis-quien b { display: block; font-weight: 600; color: var(--ink); }
+.asis-quien b.mono { font-family: var(--mono); font-weight: 500; }
+.asis-quien small { display: block; color: var(--mute); font-size: .82rem; }
+.asis-k { font-family: var(--mono); font-size: .76rem; color: var(--acc); white-space: nowrap; }
+/* Las tres pantallas como pestañas: tocar una salta a ella; su estado dice qué falta (U-48, antes en la cabecera de cada bloque). */
+.subpasos { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; background: var(--surf); }
+.subpasos button { display: grid; gap: 1px; align-content: center; min-height: var(--control-h); min-width: 0; padding: 6px 10px; border: 0; border-radius: 0; background: none; font: inherit; text-align: left; color: var(--ink-body); cursor: pointer; }
+.subpasos button + button { border-left: 1px solid var(--line); }
+.subpasos button > span:first-child { font-size: .82rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subpasos .est { font-family: var(--mono); font-size: .64rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--warn-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subpasos .listo .est { color: var(--ok-fg); }
+.subpasos button[aria-current="step"] { background: var(--acc-soft); }
+.subpasos button[aria-current="step"] > span:first-child { color: var(--acc); font-weight: 600; }
+.subpasos button:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+.asis-pantalla { display: flex; flex-direction: column; gap: var(--sp-3); }
+.asis-pantalla .campo { margin: 0; }
+.asis-pantalla .chk { margin-top: 0; }
+.asis-pantalla .pista { margin: 0; }
+.pregunta { font-family: var(--titulo); font-weight: 600; font-size: 1.3rem; color: var(--ink); margin: 0; text-wrap: balance; }
+.pregunta.chica { font-size: 1.1rem; margin-top: var(--sp-2); }
+.pregunta:focus { outline: none; }
+.asis-pantalla .sub { font-size: .88rem; color: var(--mute); margin: calc(-1 * var(--sp-2)) 0 0; }
+/* M2: elegir tocando. Cada renglón es un botón que actúa como radio (aria-pressed); el select oculto guarda el valor. */
+.opciones { display: grid; background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.opciones .o { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; width: 100%; min-height: 58px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: none; font: inherit; text-align: left; color: var(--ink-body); cursor: pointer; }
+.opciones .o:last-child { border-bottom: 0; }
+.opciones .o:hover { background: var(--rail-hover); }
+.opciones .o:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+.opciones .o .r { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); }
+.opciones .o.sel, .opciones .o.sel:hover { background: var(--acc-soft); }
+.opciones .o.sel .r { border-color: var(--acc); box-shadow: inset 0 0 0 3px var(--surf), inset 0 0 0 10px var(--acc); }
+.opciones .o .t { min-width: 0; }
+.opciones .o .t b { display: block; font-weight: 600; font-size: .95rem; color: var(--ink); overflow-wrap: anywhere; }
+.opciones .o .t b.mono { font-weight: 500; letter-spacing: .02em; }
+.opciones .o .t small { display: block; font-size: .82rem; color: var(--mute); }
+.opciones .o .d { font-family: var(--mono); font-size: .78rem; color: var(--mute); white-space: nowrap; }
+.opciones .o.fuera .t b { color: var(--mute); font-weight: 500; }
+.opciones > .pista { margin: 0; padding: 12px 14px; }
+.teclear summary { list-style: none; cursor: pointer; width: fit-content; font-size: .88rem; font-weight: 600; color: var(--acc); }
+.teclear summary::-webkit-details-marker { display: none; }
+.teclear[open] summary { margin-bottom: var(--sp-2); }
+/* El pie: la línea viva (M3) y los botones. En celular se queda pegado arriba de la barra de pestañas. */
+.asis-pie { display: grid; gap: var(--sp-2); }
+.vivo { margin: 0; font-size: .86rem; color: var(--mute); }
+.vivo b { font-family: var(--mono); font-weight: 500; }
+.asis-botones { display: flex; gap: var(--sp-2); justify-content: flex-end; }
+.asis-botones .secundario { width: auto; margin-top: 0; }
+.asis-botones .principal { width: auto; min-width: 16rem; }
+@media (max-width: 720px) {
+    .asis-pie { position: sticky; bottom: calc(var(--sp-7) + 8px + env(safe-area-inset-bottom)); z-index: 5; margin: 0 calc(-1 * var(--sp-3)); padding: var(--sp-3); background: var(--surf); border-top: 1px solid var(--line); }
+    .asis-botones { flex-direction: column-reverse; }
+    .asis-botones .principal, .asis-botones .secundario { width: 100%; min-width: 0; }
+    .asis-botones .principal { min-height: 52px; }
+}
 .reglas { list-style: none; margin: 0; padding: 0; }
 .reglas li { display: grid; grid-template-columns: 9px 1fr auto; gap: var(--sp-2); align-items: center; padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft); font-size: .88rem; }
 .reglas li:last-child { border-bottom: 0; }
@@ -733,13 +792,11 @@ button:not(:disabled):active { transform: scale(.98); }
 .btn.tono:hover:not(:disabled) { background: var(--tono); filter: brightness(1.06); }
 .btn.contorno { background: transparent; }
 
-/* I6 (7-sep): unidades del carrier en la puerta — botones con la capacidad debajo; la elegida lleva borde de marca */
-.unidades-puerta { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-1); }
-.unidades-puerta .u { display: flex; align-items: center; gap: var(--sp-3); padding: 6px 12px; border-radius: var(--r-sm); background: var(--surf); border: 1px solid var(--line); cursor: pointer; text-align: left; font: inherit; color: var(--ink); width: auto; line-height: 1.3; }
-.unidades-puerta .u .t { flex: 1; min-width: 0; font-family: var(--mono); font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: .02em; font-size: .8rem; }
-.unidades-puerta .u .t small { display: block; font-family: var(--texto); font-weight: 400; letter-spacing: 0; color: var(--mute); font-size: .7rem; }
-.unidades-puerta .u.sel { border-color: var(--acc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acc) 25%, transparent); }
-.unidades-puerta .pista { margin: 0; flex-basis: 100%; }
+/* M4 (tanda 4): en el veredicto las reglas verdes se pliegan detrás de «Ver las N reglas»; lo que hay que leer queda arriba. */
+.reglas.plegada li.ok { display: none; }
+.reglas.plegada:not(:has(li:not(.ok))) { display: none; }
+.enlace { align-self: flex-start; min-height: 0; padding: 0; border: 0; background: none; font: inherit; font-size: .88rem; font-weight: 600; color: var(--acc); cursor: pointer; }
+.enlace:hover { text-decoration: underline; }
 
 /* Rediseño 23-sep (tanda 1): el select lleva un triángulo relleno pequeño en vez de la flecha del sistema. Dos degradados
    y no un SVG en data-URI, para que el color siga a --mute en los dos temas. Las reglas con padding propio se nombran aquí. */
