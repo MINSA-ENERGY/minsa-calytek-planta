@@ -1,6 +1,6 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -265,4 +265,42 @@ assert.equal(residuoDe(''), 'RECORTES DE PERFORACIÓN');
     assert.equal(yaCapturado({ Etapa: 'anulado' }), 'la anuló otra sesión');
     assert.equal(yaCapturado({ Etapa: 'rechazado', Title: 'R-26-0004' }), 'quedó como rechazo R-26-0004');
     assert.equal(yaCapturado(null), 'está en otra etapa');
+}
+
+// C-55 (v0.52.0): un solo catálogo de corrientes y una sola traducción de la compuerta.
+{
+    assert.equal(CORRIENTES.length, 4);
+    assert.equal(etiquetaCorriente('base-aceite'), 'Recorte base aceite');
+    assert.equal(etiquetaCorriente('fluidos-base-agua'), 'Fluido agotado base agua');
+    assert.equal(etiquetaCorriente('otra-cosa'), 'otra-cosa');   // renglón viejo fuera del catálogo: tal cual
+    assert.equal(etiquetaCorriente(undefined), '');
+    assert.deepEqual([palabraCompuerta('pasa').palabra, palabraCompuerta('rechazo-legal').palabra, palabraCompuerta('excepcion-comercial').palabra], ['Pasa', 'No entra', 'Espera']);
+    assert.equal(palabraCompuerta('excepcion-comercial', true).corta, 'excepción ok');
+    assert.equal(palabraCompuerta('excepcion-comercial', false).corta, 'espera');
+    assert.equal(palabraCompuerta('pasa', true).corta, 'pasa');   // la firma solo cuenta en la excepción
+    const r = compuerta({ ...base, carrier: { ...carrier, Corrientes: 'base-agua' } });
+    assert.ok(r.hallazgos.find(h => h.regla === 'Corriente').detalle.includes('no ampara «Recorte base aceite» (ampara: Recorte base agua)'));
+}
+
+// C-56 (v0.52.0): cada nombre de regla que emite compuerta() —en verde y en falla— tiene pantalla en la tabla. Antes era un
+// regex sobre el prefijo: una regla renombrada caía callada en la pantalla 2 y «Corregir lo capturado» llevaba a otra.
+{
+    const vencido = en(-5);
+    const casos = [
+        base,
+        { ...base, prealta: null, carrier: null, unidad: null, chofer: null, manifiesto: '' },
+        { ...base, prealta: { ...prealta, Estado: 'borrador', CarrierId: 99, UnidadesIds: '77', ChoferesIds: '88' }, corriente: '',
+          carrier: { ...carrier, AutorizacionASEA: '', VigenciaASEA: vencido, CSFVigencia: vencido },
+          unidad: { ...unidad, FolioOficio: '', PlacaPlana: 'OTRA', TarjetaVigencia: vencido, PolizaVigencia: vencido },
+          chofer: { ...chofer, LicenciaVigencia: vencido } }
+    ];
+    const nombres = new Set(casos.flatMap(c => compuerta(c).hallazgos.map(h => h.regla)));
+    nombres.add('Art. 79');   // lo agrega app.js (evaluarPuerta) como aviso
+    assert.ok(nombres.size >= 17, `solo ${nombres.size} nombres: ${[...nombres]}`);
+    for (const n of nombres) assert.ok(n in PANTALLA_DE_REGLA, `la regla «${n}» no tiene pantalla en PANTALLA_DE_REGLA`);
+    for (const n of Object.keys(PANTALLA_DE_REGLA)) assert.ok(nombres.has(n), `PANTALLA_DE_REGLA trae «${n}», que ninguna regla emite`);
+    assert.equal(subpasoDeRegla('CSF del carrier'), 1);
+    assert.equal(subpasoDeRegla('Licencia del chofer'), 2);
+    assert.equal(subpasoDeRegla('Corriente'), 3);
+    assert.equal(subpasoDeRegla('Art. 79'), 3);
 }

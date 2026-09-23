@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla } from './reglas.js';
 
-const VERSION = '0.51.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.52.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -413,6 +413,8 @@ function firmaDe(tipo, id, sello) {
 }
 function prealtaFirmada(p) { return p.Estado === 'firmada' && !!firmaDe('prealta', p.id, p.FirmadaPor); }
 function excepcionAutorizada(e) { return !!e.ExcepcionAutorizo && !!firmaDe('excepcion', e.id, e.ExcepcionAutorizo); }
+/** C-55 (v0.52.0): la compuerta de un embarque en palabras, con la firma y no el sello decidiendo la excepción. */
+const palabraCompuertaDe = e => palabraCompuerta(e.Compuerta, excepcionAutorizada(e));
 /** Sellos sin firma que valga (de antes del corte, por fuera de la app, o firmada por quien no tiene el rol): la compuerta no los acepta. */
 function sellosSinFirma() {
     return { prealtas: estado.prealtas.filter(p => p.Estado === 'firmada' && !firmaDe('prealta', p.id, p.FirmadaPor)),
@@ -633,7 +635,7 @@ function pintarPuerta() {
     const borradores = estado.prealtas.filter(p => p.Estado === 'borrador' || (p.Estado === 'firmada' && !prealtaFirmada(p)));
     const pp = $('puPendientes'); pp.classList.toggle('oculto', !borradores.length);
     if (borradores.length) pp.textContent = `${borradores.length === 1 ? 'Hay 1 pre-alta por firmar' : `Hay ${borradores.length} pre-altas por firmar`}: ${borradores.map(p => p.Title).join(' · ')}. Sus góndolas no pueden entrar hasta que el validador firme.`;
-    opciones($('puPrealta'), firmadas, p => p.id, p => `${p.Title} · ${p.Corriente || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}`);
+    opciones($('puPrealta'), firmadas, p => p.id, p => `${p.Title} · ${etiquetaCorriente(p.Corriente) || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}`);
     if (!$('puPrealta').value && firmadas.length === 1) $('puPrealta').value = String(firmadas[0].id);   // U-40: una sola firmada no se hace elegir
     pintarProgramasPuerta(firmadas);
     pintarChoferesPuerta();
@@ -696,7 +698,7 @@ function pintarProgramasPuerta(firmadas) {
     for (const p of firmadas) {
         const { rec, esp } = gondolasDe(p);
         const b = renglonOpcion({ valor: p.id, sel: String(p.id) === $('puPrealta').value, titulo: p.Title,
-            detalle: [nombreDe(estado.carriers, p.CarrierId), p.Corriente].filter(Boolean).join(' · '),
+            detalle: [nombreDe(estado.carriers, p.CarrierId), etiquetaCorriente(p.Corriente)].filter(Boolean).join(' · '),
             dato: esp ? `${rec} de ${esp}` : plural(rec, 'recibida') });
         b.addEventListener('click', () => elegirEnSelect('puPrealta', p.id));
         cont.appendChild(b);
@@ -704,9 +706,9 @@ function pintarProgramasPuerta(firmadas) {
 }
 function pintarCorrientesPuerta() {
     const cont = $('puCorrientes'); cont.textContent = '';
-    for (const o of [...$('puCorriente').options].filter(x => x.value)) {
-        const b = renglonOpcion({ valor: o.value, sel: o.value === $('puCorriente').value, titulo: o.textContent });
-        b.addEventListener('click', () => elegirEnSelect('puCorriente', o.value));
+    for (const [valor, titulo] of CORRIENTES) {   // C-55: del catálogo, no del select oculto
+        const b = renglonOpcion({ valor, sel: valor === $('puCorriente').value, titulo });
+        b.addEventListener('click', () => elegirEnSelect('puCorriente', valor));
         cont.appendChild(b);
     }
 }
@@ -727,12 +729,7 @@ function enfocarCampoPuerta(id) {
     const destino = id === 'puPrealta' ? $('puProgramas').querySelector('.o') : id === 'puCorriente' ? $('puCorrientes').querySelector('.o') : $(id);
     if (destino) destino.focus();
 }
-/** «Corregir lo capturado» lleva a la pantalla de la regla que decidió (la placa → el vehículo; el manifiesto → la carga). */
-function subpasoDeRegla(regla) {
-    if (/^(Pre-alta|Carrier|Autorizaci|CSF)/.test(regla)) return 1;
-    if (/^(Manifiesto|Corriente|Art)/.test(regla)) return 3;
-    return 2;
-}
+// C-56 (v0.52.0): subpasoDeRegla vive en reglas.js, con tabla explícita y su prueba contra cada nombre que emite compuerta().
 // I6 (7-sep): las unidades que la pre-alta autorizo (o, si no marco ninguna, todas las activas del carrier).
 // Tocar una llena placa tractor y plana; la seleccion se marca comparando con lo que hay en el campo, asi que
 // teclear otra placa la desmarca sola. La compuerta sigue evaluando la placa del campo, no la seleccion.
@@ -907,9 +904,9 @@ function pintarVivoPuerta(e, faltan) {
 // Tanda 4 (M4): cada veredicto dice qué hacer después — el guion para el chofer y un botón que dice a dónde lleva.
 // La frase de «Pasa» se arma con la cuenta de reglas (pintarResultadoCompuerta).
 const VEREDICTOS = {
-    pasa: { clase: 'v-ok', palabra: 'Pasa', frase: '', boton: 'Seguir a peso bruto ›', guion: '«Pásate a la báscula.»' },
-    'rechazo-legal': { clase: 'v-bad', palabra: 'No entra', frase: 'Falta un requisito legal · sin dispensa', boton: 'Registrar el rechazo' },
-    'excepcion-comercial': { clase: 'v-warn', palabra: 'Espera', frase: 'Falta un documento comercial · lo autoriza gerencia', boton: 'Mandar a gerencia y volver a la lista', guion: '«Espérate en el patio; gerencia está autorizando.»' }
+    pasa: { clase: 'v-ok', palabra: palabraCompuerta('pasa').palabra, frase: '', boton: 'Seguir a peso bruto ›', guion: '«Pásate a la báscula.»' },
+    'rechazo-legal': { clase: 'v-bad', palabra: palabraCompuerta('rechazo-legal').palabra, frase: 'Falta un requisito legal · sin dispensa', boton: 'Registrar el rechazo' },
+    'excepcion-comercial': { clase: 'v-warn', palabra: palabraCompuerta('excepcion-comercial').palabra, frase: 'Falta un documento comercial · lo autoriza gerencia', boton: 'Mandar a gerencia y volver a la lista', guion: '«Espérate en el patio; gerencia está autorizando.»' }
 };
 /**
  * Pinta una lista de hallazgos. Compartida por el veredicto y por la vista previa de la puerta:
@@ -1215,16 +1212,17 @@ function pintarCapturado(e) {
     const par = (k, v, clase) => { if (!v || v === '—') return; dl.appendChild(el('dt', '', k)); dl.appendChild(el('dd', clase || '', v)); };
     const pre = porId(estado.prealtas, e.PreAltaId);
     const corr = e.CorrienteDeclarada || (pre && pre.Corriente);
-    const opc = corr && [...$('puCorriente').options].find(o => o.value === corr);
     sec('Programa y documentos', horaMexico(e.Arribo, 'hora'));
     par('Programa', nombreDe(estado.prealtas, e.PreAltaId)); par('Carrier', nombreDe(estado.carriers, e.CarrierId));
     par('Placas', [e.PlacaTractor, e.PlacaPlana].filter(Boolean).join(' · '), 'mono');
     par('Chofer', e.ChoferNombre || nombreDe(estado.choferes, e.ChoferId));
-    par('Manifiesto', e.Manifiesto, 'mono'); par('Corriente', opc ? opc.textContent : corr);
+    par('Manifiesto', e.Manifiesto, 'mono'); par('Corriente', etiquetaCorriente(corr));
     par('Capturó', quien(e.CapturadoPor));
     const avisos = reglasDe(e, 'aviso');   // C-54
     sec('Veredicto');
-    par('Resultado', e.Compuerta === 'pasa' ? 'Pasa' : e.Compuerta === 'excepcion-comercial' ? (e.ExcepcionAutorizo ? `Espera · autorizó ${quien(e.ExcepcionAutorizo)}` : 'Espera autorización') : e.Compuerta, e.Compuerta === 'pasa' ? 'e-ok' : 'e-warn');
+    // C-55: un sello sin renglón en PLANTA_Firmas ya no se lee como autorización (lo mismo que dicen la lista y Hoy).
+    const pc = palabraCompuertaDe(e), autorizo = excepcionAutorizada(e);
+    par('Resultado', e.Compuerta !== 'excepcion-comercial' ? pc.palabra : autorizo ? `Espera · autorizó ${quien(e.ExcepcionAutorizo)}` : `Espera · ${selloSinFirma(e)}falta autorización`, 'e-' + pc.tono);
     par('Avisos', avisos, 'e-warn');
     if (e.BrutoKg) { sec('Peso bruto', horaMexico(e.BrutoHora, 'hora')); par('Folio', e.Title, 'mono'); par('Bruto', kgG(e.BrutoKg), 'mono'); }
     if (e.TaraKg) { sec('Tara', horaMexico(e.TaraHora, 'hora')); par('Tara', kgG(e.TaraKg), 'mono'); par('Neto', kgG(e.NetoKg), 'mono'); par('Ticket de báscula', e.TicketBascula, 'mono'); }
@@ -1655,7 +1653,7 @@ function pintarTicket(e, t = $('ticket')) {
     const filas = [
         ['Folio', e.Title], ['Manifiesto', e.Manifiesto || '—'],
         ['Generador', pre ? `${pre.Generador || ''} ${pre.GeneradorRegistro ? '(' + pre.GeneradorRegistro + ')' : ''}` : '—'],
-        ['Pozo / corriente', pre ? `${pre.Pozo || '—'} · ${e.CorrienteDeclarada || pre.Corriente || ''}` : (e.CorrienteDeclarada || '—')],
+        ['Pozo / corriente', pre ? `${pre.Pozo || '—'} · ${etiquetaCorriente(e.CorrienteDeclarada || pre.Corriente)}` : (etiquetaCorriente(e.CorrienteDeclarada) || '—')],   // C-55
         ['Transportista', nombreDe(estado.carriers, e.CarrierId)],
         ['Placas', [e.PlacaTractor, e.PlacaPlana].filter(Boolean).join(' / ') || '—'], ['Operador', e.ChoferNombre || nombreDe(estado.choferes, e.ChoferId)],   // U-87: placas sin la diagonal colgando
         ['Arribo', horaCorta(e.Arribo)],
@@ -1706,7 +1704,7 @@ function pintarPrealtas() {
         cont.textContent = '';
         for (const p of ps) {
             const g = gondolasDe(p);
-            const r = renglon(p.Title, `${p.Generador || '?'} · ${p.Pozo || '?'} · ${p.Corriente || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}${grupo === 'borrador' ? ` · 1er envío ${fechaCorta(p.FechaEstimada)}` : ''}`, 'Ver', () => verPrealta(vivo('prealtas', p)));
+            const r = renglon(p.Title, `${p.Generador || '?'} · ${p.Pozo || '?'} · ${etiquetaCorriente(p.Corriente) || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}${grupo === 'borrador' ? ` · 1er envío ${fechaCorta(p.FechaEstimada)}` : ''}`, 'Ver', () => verPrealta(vivo('prealtas', p)));
             r.classList.add('conavance');
             if (p.Campana) r.firstChild.firstChild.appendChild(el('span', 'folio', p.Campana));
             if (p.Estado !== grupo) r.firstChild.firstChild.appendChild(etiqueta(p.Estado || 'sin estado', p.Estado));
@@ -1892,7 +1890,7 @@ function verPrealta(p) {
     const ul = $('paDetalleLista'); ul.textContent = '';
     const carrier = porId(estado.carriers, p.CarrierId);
     const filas = [
-        ['Generador', `${p.Generador || '—'} · ${p.GeneradorRegistro || 'sin registro'}`], ['Pozo', p.Pozo || '—'], ['Corriente', p.Corriente || '—'],
+        ['Generador', `${p.Generador || '—'} · ${p.GeneradorRegistro || 'sin registro'}`], ['Pozo', p.Pozo || '—'], ['Corriente', etiquetaCorriente(p.Corriente) || '—'],
         ['Campaña', p.Campana || '—'], ['Carrier', carrier ? `${carrier.Title} · ${carrier.AutorizacionASEA || 'sin autorización'}` : '—'],
         ['Unidades', lista(p.UnidadesIds).map(id => { const u = porId(estado.unidades, id); return u ? `${u.Title}/${u.PlacaPlana || ''}` : `#${id}`; }).join(', ') || '—'],
         ['Choferes', lista(p.ChoferesIds).map(id => nombreDe(estado.choferes, id)).join(', ') || '—'],
@@ -1905,7 +1903,7 @@ function verPrealta(p) {
     const hallazgos = [];
     if (carrier) {
         const c = evaluarVigencia('Autorización ASEA del carrier', carrier.VigenciaASEA, 'legal', CONFIG.avisoVigenciaDias); if (c) hallazgos.push(c);
-        if (p.Corriente && lista(carrier.Corrientes).length && !lista(carrier.Corrientes).includes(p.Corriente)) hallazgos.push({ clase: 'legal', regla: 'Corriente', detalle: `el oficio del carrier no ampara ${p.Corriente}` });
+        if (p.Corriente && lista(carrier.Corrientes).length && !lista(carrier.Corrientes).includes(p.Corriente)) hallazgos.push({ clase: 'legal', regla: 'Corriente', detalle: `el oficio del carrier no ampara ${etiquetaCorriente(p.Corriente)}` });
     } else hallazgos.push({ clase: 'legal', regla: 'Carrier', detalle: 'sin carrier' });
     for (const id of lista(p.UnidadesIds)) { const u = porId(estado.unidades, id); if (!u) continue;
         if (!u.FolioOficio && !(carrier && carrier.FolioOficio)) hallazgos.push({ clase: 'legal', regla: `Unidad ${u.Title}`, detalle: 'sin folio de oficio que la ampare (ni en la unidad ni en el carrier)' });
@@ -2781,8 +2779,8 @@ async function altaVigencia(titulo, titular, rol, fuente, vence, folio) {
 // Tanda 3 (v0.48.0): la Fila del dia se fundio en Gondolas; de sus piezas queda la etiqueta de compuerta (Hoy y Reportes).
 function etiquetaCompuertaDe(e) {
     if (e.Etapa === 'anulado') return etiqueta('anulado', 'anulado');
-    return etiqueta(e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'no entró' : excepcionAutorizada(e) ? 'excepción ok' : 'espera',
-                    e.Compuerta === 'pasa' ? 'pasa' : e.Compuerta === 'rechazo-legal' ? 'rechazo-legal' : 'excepcion-comercial');
+    const pc = palabraCompuertaDe(e);   // C-55
+    return etiqueta(pc.corta, pc.clase);
 }
 // Franja: la excepcion que espera a gerencia es la unica decision que «Hoy» le pide a alguien.
 function pintarFranjaHoy(pendientes, botonesExcepcion) {
@@ -3199,6 +3197,9 @@ $('btnNuevaGondola').addEventListener('click', () => {
 $('migaGondolasPuerta').addEventListener('click', () => irDesdePestana('bascula'));
 $('puPrealta').addEventListener('change', () => { marcarOpcion($('puProgramas'), $('puPrealta').value); pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta(); });
 $('puChofer').addEventListener('change', () => marcarOpcion($('puChoferes'), $('puChofer').value));
+// C-55 (v0.52.0): los tres controles de corriente salen del mismo catálogo (CORRIENTES, reglas.js).
+for (const id of ['puCorriente', 'paCorriente']) for (const [v, txt] of CORRIENTES) { const o = el('option', '', txt); o.value = v; $(id).appendChild(o); }
+for (const [v, txt] of CORRIENTES) { const l = el('label', 'chk'), c = el('input'); c.type = 'checkbox'; c.name = 'pcCorr'; c.value = v; l.appendChild(c); l.appendChild(document.createTextNode(' ' + txt)); $('pcCorrientes').appendChild(l); }
 $('puCorriente').addEventListener('change', () => marcarOpcion($('puCorrientes'), $('puCorriente').value));
 for (const b of $('puSubpasos').querySelectorAll('button')) b.addEventListener('click', () => irSubpaso(Number(b.dataset.s), true));
 $('btnPuAtras').addEventListener('click', () => irSubpaso(estado.subpasoPuerta - 1, true));

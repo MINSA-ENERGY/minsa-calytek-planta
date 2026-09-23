@@ -166,10 +166,6 @@
           <div class="opciones" id="puCorrientes" role="group" aria-labelledby="puCorrienteTitulo"></div>
           <select id="puCorriente" class="oculto" aria-hidden="true" tabindex="-1">
             <option value="">— elige —</option>
-            <option value="base-agua">Recorte base agua</option>
-            <option value="base-aceite">Recorte base aceite</option>
-            <option value="fluidos-base-agua">Fluido agotado base agua</option>
-            <option value="fluidos-base-aceite">Fluido agotado base aceite</option>
           </select>
           <label class="chk"><input type="checkbox" id="pu79"> El residuo viene identificado, etiquetado y envasado (art. 79)</label>
         </div>
@@ -456,10 +452,6 @@
           <div class="campo"><label for="paCorriente">Corriente</label>
             <select id="paCorriente">
               <option value="">— elige —</option>
-              <option value="base-agua">Recorte base agua</option>
-              <option value="base-aceite">Recorte base aceite</option>
-              <option value="fluidos-base-agua">Fluido agotado base agua</option>
-              <option value="fluidos-base-aceite">Fluido agotado base aceite</option>
             </select></div>
         </div>
         <div class="bloque" id="paBloque2">
@@ -501,11 +493,8 @@
         <div class="campo"><label for="pcAut">No. autorización ASEA de transporte</label><input type="text" id="pcAut" class="mono" placeholder="00-ASEA-T-RME-00-00"></div>
         <div class="campo"><label for="pcVig">Vigencia de la autorización</label><input type="text" id="pcVig" class="fecha mono" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off"></div>
         <div class="campo"><label for="pcFolio">Folio del oficio ASEA</label><input type="text" id="pcFolio" class="mono" placeholder="UGI-DEMO-0000-2025"></div>
-        <div class="campo"><span class="etiqueta-campo">Corrientes que ampara el oficio</span>
-          <label class="chk"><input type="checkbox" value="base-agua" name="pcCorr"> Recorte base agua</label>
-          <label class="chk"><input type="checkbox" value="base-aceite" name="pcCorr"> Recorte base aceite</label>
-          <label class="chk"><input type="checkbox" value="fluidos-base-agua" name="pcCorr"> Fluido agotado base agua</label>
-          <label class="chk"><input type="checkbox" value="fluidos-base-aceite" name="pcCorr"> Fluido agotado base aceite</label>
+        <div class="campo" id="pcCorrientes"><span class="etiqueta-campo">Corrientes que ampara el oficio</span>
+          <!-- C-55 (v0.52.0): las casillas las pone app.js desde CORRIENTES de reglas.js -->
         </div>
         <div class="campo"><label for="pcSCT">No. registro SCT</label><input type="text" id="pcSCT"></div>
         <div class="campo"><label for="pcCSF">Vigencia CSF</label><input type="text" id="pcCSF" class="fecha mono" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off">

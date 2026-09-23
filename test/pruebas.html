@@ -1186,6 +1186,14 @@ try {
             await esperar(() => visible('baPesar'), 'pesaje 110'); poner('baKg', '41000'); await foto(); clic('btnGuardarPeso');
             await esperar(() => avisoCon('Bruto guardado'), 'bruto 110');
             const e110 = filas('embarques').find(e => e.fields.Manifiesto === 'MINSA/RME/110/2025');
+            // C-56 (v0.52.0): «Ver ticket» desde la pausa «A descargar» abre el ticket de ESA góndola. Y C-55: la corriente sale con su
+            // etiqueta en la hoja de lo capturado y en el ticket (antes el ticket imprimía el valor crudo «base-aceite»).
+            R.ok('C-56: tras el bruto se ve la pausa «A descargar»', visible('baAsis') && visible('baPausa'));
+            R.ok('C-55: «Lo capturado» dice la corriente con su etiqueta y el resultado Pasa', $('baCapturadoDl').textContent.includes('Recorte base aceite') && $('baCapturadoDl').textContent.includes('ResultadoPasa'), $('baCapturadoDl').textContent.slice(0, 160));
+            clic('btnPausaTicket'); await esperar(() => $('dlgTicket').open, 'ticket desde la pausa');
+            R.ok('C-56: «Ver ticket» desde la pausa abre el ticket de esa góndola: su folio, el bruto y la tara pendiente', $('tkPos').textContent.includes(e110.fields.Title) && $('ticketPop').textContent.includes('41,000 kg') && $('ticketPop').textContent.includes('pendiente'), $('ticketPop').textContent.slice(0, 200));
+            R.ok('C-55: el ticket imprime la corriente con su etiqueta, no el valor crudo', $('ticketPop').textContent.includes('Recorte base aceite') && !$('ticketPop').textContent.includes('base-aceite'));
+            clic('tkCerrar'); await esperar(() => !$('dlgTicket').open, 'ticket cerrado');
             // C-31 (v0.34.0): el buzón del árbol ya se había leído en 11b; el lote recién subido tiene que verse SIN Actualizar.
             {
                 const gets = DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length;
@@ -1217,6 +1225,12 @@ try {
             await esperar(() => visible('baPesar') && $('baTitulo').textContent.includes('Bruto'), 'pesaje A (111) abierto');
             clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga con pesaje A abierto');
             R.ok('C-12: el refresco con captura a medias no cierra el pesaje abierto ni repinta debajo', visible('baPesar') && $('baTitulo').textContent.includes('Bruto'));
+            // C-56 (v0.52.0): la miga con kg tecleados pasa por la misma pregunta que Cancelar; «Cancelar» del diálogo no suelta nada.
+            poner('baKg', '30000'); clic('btnBaGondolas'); await esperar(() => $('dlg').open, 'la miga pregunta con kg tecleados');
+            R.ok('C-56: la miga «Góndolas» con kg tecleados pregunta antes de soltar el pesaje', $('dlg').open && $('dlgTitulo').textContent.includes('Cancelar el pesaje'), $('dlgTitulo').textContent);
+            clic('dlgCancelar'); await esperar(() => !$('dlg').open, 'diálogo de la miga cerrado'); await dormir(30);
+            R.ok('C-56: «Cancelar» del diálogo deja el pesaje abierto con lo tecleado', visible('baPesar') && $('baKg').value === '30000', `kg «${$('baKg').value}»`);
+            poner('baKg', '');
             R.ok('C-57: la miga «Góndolas» se ve antes de tocarla', seVe($('btnBaGondolas')));
             clic('btnBaGondolas'); await esperar(() => !visible('baAsis'), 'salir de A por la miga');
             const btnTaraB = filaG('baLista', e110.fields.Title).querySelector('button');
@@ -1238,6 +1252,35 @@ try {
             URL.revokeObjectURL = revokeReal;
             R.ok('C-12: la tara de B cierra el renglón de la lista fresca (tras dos refrescos) y B sale de «En planta»', e110.fields.Etapa === 'cerrado' && e110.fields.NetoKg === 21000 && !$('baLista').textContent.includes(e110.fields.Title), `etapa ${e110.fields.Etapa} · neto ${e110.fields.NetoKg}`);
             R.ok('C-21: al guardar, la vista previa de la foto revoca su blob URL (antes quedaba vivo hasta recargar la PWA)', revocados >= 1, `revocados ${revocados}`);
+            // C-56 (v0.52.0): desde el ticket (paso 5) se sale por el rail a Hoy y Actualizar REPINTA. Con el asistente olvidado abierto
+            // (el hallazgo alta C-51), capturaAMedias() congelaba el repintado de todas las pestañas: la marca sobreviviría.
+            R.ok('C-56: tras la tara se ve el ticket (paso 5)', visible('baAsis') && visible('baTicketCaja'));
+            document.querySelector('#pestanas button[data-p="hoy"]').click();
+            R.ok('C-56: salir por el rail desde el ticket suelta el asistente', !visible('baAsis'));
+            const marcaC56 = document.createElement('i'); $('hoyFranja').appendChild(marcaC56);
+            clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'Actualizar desde Hoy tras salir del ticket');
+            R.ok('C-56: Actualizar desde Hoy repinta (el asistente ya no congela el refresco)', !document.contains(marcaC56));
+            // C-56 (v0.52.0): decisión 11 en el BRUTO (hasta aquí solo se probaba en la tara): otra sesión pesó la góndola entre abrir
+            // y guardar. guardarBruto relee el año, no reserva folio, no sube lote, y lo dice con el peso de la otra sesión.
+            irPuerta();
+            elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
+            poner('puManifiesto', 'MINSA/RME/190/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite'); $('pu79').checked = true;
+            clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 190'); clic('btnRegistrarPuerta');
+            await esperar(() => filas('embarques').some(e => e.fields.Manifiesto === 'MINSA/RME/190/2025'), 'embarque 190');
+            const e190 = filas('embarques').find(e => e.fields.Manifiesto === 'MINSA/RME/190/2025');
+            irGondolas();
+            filaG('baLista', 'MINSA/RME/190').querySelector('button').click();
+            await esperar(() => visible('baPesar') && $('baTitulo').textContent.includes('Bruto'), 'pesaje 190 abierto');
+            e190.fields.Etapa = 'bruto'; e190.fields.BrutoKg = 39000; e190.fields.BrutoHora = new Date().toISOString();   // la otra sesión, sin folio: no mueve la serie E-
+            poner('baKg', '41500'); await foto();
+            const carpetas190 = DB.carpetas.length, titulo190 = e190.fields.Title;
+            clic('btnGuardarPeso'); await esperar(() => avisoCon('Tu peso no se guardó'), 'bruto rechazado por carrera');
+            R.ok('C-56 / decisión 11 en el bruto: gana el primero — el aviso dice «ya tiene peso bruto» con el peso de la otra sesión, y el pesaje sigue abierto con lo tecleado', !!avisoCon('ya tiene peso bruto: 39000 kg') && visible('baPesar') && $('baKg').value === '41500', (avisoCon('Tu peso no se guardó') || {}).textContent);
+            R.ok('C-56: el bruto perdido no reserva folio ni sube lote ni pisa el peso de la otra sesión', e190.fields.BrutoKg === 39000 && e190.fields.Title === titulo190 && DB.carpetas.length === carpetas190, `bruto ${e190.fields.BrutoKg} · título ${e190.fields.Title} · carpetas ${carpetas190}→${DB.carpetas.length}`);
+            // Se retira la góndola de prueba para no mover los conteos que siguen, y se suelta el pesaje por la miga (pregunta: hay kg).
+            DB.listas.embarques.items.splice(DB.listas.embarques.items.indexOf(e190), 1);
+            clic('btnBaGondolas'); await confirmar(); await esperar(() => !visible('baAsis'), 'pesaje 190 soltado');
+            clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados') && !$('baLista').textContent.includes('MINSA/RME/190'), 'la 190 fuera de la lista');
         }
         // 12c. Pre-alta en borrador: se elimina; firmada: no.
         document.querySelector('#pestanas button[data-p="prealtas"]').click();

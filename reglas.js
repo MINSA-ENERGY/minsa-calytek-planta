@@ -12,6 +12,27 @@
 
 export const CLASE = { LEGAL: 'legal', COMERCIAL: 'comercial', AVISO: 'aviso' };
 
+/** C-55 (v0.52.0): el catálogo de corrientes vive SOLO aquí. index.html ya no las escribe (eran tres copias: la Puerta,
+ *  el programa y el oficio del carrier); app.js llena los tres controles con esta lista al arrancar. */
+export const CORRIENTES = [
+    ['base-agua', 'Recorte base agua'], ['base-aceite', 'Recorte base aceite'],
+    ['fluidos-base-agua', 'Fluido agotado base agua'], ['fluidos-base-aceite', 'Fluido agotado base aceite']
+];
+/** La etiqueta humana de una corriente; un valor fuera del catálogo se devuelve tal cual (renglones viejos). */
+export function etiquetaCorriente(v) { const c = CORRIENTES.find(([k]) => k === v); return c ? c[1] : (v || ''); }
+
+/**
+ * C-55 (v0.52.0): la ÚNICA traducción de una compuerta a palabras. La usan el veredicto, la etiqueta de Hoy/Reportes y
+ * «Lo capturado». `autorizada` la decide quien llama con la firma (excepcionAutorizada en app.js), nunca el sello solo.
+ * Cualquier valor que no sea pasa ni rechazo cae en la espera: es lo que ya hacía la etiqueta de Hoy.
+ */
+export function palabraCompuerta(compuerta, autorizada = false) {
+    if (compuerta === 'pasa') return { palabra: 'Pasa', corta: 'pasa', clase: 'pasa', tono: 'ok' };
+    if (compuerta === 'rechazo-legal') return { palabra: 'No entra', corta: 'no entró', clase: 'rechazo-legal', tono: 'bad' };
+    return autorizada ? { palabra: 'Espera · autorizada', corta: 'excepción ok', clase: 'excepcion-comercial', tono: 'warn' }
+                      : { palabra: 'Espera', corta: 'espera', clase: 'excepcion-comercial', tono: 'warn' };
+}
+
 /** Normaliza una placa para comparar: sin espacios, guiones ni minusculas. */
 export function placaNormal(p) {
     return String(p || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -91,8 +112,8 @@ export function compuerta(p) {
         const corrientes = lista(p.carrier.Corrientes);
         if (!p.corriente) legal('Corriente', 'no se declaró la corriente del manifiesto');
         else if (corrientes.length && !corrientes.includes(p.corriente)) {
-            legal('Corriente', `el oficio del carrier no ampara "${p.corriente}" (ampara: ${corrientes.join(', ')})`);
-        } else ok('Corriente', `${p.corriente} amparada`);
+            legal('Corriente', `el oficio del carrier no ampara «${etiquetaCorriente(p.corriente)}» (ampara: ${corrientes.map(etiquetaCorriente).join(', ')})`);
+        } else ok('Corriente', `${etiquetaCorriente(p.corriente)} amparada`);
         if (p.prealta && p.prealta.CarrierId && p.carrier.id && Number(p.prealta.CarrierId) !== Number(p.carrier.id)) {
             legal('Carrier vs pre-alta', 'el carrier no es el de la pre-alta firmada');
         }
@@ -130,6 +151,19 @@ export function compuerta(p) {
     const resultado = hayLegal ? 'rechazo-legal' : hayComercial ? 'excepcion-comercial' : 'pasa';
     return { resultado, hallazgos: h };
 }
+
+/**
+ * «Corregir lo capturado» lleva a la pantalla de la regla que decidió (1 el programa · 2 el vehículo y el chofer · 3 la carga).
+ * C-56 (v0.52.0): antes era un regex sobre el prefijo del nombre y una regla renombrada caía callada en la pantalla 2; ahora
+ * es una tabla y reglas.test.js exige que cada nombre que emite compuerta() (más los dos que agrega app.js) esté en ella.
+ */
+export const PANTALLA_DE_REGLA = {
+    'Pre-alta': 1, 'Carrier': 1, 'Carrier vs pre-alta': 1, 'Autorización ASEA del carrier': 1, 'CSF del carrier': 1,
+    'Placa': 2, 'Placa amparada': 2, 'Placa de la plana': 2, 'Unidad vs pre-alta': 2, 'Tarjeta de circulación': 2, 'Póliza de la unidad': 2,
+    'Chofer': 2, 'Chofer vs pre-alta': 2, 'Licencia del chofer': 2,
+    'Manifiesto': 3, 'Corriente': 3, 'Art. 79': 3
+};
+export function subpasoDeRegla(regla) { return PANTALLA_DE_REGLA[regla] || 2; }
 
 /**
  * Folios (ticket 03 seccion 4): ciegos, secuenciales por anio, nunca reutilizados.
