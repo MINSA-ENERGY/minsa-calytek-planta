@@ -850,6 +850,41 @@ try {
             R.ok('U-110: tocar «Cerradas» en la banda abre su pestaña', !$('ppCerradas').hidden && $('ppFirmadas').hidden && document.querySelector('#paTabs [data-pa="cerrada"]').getAttribute('aria-pressed') === 'true');
             R.ok('U-110: «Firmadas» se pinta ámbar solo con algo que atender, igual que su pestaña', document.querySelector('.pa-kpis [data-pa="firmada"]').classList.contains('alerta') === $('paNFirmadas').classList.contains('alerta') && $('paNFirmadas').classList.contains('alerta') && document.querySelector('.pa-kpis [data-pa="borrador"]').classList.contains('alerta') === $('paNBorradores').classList.contains('alerta'));
             document.querySelector('.pa-kpis button[data-pa="firmada"]').click();
+            // C-71 (v0.63.1): la CIFRA del Total (antes solo se pedía que existiera .pa-total). Se arma con los datos crudos del
+            // Graph falso, no con sumaGondolas: CLIENTE DEMO + CEBRA 1 (4) llevan estimado; las recibidas de CEBRA 2 van aparte.
+            {
+                const demo = filas('prealtas')[0], vivos = e => !['anulado', 'rechazado'].includes(e.fields.Etapa);
+                const recDemo = filas('embarques').filter(e => Number(e.fields.PreAltaId) === demo.id && vivos(e)).length;
+                const espTot = (Number(demo.fields.GondolasEsperadas) || 0) + 4, esperado = `${recDemo}/${espTot} góndolas + 1 sin estimado`;
+                R.ok('C-71: el renglón Total de Firmadas dice la cifra de las tres (con estimado, y las sin estimado aparte)', tf.querySelector('.pa-total .g').textContent === esperado, `${tf.querySelector('.pa-total .g').textContent} ≠ ${esperado}`);
+            }
+            // C-71: el CSS de tarjetas (bajo 1100 px desde C-75; la propuesta decía 720, que era el corte de entonces). La E2E no fija
+            // viewport: se asevera la rama que toque y el ancho sale en el detalle.
+            {
+                const r = tf.querySelector('.renglon.prog'), cs = x => getComputedStyle(x).display, tarjeta = window.matchMedia('(max-width: 1099px)').matches;
+                const ok = tarjeta
+                    ? cs(r.querySelector('.fol')) === 'none' && cs(r.querySelector('.fe')) === 'none' && cs(r.querySelector('.cc')) === 'block' && cs(tf.querySelector('.pa-total')) === 'none' && cs(tf.querySelector('.pa-cab')) === 'none' && cs(tf.querySelector('.pa-mes .g')) === 'none'
+                    : cs(r.querySelector('.fol')) !== 'none' && cs(r.querySelector('.fe')) !== 'none' && cs(r.querySelector('.cc')) === 'contents' && cs(tf.querySelector('.pa-total')) === 'grid' && cs(tf.querySelector('.pa-cab')) === 'grid';
+                R.ok(`C-71: a ${window.innerWidth}px la tabla va en ${tarjeta ? 'tarjetas (sin folio, fecha, encabezado, Total ni subtotal; corriente · carrier en bloque)' : 'columnas (folio, fecha, encabezado y Total a la vista)'}`, ok, `${window.innerWidth}px · fol ${cs(r.querySelector('.fol'))} · cc ${cs(r.querySelector('.cc'))} · total ${cs(tf.querySelector('.pa-total'))}`);
+            }
+            // C-71: Cerradas — una cerrada SIN CerradaEl cae en el mes de su firma (fechaDePestana), con encabezado «Cerrada»;
+            // y el pie de Por firmar suma las góndolas comprometidas de un borrador nuevo.
+            const hoy = new Date().toISOString();
+            const cSin = { id: DB.siguienteId++, fields: { Title: 'C71 SIN SELLO-POZO 1-2026', Estado: 'cerrada', FirmadaPor: 'validador@example.invalid', FirmadaEl: hace40, Created: hace40, Corriente: 'base-aceite', CarrierId: carrierId, Campana: 'L-99-071', GondolasEsperadas: 2 } };
+            const bor = { id: DB.siguienteId++, fields: { Title: 'C71 POR FIRMAR-POZO 1-2026', Estado: 'borrador', Created: hoy, Corriente: 'base-aceite', CarrierId: carrierId, Campana: 'L-99-072', GondolasEsperadas: 3 } };
+            const comprometidas = () => Number((/^(\d+) góndola/.exec($('paResBorradores').textContent) || [0, 0])[1]);
+            const n0 = comprometidas();
+            filas('prealtas').push(cSin, bor);
+            clic('btnActualizar'); await esperar(() => $('paCerradas').textContent.includes('C71 SIN SELLO') && $('paBorradores').textContent.includes('C71 POR FIRMAR'), 'C-71: la cerrada sin sello y el borrador');
+            {
+                const tc = $('paCerradas'), rC = [...tc.querySelectorAll('.renglon.prog')].find(x => x.textContent.includes('C71 SIN SELLO'));
+                const fechaCortaMx = iso => new Date(iso).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit', year: 'numeric' });
+                const mesFirma = tf.querySelectorAll('.pa-mes')[1].querySelector('b').textContent;   // el mes de hace 40 días, ya visto en Firmadas
+                const mesC = [...tc.children].filter(x => x.classList.contains('pa-mes')).find(m => { let s = m.nextElementSibling; while (s && !s.classList.contains('pa-mes')) { if (s === rC) return true; s = s.nextElementSibling; } return false; });
+                R.ok('C-71: Cerradas trae encabezado «Cerrada» y la cerrada sin CerradaEl va bajo el mes de su firma, con esa fecha', tc.querySelector('.pa-cab').textContent.includes('Cerrada') && !!rC && !!mesC && mesC.querySelector('b').textContent === mesFirma && rC.querySelector('.fe').textContent === fechaCortaMx(hace40), `${mesC && mesC.querySelector('b').textContent} vs ${mesFirma} · ${rC && rC.querySelector('.fe').textContent}`);
+                R.ok('C-71: el pie de Por firmar suma las góndolas comprometidas del borrador nuevo', $('paResBorradores').textContent === `${n0 + 3} góndolas comprometidas; ninguna puede entrar hasta que se firme.`, $('paResBorradores').textContent);
+            }
+            for (const x of [cSin, bor]) filas('prealtas').splice(filas('prealtas').indexOf(x), 1);
             for (const x of extra) filas('prealtas').splice(filas('prealtas').indexOf(x), 1);
             filas('embarques').splice(filas('embarques').indexOf(embC), 1);
             clic('btnActualizar'); await esperar(() => tf.querySelectorAll('.renglon.prog').length === 1, 'C-70: retiro de las firmadas extra');
