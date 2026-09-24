@@ -127,7 +127,7 @@
             <div><i></i><span>Ticket</span></div>
           </div>
           <div class="asis-quien"><div><b id="puQuien">Góndola nueva</b><small id="puQuienSub">sin programa todavía</small></div><span class="asis-k" id="puPasoK">Paso 1 de 5 · Programa</span></div>
-          <nav class="subpasos" id="puSubpasos" aria-label="Paso 1: programa y documentos">
+          <nav class="subpasos" id="puSubpasos" aria-label="Paso 1: programa y documentos" hidden>   <!-- v0.69.0: oculto a pedido de Carlos (lo repite «Así va la góndola»); la E2E lo sigue usando -->
             <button type="button" data-s="1" id="puSub1"><span>Programa</span><span class="est" id="puEst1"></span></button>
             <button type="button" data-s="2" id="puSub2"><span>Vehículo y chofer</span><span class="est" id="puEst2"></span></button>
             <button type="button" data-s="3" id="puSub3"><span>Carga</span><span class="est" id="puEst3"></span></button>
@@ -624,7 +624,7 @@
 </dialog>
 <!-- Detalle de una pre-alta en pop-up (v0.19.14, pedido de Carlos): «Ver» abre este dialog. -->
 <dialog id="paDetalle" class="dlg dlg-forma" aria-label="Detalle de la pre-alta">
-        <h2 id="paDetalleTitulo"></h2>
+        <div class="pd-cabeza"><h2 id="paDetalleTitulo"></h2><button id="btnVolverPrealtas" class="secundario" type="button">Volver</button></div>   <!-- v0.68.0 (pedido de Carlos): Volver arriba a la derecha -->
         <div class="dlg-avisos" aria-live="polite"></div>
         <ul class="hallazgos" id="paDetalleLista"></ul>
         <ul class="hallazgos" id="paDetalleVigencias"></ul>
@@ -632,10 +632,10 @@
         <div class="dlg-botones envuelve">
         <button id="btnFirmar" class="principal enviar oculto" type="button">Firmar la pre-alta</button>
         <button id="btnEditarPrealta" class="secundario oculto" type="button">Editar la pre-alta</button>
-        <button id="btnCerrarPrealta" class="secundario peligro oculto" type="button">Cerrar el programa</button>
         <button id="btnEliminarPrealta" class="secundario peligro oculto" type="button" data-accion="eliminar">Eliminar esta pre-alta</button>
-        <button id="btnVolverPrealtas" class="secundario" type="button">Volver</button>   <!-- U-45: antes «Cerrar», junto a «Cerrar el programa» -->
         </div>
+        <button id="btnCerrarPrealta" class="pd-cerrar-programa oculto" type="button">Cerrar el programa</button>   <!-- v0.68.0: en grande, abajo y solo -->
+
 </dialog>
 <!-- Pantalla principal, tanda 1 (v0.60.0): «Partir de uno reciente» abre este pop-up; antes era una tarjeta junto a «Nueva pre-alta». -->
 <dialog id="paRecientes" class="dlg dlg-forma" aria-labelledby="paRecientesTitulo">

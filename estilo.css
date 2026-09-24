@@ -473,7 +473,7 @@ button:not(:disabled):active { transform: scale(.98); }
    renglón y total: --pa-cols. */
 /* C-74 (v0.63.0): las celdas se ubican por NOMBRE de área (--pa-areas), no por índice: una columna nueva o un envoltorio de
    renglon() ya no corren el Total. U-111: la barra de mes va en la misma rejilla y su subtotal cae bajo Góndolas, como el Total. */
-#p-prealtas { --pa-cols: minmax(0, 1.45fr) 92px minmax(0, 1fr) minmax(0, 1fr) 96px minmax(120px, 160px) 64px; --pa-areas: "pr fol cor car fe gon ver"; }
+#p-prealtas { --pa-cols: minmax(0, 1.45fr) 92px minmax(0, 1fr) minmax(0, 1fr) 96px minmax(120px, 160px); --pa-areas: "pr fol cor car fe gon"; }
 .pa-tabla .pa-cab, .pa-tabla .renglon.prog, .pa-tabla .pa-total, .pa-tabla .pa-mes { display: grid; grid-template-columns: var(--pa-cols); grid-template-areas: var(--pa-areas); gap: 4px 16px; align-items: center; padding: 12px 16px; }
 .pa-tabla .pa-cab { grid-template-areas: none; padding-block: 9px; background: var(--surf2); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
 .pa-tabla .renglon.prog { border-top: 0; background: var(--surf); cursor: pointer; }   /* U-109: el renglón entero abre la ficha */
@@ -485,7 +485,6 @@ button:not(:disabled):active { transform: scale(.98); }
 .pa-tabla .renglon.prog .car { grid-area: car; }
 .pa-tabla .renglon.prog .fe { grid-area: fe; }
 .pa-tabla .renglon.prog .gon { grid-area: gon; }
-.pa-tabla .renglon.prog .ver { grid-area: ver; }
 .pa-tabla .renglon.prog .t { font-family: var(--mono); font-weight: 500; overflow-wrap: anywhere; }
 .pa-tabla .renglon.prog .cc { display: contents; }
 /* U-112 (v0.63.0): una línea con elipsis (el nombre completo va en title) para que la cebra lleve renglones de alto parejo. */
@@ -498,10 +497,10 @@ button:not(:disabled):active { transform: scale(.98); }
 .pa-tabla .pa-mes .mt { grid-column: pr-start / fe-end; display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
 .pa-tabla .pa-mes b { font-family: var(--mono); font-weight: 500; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--acc); }
 .pa-tabla .pa-mes .n { font-size: .8rem; color: var(--mute); }
-.pa-tabla .pa-mes .g { grid-column: gon-start / ver-end; white-space: nowrap; font-family: var(--mono); font-size: .78rem; color: var(--ink-body); }
+.pa-tabla .pa-mes .g { grid-column: gon-start / gon-end; white-space: nowrap; font-family: var(--mono); font-size: .78rem; color: var(--ink-body); }
 .pa-tabla .pa-total { border-top: 1px solid var(--ink); background: var(--surf); }
 .pa-tabla .pa-total .tt { grid-area: pr; color: var(--ink); }
-.pa-tabla .pa-total .g { grid-column: gon-start / ver-end; white-space: nowrap; font-family: var(--mono); font-size: .8rem; font-weight: 500; color: var(--ink); }
+.pa-tabla .pa-total .g { grid-column: gon-start / gon-end; white-space: nowrap; font-family: var(--mono); font-size: .8rem; font-weight: 500; color: var(--ink); }
 /* v0.63.0 (visto en las capturas de C-75, no es hallazgo del artifact): bajo 1200 px los conteos y los dos botones dejaban al
    título ~70 px y la frase se partía palabra por palabra; el título pasa a su propio renglón, y bajo 1100 cada bloque al suyo
    (a 800 px el tercer conteo quedaba cortado). */
@@ -515,8 +514,7 @@ button:not(:disabled):active { transform: scale(.98); }
        y la barra de avance a lo ancho. Folio y fecha no van (la L no los dibuja; siguen en la ficha). El mes es un separador
        en línea (kicker azul, raya, conteo) sin subtotal, y no hay renglón Total: la L no lo lleva. */
     .pa-tabla .pa-cab, .pa-tabla .pa-total { display: none; }
-    .pa-tabla .renglon.prog { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "pr ver" "cc cc" "gon gon"; gap: 6px 12px; padding: 12px 16px; }
-    .pa-tabla .renglon.prog > .ver { align-self: start; }
+    .pa-tabla .renglon.prog { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pr" "cc" "gon"; gap: 6px 12px; padding: 12px 16px; }
     .pa-tabla .renglon.prog :is(.fol, .fe) { display: none; }
     .pa-tabla .renglon.prog .cc { display: block; grid-area: cc; min-width: 0; font-size: .8rem; color: var(--mute); overflow-wrap: anywhere; }
     .pa-tabla .renglon.prog .cc :is(.cor, .car) { font-size: inherit; color: inherit; white-space: normal; overflow: visible; }
@@ -1245,3 +1243,10 @@ select, .archivos-filtros select, .con-boton select {
     .rotulo i { font-style: normal; }
     .app:has(#pantallaEntrar:not(.oculto)) .rotulo { display: none; }
 }
+/* v0.68.0 (pedido de Carlos): detalle de pre-alta — «Volver» arriba a la derecha, «Cerrar el programa» en grande abajo y solo. */
+#paDetalle .pd-cabeza { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+#paDetalle .pd-cabeza h2 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+#paDetalle .pd-cabeza button { flex: none; margin: 0; }
+#paDetalle .pd-cerrar-programa { display: block; width: 100%; min-height: 56px; margin-top: var(--sp-4); font-size: 1.05rem; font-weight: 600; color: var(--bad-ink); background: var(--bad); border: 1px solid var(--bad); border-radius: var(--r-sm, 6px); cursor: pointer; }
+#paDetalle .pd-cerrar-programa:hover:not(:disabled) { filter: brightness(.92); }
+#paDetalle .pd-cerrar-programa.oculto { display: none; }

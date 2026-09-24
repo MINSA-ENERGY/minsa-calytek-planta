@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.67.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.69.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1823,15 +1823,15 @@ function renglonPrograma(p, grupo, ctx, non = false) {
     cc.appendChild(celda('span', 'cor', cor)).title = cor;   // U-112: en una línea con elipsis; el nombre completo al pasar el ratón
     cc.appendChild(celda('span', 'car', car)).title = car;
     const av = celda('div', 'gon'); av.appendChild(barraAvance(gondolasDe(p, ctx.conteo)));
-    const ver = celda('div', 'ver'); ver.appendChild(botonAccion({ texto: 'Ver', alClic: abrir }));
-    for (const c of [pr, celda('span', 'fol', p.Campana || '—'), cc, celda('span', 'fe', fechaPestanaCorta(p, grupo)), av, ver]) r.appendChild(c);
+    for (const c of [pr, celda('span', 'fol', p.Campana || '—'), cc, celda('span', 'fe', fechaPestanaCorta(p, grupo)), av]) r.appendChild(c);
+    r.tabIndex = 0;   // v0.68.0: sin botón Ver (pedido de Carlos); el renglón es el control
+    r.addEventListener('keydown', e => { if (e.target === r && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrir(); } });
     r.addEventListener('click', e => { if (!e.target.closest('button')) abrir(); });
     return r;
 }
 function encabezadoProgramas(grupo) {
     const h = el('div', 'pa-cab'); h.setAttribute('role', 'row');
     for (const s of ['Programa', 'Folio', 'Corriente', 'Carrier', FECHA_PESTANA[grupo], 'Góndolas']) h.appendChild(celda('span', '', s, 'columnheader'));
-    h.appendChild(celda('span', '', '', 'columnheader')).setAttribute('aria-label', 'Abrir');
     return h;
 }
 /** U-111 (v0.63.0): la barra de mes va en la misma rejilla que los renglones y su subtotal cae en la columna Góndolas. */
@@ -3699,7 +3699,14 @@ $('btnNuevaGondola').addEventListener('click', () => {
 });
 $('migaGondolasPuerta').addEventListener('click', () => irDesdePestana('bascula'));
 $('btnCancelarPuerta').addEventListener('click', () => irDesdePestana('bascula'));   // v0.66.3: Cancelar hace lo mismo que la miga
-$('puPrealta').addEventListener('change', () => { marcarOpcion($('puProgramas'), $('puPrealta').value); pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta(); });
+// v0.69.0 (bug que reportó Carlos): regresar y cambiar de programa dejaba las placas y el chofer del programa anterior
+// —de otro carrier— capturados y en «Así va la góndola». Al cambiar de programa se limpian los datos que dependen de él.
+let prealtaPuertaPrevia = '';
+$('puPrealta').addEventListener('change', () => {
+    const v = $('puPrealta').value;
+    if (prealtaPuertaPrevia && v !== prealtaPuertaPrevia) for (const id of ['puPlaca', 'puPlacaPlana', 'puChofer', 'puChoferNombre']) $(id).value = '';
+    prealtaPuertaPrevia = v;
+    marcarOpcion($('puProgramas'), v); pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta(); });
 $('puChofer').addEventListener('change', () => marcarOpcion($('puChoferes'), $('puChofer').value));
 // C-55 (v0.52.0): los tres controles de corriente salen del mismo catálogo (CORRIENTES, reglas.js).
 for (const id of ['puCorriente', 'paCorriente']) for (const [v, txt] of CORRIENTES) { const o = el('option', '', txt); o.value = v; $(id).appendChild(o); }

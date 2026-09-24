@@ -649,7 +649,7 @@ try {
         R.ok('v0.60.0: la banda de cabecera cuenta lo mismo que las pestañas', ['Borradores', 'Firmadas', 'Cerradas'].every(k => $('paK' + k).textContent === $('paN' + k).textContent) && $('paKBorradores').textContent === '1', ['Borradores', 'Firmadas', 'Cerradas'].map(k => $('paK' + k).textContent).join('/'));
         // Editar el borrador (v0.19.10): PATCH que conserva la campana y el estado.
         const campanaAntes = filas('prealtas')[0].fields.Campana;
-        document.querySelector('#paBorradores .renglon button').click();
+        document.querySelector('#paBorradores .renglon').click();
         await esperar(() => visible('paDetalle'), 'detalle del borrador');
         // U-28 (v0.26.0): fuera del ticket también sale el Nombre de PLANTA_Roles, no el correo.
         R.ok('U-28: «Capturó» del detalle muestra el nombre, no el correo', $('paDetalleLista').textContent.includes('Capturó') && $('paDetalleLista').textContent.includes('Prueba') && !$('paDetalleLista').textContent.includes(window.__CUENTA.username), $('paDetalleLista').textContent.slice(0, 120));
@@ -663,7 +663,7 @@ try {
         clic('btnVolverPrealtas');
         R.ok('cerrar el detalle abierto desde Hoy se queda en Hoy', !visible('paDetalle') && visible('p-hoy') && !visible('p-prealtas'));
         document.querySelector('#pestanas button[data-p="prealtas"]').click();
-        document.querySelector('#paBorradores .renglon button').click();
+        document.querySelector('#paBorradores .renglon').click();
         await esperar(() => visible('paDetalle'), 'detalle del borrador otra vez');
         clic('btnEditarPrealta'); await esperar(() => visible('paAsis'), 'formulario de edición');
         R.ok('tanda 2: Editar abre el asistente en Revisar', !$('paPaso5').hidden && $('paFormaTitulo').textContent.startsWith('Editar') && visible('btnGuardarPrealta'), $('paPasoK').textContent);
@@ -672,7 +672,7 @@ try {
         // Tanda 2: era Escape sobre el <dialog>; el asistente ya no es pop-up y lo hace su «Cancelar».
         clic('btnCancelarPrealta'); await dormir(30);
         R.ok('U-34: Cancelar sobre Editar sin tocar nada no abre «Descartar» y cierra', !$('dlg').open && !visible('paAsis'));
-        document.querySelector('#paBorradores .renglon button').click(); await esperar(() => visible('paDetalle'), 'detalle para editar de nuevo');
+        document.querySelector('#paBorradores .renglon').click(); await esperar(() => visible('paDetalle'), 'detalle para editar de nuevo');
         clic('btnEditarPrealta'); await esperar(() => visible('paAsis'), 'edición otra vez');
         poner('paPozo', 'Pozo-2');
         clic('btnCancelarPrealta'); await esperar(() => $('dlg').open, 'descarte tras cambio');
@@ -685,7 +685,7 @@ try {
         clic('btnVolverPrealtas');
         // C-61 / C-62 (v0.56.0): tocar el carrier ya elegido no re-marca las casillas; con las unidades desmarcadas y Revisar
         // alcanzado por la barra de pasos, Guardar no escribe la lista vacía («todas autorizadas» para la compuerta).
-        document.querySelector('#paBorradores .renglon button').click(); await esperar(() => visible('paDetalle'), 'detalle para C-61');
+        document.querySelector('#paBorradores .renglon').click(); await esperar(() => visible('paDetalle'), 'detalle para C-61');
         clic('btnEditarPrealta'); await esperar(() => visible('paAsis'), 'edición para C-61');
         $('paPasos').querySelector('[data-p="3"]').click();
         for (const c of $('paUnidades').querySelectorAll('input:checked')) c.click();
@@ -718,7 +718,7 @@ try {
     document.querySelector('#pestanas button[data-p="prealtas"]').click();
 
     if (['validador', 'gerencia'].includes(ROL)) {
-        document.querySelector('#paBorradores .renglon button').click();
+        document.querySelector('#paBorradores .renglon').click();
         await esperar(() => visible('paDetalle'), 'detalle de pre-alta');
         R.ok('detalle: vigencias todo vigente y botón Firmar habilitado', $('paDetalleVigencias').textContent.includes('todo vigente') && !$('btnFirmar').disabled && visible('btnFirmar'));
         const nLl0 = DB.llamadas.length;
@@ -763,7 +763,7 @@ try {
             filas('prealtas').push(c60);
             const rC60 = () => [...document.querySelectorAll('#paBorradores .renglon')].find(r => r.textContent.includes('CSESENTA'));
             clic('btnActualizar'); await esperar(() => !!rC60(), 'borrador de C-60 en la lista');
-            rC60().querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle de C-60');
+            rC60().click(); await esperar(() => visible('paDetalle'), 'detalle de C-60');
             c60.fields.ChoferesIds = '';   // otra sesión le quita el chofer mientras el detalle está abierto
             clic('btnFirmar'); await confirmar(); await esperar(() => avisoCon('cambió desde que lo abriste'), 'C-60: la relectura frena la firma');
             R.ok('C-60: Firmar sobre un renglón que cambió desde que se abrió no firma ni sella', c60.fields.Estado === 'borrador' && !filas('firmas').some(x => x.fields.Tipo === 'prealta' && Number(x.fields.ObjetoId) === c60.id));
@@ -786,7 +786,7 @@ try {
             document.querySelector('#pestanas button[data-p="prealtas"]').click();
             const rSF = [...document.querySelectorAll('#paFirmadas .renglon')].find(r => r.textContent.includes('SELLO SIN FIRMA'));
             R.ok('S-01: en Pre-altas lleva la etiqueta «sin firma»', !!rSF && rSF.textContent.includes('sin firma'));
-            rSF.querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle del sello sin firma');
+            rSF.click(); await esperar(() => visible('paDetalle'), 'detalle del sello sin firma');
             R.ok('S-01: el detalle dice SIN FIRMA y ofrece Firmar aunque el Estado ya sea firmada', visible('btnFirmar') && !$('btnFirmar').disabled && $('paDetalleLista').textContent.includes('sello sin firma') && !!avisoCon('Falta la firma del validador'));
             clic('btnFirmar'); await confirmar(); await esperar(() => avisoCon('Pre-alta firmada'), 'firma del sello');
             R.ok('S-01: firmar crea el renglón y el sello pasa a quien firmó', !!filas('firmas').find(x => x.fields.Tipo === 'prealta' && Number(x.fields.ObjetoId) === sinFirma.id) && sinFirma.fields.FirmadaPor === window.__CUENTA.username);
@@ -843,7 +843,7 @@ try {
             R.ok('C-69: el subtotal no mezcla programas con y sin estimado', mesViejo.querySelector('.g').textContent === '0/4 góndolas + 1 sin estimado', mesViejo.querySelector('.g').textContent);
             R.ok('U-111: el subtotal de mes y el Total caen en la columna Góndolas', getComputedStyle(mesViejo.querySelector('.g')).gridColumnStart === 'gon-start' && getComputedStyle(tf.querySelector('.pa-total .g')).gridColumnStart === 'gon-start', getComputedStyle(mesViejo.querySelector('.g')).gridColumnStart);
             // U-114: la rejilla se anuncia como tabla.
-            R.ok('U-114: la tabla es tabla para el lector de pantalla (table · 7 columnheader · row/cell)', tf.getAttribute('role') === 'table' && tf.querySelectorAll('[role="columnheader"]').length === 7 && !tf.querySelector('.pa-cab[aria-hidden]') && [...tf.querySelectorAll('.renglon.prog')].every(r => r.getAttribute('role') === 'row' && r.querySelectorAll('[role="cell"]').length === 7));
+            R.ok('U-114: la tabla es tabla para el lector de pantalla (table · 6 columnheader · row/cell)', tf.getAttribute('role') === 'table' && tf.querySelectorAll('[role="columnheader"]').length === 6 && !tf.querySelector('.pa-cab[aria-hidden]') && [...tf.querySelectorAll('.renglon.prog')].every(r => r.getAttribute('role') === 'row' && r.querySelectorAll('[role="cell"]').length === 6));
             // U-109: tocar el renglón fuera de Ver abre la ficha.
             tf.querySelector('.renglon.prog .fol').click(); await esperar(() => visible('paDetalle'), 'U-109: el renglón abre la ficha');
             R.ok('U-109: tocar el folio del renglón abre la ficha como Ver', visible('paDetalle'));
@@ -989,6 +989,13 @@ try {
             R.ok('tanda 4: «‹ Vehículo y chofer» regresa sin perder lo capturado', visible('puBloque2') && $('puPlaca').value === '55XY9K' && document.querySelector('#puUnidades .o.sel') === document.querySelector('#puUnidades .o.u[data-placa="55XY9K"]'));
             document.querySelector('#puSubpasos button[data-s="3"]').click();
             R.ok('tanda 4: la fila de subpasos salta directo a una pantalla', visible('puBloque3') && document.querySelector('#puSubpasos button[data-s="3"]').getAttribute('aria-current') === 'step');
+            {   // v0.69.0 (bug de Carlos): regresar y cambiar de programa limpia placas y chofer del anterior, en campos y en «Así va la góndola».
+                clic('btnPuAtras'); clic('btnPuAtras');
+                // Los datos de prueba traen UN programa firmado: se cambia a «ninguno», que pasa por el mismo listener de change.
+                poner('puPrealta', ''); await dormir(20);
+                R.ok('v0.69.0: cambiar de programa tras «‹» borra placas y chofer del anterior, también del resumen', visible('puBloque1') && ['puPlaca', 'puPlacaPlana', 'puChofer', 'puChoferNombre'].every(id => $(id).value === '') && !$('puResumen').textContent.includes('55XY9K') && !$('puResumen').textContent.includes('JUAN') && $('puCorriente').value === 'base-aceite', `${$('puPlaca').value} · ${$('puChoferNombre').value} · ${$('puResumen').textContent.slice(0, 160)}`);
+                R.ok('v0.69.0: la fila de subpasos no se ve (la repite «Así va la góndola»)', !visible('puSubpasos'));
+            }
         }
         elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
         poner('puManifiesto', 'MINSA/RME/000/2026'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M');
@@ -1555,16 +1562,16 @@ try {
         clic('btnPaIrLista');
         R.ok('tanda 3 (P10): «Ir a Pre-altas» suelta la confirmación y muestra la lista', !visible('paListo') && getComputedStyle($('paInicio').closest('.pa-banda')).display !== 'none');
         const rBorr = [...document.querySelectorAll('#paBorradores .renglon')].find(r => r.textContent.includes('BORRADOR-EQUIVOCADO-2026'));
-        rBorr.querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle borrador');
+        rBorr.click(); await esperar(() => visible('paDetalle'), 'detalle borrador');
         const btnElimPa = $('btnEliminarPrealta');
         R.ok('pre-alta en borrador ofrece Eliminar', !!btnElimPa && visible('btnEliminarPrealta'));
         if (btnElimPa) {
             btnElimPa.click(); await confirmar('Se capturó dos veces');
             await esperar(() => filas('prealtas').length === 1, 'pre-alta eliminada');
             R.ok('borrador eliminado de la lista', filas('prealtas').length === 1 && !$('paBorradores').textContent.includes('BORRADOR-EQUIVOCADO-2026'));
-            [...document.querySelectorAll('#paFirmadas .renglon')][0].querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle firmada');
+            [...document.querySelectorAll('#paFirmadas .renglon')][0].click(); await esperar(() => visible('paDetalle'), 'detalle firmada');
             R.ok('pre-alta firmada NO ofrece Eliminar (solo Cerrar el programa)', !visible('btnEliminarPrealta') && visible('btnCerrarPrealta'));
-            R.ok('U-45: el botón que cierra el detalle dice «Volver», no «Cerrar»', $('btnVolverPrealtas').textContent.trim() === 'Volver' && $('btnCerrarPrealta').classList.contains('peligro'));
+            R.ok('U-45: el botón que cierra el detalle dice «Volver», no «Cerrar»', $('btnVolverPrealtas').textContent.trim() === 'Volver' && $('btnCerrarPrealta').classList.contains('pd-cerrar-programa') && !!$('btnVolverPrealtas').closest('.pd-cabeza'));   // v0.68.0: Volver arriba, Cerrar el programa grande abajo
         }
         // 12d. Padron: unidad referenciada -> baja (no borrado); chofer sin referencias -> eliminar.
         document.querySelector('#pestanas button[data-p="padron"]').click();
@@ -1860,7 +1867,7 @@ try {
         {
             document.querySelector('#pestanas button[data-p="prealtas"]').click();
             const rDemo = await esperar(() => [...document.querySelectorAll('#paFirmadas .renglon')].find(r => r.textContent.includes('CLIENTE DEMO')), 'renglón CLIENTE DEMO en firmadas');
-            rDemo.querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle de CLIENTE DEMO');
+            rDemo.click(); await esperar(() => visible('paDetalle'), 'detalle de CLIENTE DEMO');
             R.ok('v0.39.0: el detalle del programa ya no emite certificados y manda a la góndola', !visible('btnEmitirCertificado') && $('paDetalleCertificado').textContent.includes('góndola'), $('paDetalleCertificado').textContent.slice(0, 110));
             clic('btnCerrarPrealta'); await confirmar();
             await esperar(() => filas('prealtas').some(x => x.fields.Title === 'CLIENTE DEMO-POZO 1-2026' && x.fields.Estado === 'cerrada'), 'programa cerrado');
@@ -2005,7 +2012,7 @@ try {
                 document.querySelector('#pestanas button[data-p="prealtas"]').click();
                 document.querySelector('#paTabs button[data-pa="cerrada"]').click();
                 const rCerr = await esperar(() => [...document.querySelectorAll('#paCerradas .renglon')].find(r => r.textContent.includes('CLIENTE DEMO')), 'renglón en cerradas');
-                rCerr.querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle del programa cerrado');
+                rCerr.click(); await esperar(() => visible('paDetalle'), 'detalle del programa cerrado');
                 R.ok('v0.39.0: el detalle del programa lista sus certificados sin ofrecer emitir', $('paDetalleCertificado').textContent.includes('CT-') && $('paDetalleCertificado').textContent.includes('vigente') && !visible('btnEmitirCertificado'), $('paDetalleCertificado').textContent.slice(0, 140));
                 clic('btnVolverPrealtas'); await dormir(20);
                 // U-70 (v0.40.0): anular una góndola con certificado vigente lo CANCELA con el mismo motivo (antes quedaba
