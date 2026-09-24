@@ -625,12 +625,12 @@ try {
         // Tanda 3 (P10): guardar una nueva muestra «Quedó por firmar» con el folio y qué sigue, en vez de un aviso.
         await esperar(() => visible('paListo'), 'pantalla «Quedó por firmar»');
         const nuestra = filas('prealtas').find(p => p.fields.Title === 'CLIENTE DEMO-POZO 1-2026');
-        R.ok('tanda 3 (P10): «Quedó por firmar» con el folio, el nombre y el carrier; la lista y el asistente escondidos', !visible('paAsis') && getComputedStyle($('paInicio')).display === 'none' && $('p-prealtas').classList.contains('en-listo') && !!nuestra && $('paListoFolio').textContent === `${nuestra.fields.Campana} · CLIENTE DEMO-POZO 1-2026` && $('paListoPuerta').textContent.includes('TRANSPORTES DEMO') && document.activeElement === $('paListoTitulo'), JSON.stringify([visible('paAsis'), getComputedStyle($('paInicio')).display, $('paListoFolio').textContent, $('paListoPuerta').textContent, document.activeElement && document.activeElement.id]));
+        R.ok('tanda 3 (P10): «Quedó por firmar» con el folio, el nombre y el carrier; la lista y el asistente escondidos', !visible('paAsis') && getComputedStyle($('paInicio').closest('.pa-banda')).display === 'none' && $('p-prealtas').classList.contains('en-listo') && !!nuestra && $('paListoFolio').textContent === `${nuestra.fields.Campana} · CLIENTE DEMO-POZO 1-2026` && $('paListoPuerta').textContent.includes('TRANSPORTES DEMO') && document.activeElement === $('paListoTitulo'), JSON.stringify([visible('paAsis'), getComputedStyle($('paInicio').closest('.pa-banda')).display, $('paListoFolio').textContent, $('paListoPuerta').textContent, document.activeElement && document.activeElement.id]));
         R.ok('tanda 3: la pre-alta nueva escribe la columna Cliente (esquema v8)', !!nuestra && nuestra.fields.Cliente === 'CLIENTE DEMO', nuestra && nuestra.fields.Cliente);
         clic('btnPaOtra');
         R.ok('tanda 3 (P10): «Capturar otra» abre el asistente vacío en el paso 1', visible('paAsis') && !visible('paListo') && !$('paPaso1').hidden && $('paCliente').value === '' && $('paTitulo').value === '');
         clic('btnCancelarPrealta'); await dormir(30);
-        R.ok('tanda 3: y «Cancelar» sin capturar nada regresa a la lista', !$('dlg').open && !visible('paAsis') && getComputedStyle($('paInicio')).display !== 'none');
+        R.ok('tanda 3: y «Cancelar» sin capturar nada regresa a la lista', !$('dlg').open && !visible('paAsis') && getComputedStyle($('paInicio').closest('.pa-banda')).display !== 'none');
         R.ok('C-04: la campaña se escoge con la lista releída, no con la memoria (la ajena L-AA-001 no se repite)', nuestra && nuestra.fields.Campana === `L-${aaL}-002`, nuestra && nuestra.fields.Campana);
         filas('prealtas').splice(filas('prealtas').indexOf(ajena), 1);
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras la campaña ajena');
@@ -641,7 +641,9 @@ try {
         // pie dice que la puerta no puede recibir. La vista abre en «Por firmar», con el borrador.
         R.ok('tanda 1: Pre-altas abre en «Por firmar» con la captura al frente y los conteos en las pestañas', visible('paInicio') && visible('ppBorradores') && !visible('ppFirmadas') && $('paNBorradores').textContent === '1' && $('paNFirmadas').textContent === '0', `${$('paNBorradores').textContent}/${$('paNFirmadas').textContent}`);
         R.ok('U-23 / U-102: Firmadas vacía dice UNA vez que la puerta no puede recibir (en la tabla; el pie queda vacío)', $('paResFirmadas').textContent === '' &&$('paFirmadas').textContent.includes('la puerta no puede recibir'), $('paResFirmadas').textContent);
-        R.ok('tanda 1: sin firmadas ni cerradas no hay programas que usar como base', !visible('paRecientes'));
+        R.ok('tanda 1: sin firmadas ni cerradas no hay programas que usar como base', !visible('btnPaBases'));
+        // Pantalla principal, tanda 1 (v0.60.0): la banda cuenta lo mismo que las pestañas.
+        R.ok('v0.60.0: la banda de cabecera cuenta lo mismo que las pestañas', ['Borradores', 'Firmadas', 'Cerradas'].every(k => $('paK' + k).textContent === $('paN' + k).textContent) && $('paKBorradores').textContent === '1', ['Borradores', 'Firmadas', 'Cerradas'].map(k => $('paK' + k).textContent).join('/'));
         // Editar el borrador (v0.19.10): PATCH que conserva la campana y el estado.
         const campanaAntes = filas('prealtas')[0].fields.Campana;
         document.querySelector('#paBorradores .renglon button').click();
@@ -804,9 +806,13 @@ try {
         // Rediseño de Pre-altas, tanda 1 (P2): ya firmada, sale como base; usarla llena cliente, generador, corriente y carrier y
         // deja el pozo vacío con el foco. La pestaña Firmadas la cuenta.
         {
+            // v0.60.0: los recientes viven en el pop-up que abre «Partir de uno reciente» de la banda.
+            R.ok('v0.60.0: con una firmada, la banda ofrece «Partir de uno reciente»', visible('btnPaBases') && !visible('paRecientes'));
+            clic('btnPaBases');
             const b = [...document.querySelectorAll('#paBases .pa-base')].find(x => x.textContent.includes('CLIENTE DEMO-POZO 1-2026'));
-            R.ok('tanda 1: la firmada sale en «O parte de uno reciente» y Firmadas la cuenta', visible('paRecientes') && !!b && $('paNFirmadas').textContent === '1', $('paNFirmadas').textContent);
+            R.ok('tanda 1: la firmada sale en «Partir de uno reciente» y Firmadas la cuenta', visible('paRecientes') && !!b && $('paNFirmadas').textContent === '1' && $('paKFirmadas').textContent === '1', $('paNFirmadas').textContent);
             b.click(); await esperar(() => visible('paAsis'), 'pre-alta desde la base');
+            R.ok('v0.60.0: elegir la base cierra el pop-up de recientes', !visible('paRecientes'));
             R.ok('tanda 2: la base abre el asistente en el paso 2 con su aviso y los pasos 1 y 3 ya vistos', !$('paPaso2').hidden && visible('paBaseAviso') && !$('paPasos').querySelector('[data-p="3"]').disabled && $('paPasos').querySelector('[data-p="4"]').disabled);
             R.ok('tanda 1: «Usar como base» copia cliente, generador, corriente y carrier; el pozo queda vacío y con el foco', $('paCliente').value === 'CLIENTE DEMO' && $('paGenerador').value === 'GENERADOR DEMO' && $('paCorriente').value === 'base-aceite' && $('paCarrier').value === String(carrierId) && $('paPozoTitulo').value === '' && document.activeElement === $('paPozoTitulo') && $('paTitulo').value === '', `${$('paCliente').value} · ${$('paCarrier').value} · ${$('paPozoTitulo').value}`);
             // v0.57.0 (U-93): «Quitar la base» suelta lo copiado y vuelve al paso 1; (v0.59.0) elegir un cliente NO avanza: se pulsa «Siguiente».
@@ -1449,7 +1455,7 @@ try {
         poner('paMes', '2026'); clic('btnGuardarPrealta');
         await esperar(() => filas('prealtas').length === 2 && visible('paListo'), 'segunda pre-alta');
         clic('btnPaIrLista');
-        R.ok('tanda 3 (P10): «Ir a Pre-altas» suelta la confirmación y muestra la lista', !visible('paListo') && getComputedStyle($('paInicio')).display !== 'none');
+        R.ok('tanda 3 (P10): «Ir a Pre-altas» suelta la confirmación y muestra la lista', !visible('paListo') && getComputedStyle($('paInicio').closest('.pa-banda')).display !== 'none');
         const rBorr = [...document.querySelectorAll('#paBorradores .renglon')].find(r => r.textContent.includes('BORRADOR-EQUIVOCADO-2026'));
         rBorr.querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle borrador');
         const btnElimPa = $('btnEliminarPrealta');

@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta } from './reglas.js';
 
-const VERSION = '0.59.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.60.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1746,15 +1746,17 @@ function pintarPrealtas() {
     const grupos = { borrador: [], firmada: [], cerrada: [] };
     for (const p of [...estado.prealtas].sort((a, b) => b.id - a.id)) (grupos[p.Estado] || grupos.cerrada).push(p);
 
+    // Pantalla principal, tanda 1 (v0.60.0): los recientes viven en el pop-up #paRecientes; el botón de la banda solo sale si hay.
     const bases = captura ? basesRecientes(estado.prealtas) : [];
-    $('paRecientes').classList.toggle('oculto', !bases.length);
+    $('btnPaBases').classList.toggle('oculto', !bases.length);
+    if (!bases.length) cerrarForma('paRecientes');
     const cb = $('paBases'); cb.textContent = '';
     for (const p of bases) {
         const b = el('button', 'pa-base'); b.type = 'button';
         b.appendChild(el('b', '', p.Title));
         b.appendChild(el('small', '', `${etiquetaCorriente(p.Corriente) || 'sin corriente'} · ${nombreDe(estado.carriers, p.CarrierId)}`));
         b.appendChild(el('span', 'usar', 'Usar como base ›'));
-        b.addEventListener('click', () => usarComoBase(vivo('prealtas', p)));
+        b.addEventListener('click', () => { cerrarForma('paRecientes'); usarComoBase(vivo('prealtas', p)); });
         cb.appendChild(b);
     }
 
@@ -1767,6 +1769,7 @@ function pintarPrealtas() {
     $('paNBorradores').textContent = String(grupos.borrador.length);
     $('paNFirmadas').textContent = String(grupos.firmada.length);
     $('paNCerradas').textContent = String(grupos.cerrada.length);
+    for (const [id, g] of [['paKBorradores', 'borrador'], ['paKFirmadas', 'firmada'], ['paKCerradas', 'cerrada']]) $(id).textContent = String(grupos[g].length);   // la banda
     // Las pestañas con algo que atender se marcan: borradores por firmar y firmadas sin firma o que ya no se mueven.
     $('paNBorradores').classList.toggle('alerta', grupos.borrador.length > 0);
     $('paNFirmadas').classList.toggle('alerta', grupos.firmada.some(p => sinMovimientoDe(p) || !prealtaFirmada(p)));
@@ -3650,6 +3653,8 @@ $('baCapturado').addEventListener('keydown', ev => {
     focables[ev.shiftKey ? (i <= 0 ? focables.length - 1 : i - 1) : (i < 0 || i === focables.length - 1 ? 0 : i + 1)].focus();
 });
 $('btnNuevaPrealta').addEventListener('click', nuevaPrealta);
+$('btnPaBases').addEventListener('click', () => abrirForma('paRecientes'));
+$('btnPaBasesCerrar').addEventListener('click', () => cerrarForma('paRecientes'));
 for (const b of $('paTabs').querySelectorAll('button')) b.addEventListener('click', () => elegirVistaPrealtas(b.dataset.pa));
 $('paCarrier').addEventListener('change', pintarUnidadesChoferesPrealta);
 // U-10 (v0.23.0): «+ Alta de carrier» desde la pre-alta abre la forma del padron ENCIMA (dialog anidado: la pre-alta

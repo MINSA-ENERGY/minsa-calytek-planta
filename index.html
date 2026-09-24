@@ -304,29 +304,26 @@
 
     <!-- PRE-ALTAS -->
     <section id="p-prealtas" class="oculto">
-      <header class="cabecera"><span class="titulo-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><h1>Pre-altas</h1></header>
-      <!-- Rediseño de Pre-altas, tanda 1 (v0.53.0; artifact 3PrGGb7ruvmrFhYNrrqdU1 v9, aprobado 2026-09-24): la captura al frente
-           (P1) con «Usar como base» un programa reciente (P2), las tres fases explicadas y los programas en pestañas con conteo
-           (las .gtabs de Góndolas). Sustituye los tres acordeones por estado. Los ids paBorradores/paFirmadas/paCerradas y
-           paRes* se conservan: son los paneles y sus pies. -->
-      <div class="pa-inicio" id="paInicio">
-        <section class="tarjeta pa-nueva">
-          <div class="pa-nueva-t"><span class="ic ac" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><h2>Nueva pre-alta</h2></div>
-          <p>¿Llegó el correo del cliente con su programa? Captúralo aquí; solo cliente, pozo, corriente y carrier son obligatorios.</p>
-          <div class="pa-ruta"><span><i>1</i>Capturas</span><span><i>2</i>Ambiental la firma</span><span><i>3</i>La puerta recibe</span></div>
-          <div><button id="btnNuevaPrealta" class="principal mn-btn" type="button">+ Nueva pre-alta</button></div>
-        </section>
-        <section class="tarjeta pa-recientes" id="paRecientes">
-          <div class="pa-rec-h"><span class="ic ac" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></span><div><h2>O parte de uno reciente</h2><small>Copia cliente, generador, corriente y transporte</small></div></div>
-          <div id="paBases"></div>
-        </section>
-      </div>
-      <ul class="pa-fases">
-        <li><span class="ic bo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14.5 4.5l5 5L10 19H5v-5z"/><path d="M12.5 6.5l5 5"/><path d="M4 21h16"/></svg></span><b>Por firmar</b><small>Capturado; espera la firma de la Responsable Ambiental. La puerta aún no recibe sus góndolas.</small></li>
-        <li><span class="ic fi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><b>Firmada</b><small>Autorizado. La puerta recibe sus góndolas y las coteja sola.</small></li>
-        <li><span class="ic ce" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><b>Cerrada</b><small>Ya no entra ninguna góndola. Queda para consulta y certificados.</small></li>
-      </ul>
-      <h2 class="pa-prog-h">Programas</h2>
+      <!-- Pantalla principal de Pre-altas, tanda 1 (v0.60.0; lienzo EhJVtU3d4X6jUNuhJb6KQR: K en escritorio, L en celular, OK de
+           Carlos 2026-09-24): banda de cabecera con los tres conteos y los dos botones. Salieron la tarjeta «Nueva pre-alta» con su
+           ruta 1-2-3 y la de recientes: los recientes viven en el pop-up #paRecientes. #paInicio es ahora el grupo de botones de
+           captura (la E2E lo mira como «la lista está a la vista»). Las fases bajan a una línea bajo la tabla. -->
+      <section class="pa-banda">
+        <div class="pa-banda-t">
+          <span class="pa-kicker">CALYTEK · Recepción</span>
+          <h1>Pre-altas</h1>
+          <p>Los programas que el cliente manda por correo, firmados antes de que llegue la primera góndola.</p>
+        </div>
+        <dl class="pa-kpis">
+          <div class="bo"><dt>Por firmar</dt><dd id="paKBorradores">0</dd></div>
+          <div class="fi"><dt>Firmadas</dt><dd id="paKFirmadas">0</dd></div>
+          <div class="ce"><dt>Cerradas</dt><dd id="paKCerradas">0</dd></div>
+        </dl>
+        <div class="pa-acciones" id="paInicio">
+          <button id="btnPaBases" class="secundario" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>Partir de uno reciente</button>
+          <button id="btnNuevaPrealta" class="principal mn-btn" type="button">+ Nueva pre-alta</button>
+        </div>
+      </section>
       <div class="gtabs" id="paTabs" role="group" aria-label="Programas por estado">
         <button type="button" data-pa="borrador" aria-pressed="true">Por firmar<i id="paNBorradores"></i></button>
         <button type="button" data-pa="firmada" aria-pressed="false">Firmadas<i id="paNFirmadas"></i></button>
@@ -335,6 +332,11 @@
       <div class="gpanel" id="ppBorradores"><div class="pa-tabla" id="paBorradores"></div><p class="pista" id="paResBorradores"></p></div>
       <div class="gpanel" id="ppFirmadas" hidden><div class="pa-tabla" id="paFirmadas"></div><p class="pista" id="paResFirmadas"></p></div>
       <div class="gpanel" id="ppCerradas" hidden><div class="pa-tabla" id="paCerradas"></div><p class="pista" id="paResCerradas"></p></div>
+      <ul class="pa-fases" aria-label="Cómo avanza un programa">
+        <li><span class="ic bo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14.5 4.5l5 5L10 19H5v-5z"/><path d="M12.5 6.5l5 5"/><path d="M4 21h16"/></svg></span><b>Por firmar</b><small>Espera la firma de la Responsable Ambiental</small></li>
+        <li><span class="ic fi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><b>Firmada</b><small>La puerta recibe sus góndolas</small></li>
+        <li><span class="ic ce" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><b>Cerrada</b><small>Queda para consulta y certificados</small></li>
+      </ul>
       <!-- Rediseño de Pre-altas, tanda 2 (v0.54.0): el asistente de 5 pasos (artifact 3PrGGb7ruvmrFhYNrrqdU1 v9) en la pestaña, como
            el de Góndolas, en vez del <dialog id="paForma">. Los ids de los campos NO cambiaron: guardarPrealta los lee igual, y los
            selects paCorriente/paCarrier siguen siendo la fuente de verdad (ocultos; los renglones solo los llenan). Mientras está
@@ -624,6 +626,13 @@
         <button id="btnEliminarPrealta" class="secundario peligro oculto" type="button" data-accion="eliminar">Eliminar esta pre-alta</button>
         <button id="btnVolverPrealtas" class="secundario" type="button">Volver</button>   <!-- U-45: antes «Cerrar», junto a «Cerrar el programa» -->
         </div>
+</dialog>
+<!-- Pantalla principal, tanda 1 (v0.60.0): «Partir de uno reciente» abre este pop-up; antes era una tarjeta junto a «Nueva pre-alta». -->
+<dialog id="paRecientes" class="dlg dlg-forma" aria-labelledby="paRecientesTitulo">
+        <h2 id="paRecientesTitulo">Partir de uno reciente</h2>
+        <p class="pista">Copia cliente, generador, corriente y carrier; tú pones el pozo.</p>
+        <div class="pa-bases" id="paBases"></div>
+        <div class="dlg-botones"><button id="btnPaBasesCerrar" class="secundario" type="button">Cancelar</button></div>
 </dialog>
 <!-- Certificado de tratamiento (FO-CT-01, carta horizontal). Se ve en pantalla a escala y se imprime solo el
      formato (body.imprimiendo-certificado). Sin firma valida de gerencia o si no esta vigente, Imprimir queda deshabilitado.
