@@ -292,6 +292,17 @@ const sePesa = texto => { const r = filaG('baLista', texto); return !!r && !!r.q
 const poner = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('input', { bubbles: true })); $(id).dispatchEvent(new Event('change', { bubbles: true })); };
 const elegirPorTexto = (id, texto) => { const o = [...$(id).options].find(x => x.textContent.includes(texto)); if (!o) throw new Error(`no hay opción "${texto}" en ${id}`); poner(id, o.value); };
 const filas = clave => DB.listas[clave].items;
+// v0.71.0: el padrón es por carrier; a la ficha de un renglón se llega buscándolo y abriéndolo, como lo haría quien captura.
+async function fichaPd(texto) {
+    document.querySelector('#pestanas button[data-p="padron"]').click();
+    document.querySelector('#pdTabs button[data-pd="buscar"]').click();
+    poner('pdBusca', texto);
+    const fila = await esperar(() => [...document.querySelectorAll('#pdResultados .pd-fila:not(.pd-cab)')].find(f => f.textContent.includes(texto)), `«${texto}» en la búsqueda del padrón`);
+    fila.click();
+    await esperar(() => !$('pdFicha').hidden, `ficha de «${texto}»`);
+    return $('pdFichaDatos');
+}
+const accionPd = a => $('pdFichaDatos').querySelector(`button[data-accion="${a}"]`);
 async function foto() {
     const c = document.createElement('canvas'); c.width = 64; c.height = 48;
     const ctx = c.getContext('2d'); ctx.fillStyle = '#333'; ctx.fillRect(0, 0, 64, 48); ctx.fillStyle = '#0f0'; ctx.fillText('44600', 5, 30);
@@ -486,20 +497,11 @@ try {
 
     // 3. Padron: carrier (RME 105) + unidad + chofer.
     document.querySelector('#pestanas button[data-p="padron"]').click();
-    // C-08 (v0.23.0): en escritorio (>= 900 px) los tres grupos del padron se abren solos; en celular se quedan cerrados.
-    {
-        const esc = window.matchMedia('(min-width: 900px)').matches;
-        const abiertos = ['pdGrupoCarriers', 'pdGrupoUnidades', 'pdGrupoChoferes'].filter(id => $(id).open).length;
-        R.ok('C-08: abrirGruposPadronEscritorio abre los 3 grupos en escritorio y ninguno en celular', abiertos === (esc ? 3 : 0), `${window.innerWidth}px → ${abiertos} abiertos`);
-        // U-56 (v0.29.0): en escritorio el clic en la cabecera del grupo NO lo pliega (los tres van abiertos); en celular sigue plegando.
-        const antesU56 = $('pdGrupoUnidades').open;
-        $('pdGrupoUnidades').querySelector('summary').click(); await dormir(10);
-        R.ok('U-56: el clic en el summary del padrón no pliega en escritorio y sí en celular', esc ? $('pdGrupoUnidades').open === true : $('pdGrupoUnidades').open !== antesU56, `${esc ? 'escritorio' : 'celular'}: ${antesU56} → ${$('pdGrupoUnidades').open}`);
-        if (!esc) $('pdGrupoUnidades').open = antesU56;
-    }
+    // v0.71.0: el padrón abre en la lista de carriers por estado (Vigentes), con los tres conteos de la banda y sin expediente ni ficha.
+    R.ok('v0.71.0: el padrón abre en la lista de carriers, pestaña Vigentes, tres conteos', !$('pdLista').hidden && $('pdExpediente').hidden && $('pdFicha').hidden
+        && document.querySelector('#pdTabs [aria-pressed="true"]').dataset.pd === 'vigentes' && $('pdKpis').querySelectorAll('button').length === 3 && $('pdMigas').hidden);
     if (captura) {
-    // U-18 (v0.22.0): los tres grupos vacios lo dicen (antes solo Carriers).
-    R.ok('U-18: Unidades y Choferes vacíos tienen estado vacío', $('pdUnidades').textContent.includes('Sin unidades') && $('pdChoferes').textContent.includes('Sin choferes'), $('pdUnidades').textContent.slice(0, 40));
+    R.ok('v0.71.0: sin carriers, la lista lo dice y ofrece «+ Nuevo carrier»', $('pdCarriers').textContent.includes('Sin carriers') && visible('btnNuevoCarrier') && !visible('btnNuevaUnidad'), $('pdCarriers').textContent.slice(0, 60));
     // U-09 (v0.22.0): Escape (evento cancel) sobre un formulario con algo tecleado pregunta; vacio cierra directo.
     clic('btnNuevoCarrier'); await esperar(() => $('pdFormaCarrier').open, 'forma de carrier');
     $('pdFormaCarrier').dispatchEvent(new Event('cancel', { cancelable: true })); await dormir(30);
@@ -523,6 +525,11 @@ try {
     R.ok('carrier guardado en PLANTA_Carriers', filas('carriers').length === 1 && filas('carriers')[0].fields.Corrientes.includes('base-aceite'));
     R.ok('vigencia ASEA del carrier dada de alta en PLANTA_Vigencias', filas('vigencias').length === 1 && filas('vigencias')[0].fields.Fuente === 'legal');
     const carrierId = filas('carriers')[0].id;
+    // v0.71.0: dado de alta desde el padrón, el carrier abre su expediente; vacío, lo dice (U-18), y el alta de unidad queda a la vista.
+    R.ok('v0.71.0: tras el alta, el carrier abre su expediente con migas y «+ Alta de unidad»', !$('pdExpediente').hidden && $('pdTitulo').textContent.includes('TRANSPORTES DEMO')
+        && $('pdMigas').textContent.includes('Padrón') && visible('btnNuevaUnidad') && visible('btnPdVolver') && !visible('btnNuevoCarrier'));
+    R.ok('U-18: el expediente sin unidades ni choferes lo dice', $('pdUnidades').textContent.includes('Sin unidades') && $('pdChoferes').textContent.includes('Sin choferes'), $('pdUnidades').textContent.slice(0, 40));
+    R.ok('v0.71.0: el oficio va a un lado del expediente', $('pdOficio').textContent.includes('00-ASEA-T-RME-00-00') && $('pdOficio').textContent.includes('UGI-DEMO-0000-2025'));
 
     clic('btnNuevaUnidad');
     // U-46 (v0.29.0): el alta de unidad arranca con el carrier que se acaba de dar de alta (o el del filtro).
@@ -533,14 +540,17 @@ try {
     await esperar(() => avisoCon('Unidad transcrita'), 'unidad guardada');
     R.ok('placa normalizada al guardar', filas('unidades')[0].fields.Title === '55XY9K', filas('unidades')[0].fields.Title);
     const unidadId = filas('unidades')[0].id;
-    // U-15 (v0.22.0): el renglon del padron se abre con teclado y anuncia su estado.
+    // U-15 (v0.22.0) / v0.71.0: el renglón es role=button, tabindex=0 y Enter abre la ficha; Volver regresa al expediente.
     {
-        const cab = document.querySelector('#pdUnidades .renglon > div:first-child');
-        const antes = cab.getAttribute('aria-expanded');
-        cab.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-        R.ok('U-15: el renglón del padrón es role=button, tabindex=0 y Enter despliega la ficha (aria-expanded)', cab.getAttribute('role') === 'button' && cab.tabIndex === 0 && antes === 'false' && cab.getAttribute('aria-expanded') === 'true' && !document.querySelector('#pdUnidades .ficha').classList.contains('oculto'), `${antes} → ${cab.getAttribute('aria-expanded')}`);
-        cab.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
-        R.ok('U-15: Espacio la vuelve a plegar', cab.getAttribute('aria-expanded') === 'false');
+        const f = await esperar(() => document.querySelector('#pdUnidades .pd-fila:not(.pd-cab)'), 'renglón de la unidad');
+        R.ok('v0.71.0: la unidad sale en el expediente con su estado como etiqueta (sin píldora)', f.textContent.includes('55XY9K') && !!f.querySelector('.etiqueta'), f.textContent);
+        f.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        R.ok('U-15: el renglón del padrón es role=button, tabindex=0 y Enter abre su ficha', f.getAttribute('role') === 'button' && f.tabIndex === 0 && !$('pdFicha').hidden && $('pdTitulo').textContent.includes('55XY9K'));
+        R.ok('v0.71.0: la ficha trae migas hasta el carrier, vigencias y Dónde se ha usado', $('pdMigas').textContent.includes('TRANSPORTES DEMO') && $('pdFichaDatos').querySelectorAll('.pd-vigs li').length === 2 && $('pdUso').textContent.includes('Pre-altas'));
+        clic('btnPdVolver');
+        R.ok('v0.71.0: Volver desde la ficha regresa al expediente del carrier', !$('pdExpediente').hidden && $('pdFicha').hidden);
+        document.querySelector('#pdSubTabs button[data-sub="choferes"]').click();
+        R.ok('v0.71.0: la pestaña Choferes cambia el botón de alta', visible('btnNuevoChofer') && !visible('btnNuevaUnidad') && !$('pdpChoferes').hidden);
     }
 
     clic('btnNuevoChofer');
@@ -1584,20 +1594,22 @@ try {
         document.querySelector('#pestanas button[data-p="padron"]').click();
         clic('btnNuevoChofer'); poner('pchCarrier', String(carrierId)); poner('pchNombre', 'CHOFER DE PRUEBA'); clic('btnGuardarChofer');
         await esperar(() => filas('choferes').length === 2, 'chofer 2');
-        // Al repintado, no al dato (v0.24.0): con el renglon capturado un tick antes, el clic en Eliminar caia en un nodo suelto.
-        await esperar(() => [...document.querySelectorAll('#pdChoferes .renglon')].some(r => r.textContent.includes('CHOFER DE PRUEBA')), 'renglón del chofer repintado');
-        const rCh = [...document.querySelectorAll('#pdChoferes .renglon')].find(r => r.textContent.includes('CHOFER DE PRUEBA'));
-        const rUn = document.querySelector('#pdUnidades .renglon');
+        // v0.71.0: las acciones viven en la ficha; la que no se deshace va sola, grande, abajo (.pd-grande).
         // v0.15.1 revirtió la autorización de gerencia: trazabilidad y gerencia eliminan / dan de baja directo.
-        // (La prueba de v0.15.0 quedó aquí sin revertir hasta el 2026-09-08 y fallaba en trazabilidad.)
-        R.ok('chofer sin referencias ofrece Eliminar; unidad referenciada ofrece Dar de baja', !!(rCh && rCh.querySelector('button[data-accion="eliminar"]')) && !!(rUn && rUn.querySelector('button[data-accion="baja"]')) && !(rUn && rUn.querySelector('button[data-accion="eliminar"]')));
-        if (rCh && rCh.querySelector('button[data-accion="eliminar"]')) {
-            rCh.querySelector('button[data-accion="eliminar"]').click(); await confirmar();
+        await fichaPd('CHOFER DE PRUEBA');
+        const eliminaCh = accionPd('eliminar');
+        R.ok('v0.71.0: chofer sin referencias ofrece Eliminar, grande, en su ficha', !!eliminaCh && eliminaCh.classList.contains('pd-grande') && !accionPd('baja'));
+        if (eliminaCh) {
+            eliminaCh.click(); await confirmar();
             await esperar(() => filas('choferes').length === 1, 'chofer eliminado');
             R.ok('chofer eliminado', filas('choferes').length === 1);
+            R.ok('v0.71.0: eliminado el renglón, la ficha se cierra y vuelve a la búsqueda', $('pdFicha').hidden && !$('pdLista').hidden);
         }
-        if (rUn && rUn.querySelector('button[data-accion="baja"]')) {
-            rUn.querySelector('button[data-accion="baja"]').click(); await confirmar('Placa mal transcrita');
+        await fichaPd('55XY9K');
+        const bajaUn = accionPd('baja');
+        R.ok('unidad referenciada ofrece Dar de baja y no Eliminar', !!bajaUn && !accionPd('eliminar'));
+        if (bajaUn) {
+            bajaUn.click(); await confirmar('Placa mal transcrita');
             await esperar(() => filas('unidades')[0].fields.Activo === false, 'unidad de baja');
             R.ok('unidad dada de baja (Activo=false), el renglón se conserva', filas('unidades')[0].fields.Activo === false && filas('unidades').length === 1);
             // C-06 (v0.22.0): el motivo de la baja queda en Notas tambien para unidades y choferes (antes solo carriers).
@@ -1608,17 +1620,17 @@ try {
             clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto baja');
             R.ok('una unidad de baja ya no ampara: la puerta la rechaza', $('veredicto').classList.contains('v-bad'));
             clic('btnVolverVeredicto');
-            document.querySelector('#pestanas button[data-p="padron"]').click();
-            const rUn2 = document.querySelector('#pdUnidades .renglon');
-            if (rUn2 && rUn2.querySelector('button[data-accion="reactivar"]')) { rUn2.querySelector('button[data-accion="reactivar"]').click(); await confirmar(); await esperar(() => filas('unidades')[0].fields.Activo === true, 'reactivada'); R.ok('unidad reactivada', filas('unidades')[0].fields.Activo === true); }
+            await fichaPd('55XY9K');
+            const reac = accionPd('reactivar');
+            R.ok('v0.71.0: la unidad de baja dice «de baja» y ofrece Reactivar grande', !!reac && reac.classList.contains('bien') && $('pdTitulo').textContent.includes('de baja'));
+            if (reac) { reac.click(); await confirmar(); await esperar(() => filas('unidades')[0].fields.Activo === true, 'reactivada'); R.ok('unidad reactivada', filas('unidades')[0].fields.Activo === true); }
         }
         // C-08 (v0.23.0): editar una unidad cambiando la vigencia de la poliza pide motivo y lo deja en Notas.
         {
             // Se espera al REPINTADO (el boton Editar existe solo con la unidad activa), no al dato de la reactivacion:
             // el renglon capturado antes del repintado era un nodo suelto y el clic no abria nada (misma carrera que 12a).
-            await esperar(() => document.querySelector('#pdUnidades .renglon button[data-accion="editar"]'), 'renglón repintado con Editar').catch(() => {});
-            const rEd = document.querySelector('#pdUnidades .renglon');
-            const btnEd = rEd && rEd.querySelector('button[data-accion="editar"]');
+            await fichaPd('55XY9K');
+            const btnEd = await esperar(() => accionPd('editar'), 'Editar en la ficha de la unidad').catch(() => null);
             if (btnEd) {
                 btnEd.click(); await esperar(() => $('pdFormaUnidad').open, 'edición de unidad');
                 poner('puuPolizaVig', '2027-09-30');
@@ -1730,9 +1742,9 @@ try {
         await esperar(() => filas('choferes').some(c => c.fields.Title === 'CHOFER VIEJO'), 'chofer viejo');
         const idChoferViejo = filas('choferes').find(c => c.fields.Title === 'CHOFER VIEJO').id;
         viejoCerrado.fields.ChoferId = idChoferViejo;
-        const rChV = [...document.querySelectorAll('#pdChoferes .renglon')].find(r => r.textContent.includes('CHOFER VIEJO'));
-        R.ok('el botón sigue ofreciendo Eliminar (la memoria no lo ve citado)', !!rChV.querySelector('button[data-accion="eliminar"]'));
-        rChV.querySelector('button[data-accion="eliminar"]').click(); await confirmar();
+        await fichaPd('CHOFER VIEJO');
+        R.ok('el botón sigue ofreciendo Eliminar (la memoria no lo ve citado)', !!accionPd('eliminar'));
+        accionPd('eliminar').click(); await confirmar();
         await esperar(() => avisoCon('se da de baja, no se elimina'), 'negativa por cita vieja');
         R.ok('pero el borrado se NIEGA: la consulta en vivo lo encuentra citado fuera de la ventana',
             filas('choferes').some(c => c.id === idChoferViejo));
@@ -1756,16 +1768,20 @@ try {
             clic('btnGuardarCarrier'); await esperar(() => filas('carriers').some(c => c.fields.Title === 'CARRIER SUELTO'), 'carrier suelto');
             await esperar(() => filas('vigencias').some(v => String(v.fields.Title).includes('CARRIER SUELTO')), 'vigencia del carrier suelto');
             const nVig = filas('vigencias').length;
-            const rSuelto = await esperar(() => [...document.querySelectorAll('#pdCarriers .renglon')].find(r => r.textContent.includes('CARRIER SUELTO') && r.querySelector('button[data-accion="eliminar"]')), 'renglón del carrier suelto con Eliminar');
+            // v0.71.0: del expediente que abrió el alta a la ficha del carrier, por «Ver la ficha del carrier».
+            await esperar(() => !$('pdExpediente').hidden && $('pdTitulo').textContent.includes('CARRIER SUELTO'), 'expediente del carrier suelto');
+            clic('btnPdFichaCarrier');
+            const eliminaSuelto = await esperar(() => !$('pdFicha').hidden && accionPd('eliminar'), 'Eliminar en la ficha del carrier suelto');
             const nLl = DB.llamadas.length;
-            rSuelto.querySelector('button[data-accion="eliminar"]').click(); await confirmar();
+            eliminaSuelto.click(); await confirmar();
             await esperar(() => !filas('carriers').some(c => c.fields.Title === 'CARRIER SUELTO'), 'carrier suelto eliminado');
             const borrados = DB.llamadas.slice(nLl).filter(l => l.startsWith('DELETE'));
             R.ok('C-19/C-05: eliminar el carrier borra ANTES su vigencia (DELETE vigencias → DELETE carriers) y filas(vigencias) queda sin su renglón', !filas('vigencias').some(v => String(v.fields.Title).includes('CARRIER SUELTO')) && filas('vigencias').length === nVig - 1 && borrados.length === 2 && borrados[0].includes('lista-vigencias') && borrados[1].includes('lista-carriers'), borrados.join(' | '));
             // (c) si el PATCH a la vigencia del tablero falla, el carrier ya quedo y el aviso ambar lo dice.
             const fallaVig = { metodo: 'PATCH', incluye: 'lista-vigencias', status: 403, veces: 1 }; DB.fallas.push(fallaVig);
-            const rDemo = await esperar(() => [...document.querySelectorAll('#pdCarriers .renglon')].find(r => r.textContent.includes('TRANSPORTES DEMO') && r.querySelector('button[data-accion="editar"]')), 'Editar del carrier DEMO');
-            rDemo.querySelector('button[data-accion="editar"]').click(); await esperar(() => $('pdFormaCarrier').open, 'edición del carrier');
+            await fichaPd('TRANSPORTES DEMO');
+            const edDemo = await esperar(() => accionPd('editar'), 'Editar del carrier DEMO');
+            edDemo.click(); await esperar(() => $('pdFormaCarrier').open, 'edición del carrier');
             poner('pcFolio', 'UGI-DEMO-0001-2025'); clic('btnGuardarCarrier');
             await esperar(() => avisoCon('no se sincronizó'), 'aviso ámbar del segundo paso');
             R.ok('C-19: PATCH fallido sobre la vigencia del tablero → el carrier queda actualizado y el aviso «no se sincronizó» lo dice', filas('carriers')[0].fields.FolioOficio === 'UGI-DEMO-0001-2025' && fallaVig.veces === 0 && !$('pdFormaCarrier').open && !!avisoCon('no se sincronizó'), (avisoCon('no se sincronizó') || {}).textContent);
@@ -2091,7 +2107,21 @@ try {
                 poner('baKg', tara ? '17620' : '41080'); if (tara) poner('baTicketBascula', 'B-18841'); await foto();
                 if (a === 'pausa' || a === 'ticket') { clic('btnGuardarPeso'); await esperar(() => visible(a === 'pausa' ? 'baPausa' : 'baTicketCaja'), 'captura ' + a); }
                 if (params.get('hoja')) clic('btnLoCapturado');
-            })(); } else document.querySelector(`#pestanas button[data-p="${v}"], #pestanasExtra button[data-p="${v}"]`).click(); }
+            })(); } else {
+                document.querySelector(`#pestanas button[data-p="${v}"], #pestanasExtra button[data-p="${v}"]`).click();
+                // v0.71.0, solo para capturas: `&pd=carrier|ficha|buscar` abre el expediente del primer carrier, la ficha de su primera unidad o la búsqueda.
+                const pd = params.get('pd');
+                if (v === 'padron' && pd === 'buscar') { document.querySelector('#pdTabs button[data-pd="buscar"]').click(); poner('pdBusca', 'DEMO'); }
+                else if (v === 'padron' && pd) {
+                    document.querySelector('#pdTabs button[data-pd="vigentes"]').click();
+                    if (pd !== 'lista') for (const t of ['vigentes', 'atender', 'baja']) {
+                        document.querySelector(`#pdTabs button[data-pd="${t}"]`).click();
+                        const f = [...document.querySelectorAll('#pdCarriers .pd-fila:not(.pd-cab)')].find(x => x.textContent.includes('TRANSPORTES DEMO'));
+                        if (f) { f.click(); break; }
+                    }
+                    if (pd === 'ficha') document.querySelector('#pdUnidades .pd-fila:not(.pd-cab)')?.click();
+                }
+            } }
 }
 </script>
 </body>

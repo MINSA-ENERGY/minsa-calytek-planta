@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.70.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.71.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -34,8 +34,8 @@ const estado = {
     paAsis: null,            // v0.54.0: el recorrido del asistente de pre-alta (paso, max, revisar...); null = cerrado
     padronEdit: null,        // {clave, x} del renglon del padron en edicion, o null
     focoAntesVeredicto: null, // elemento con el foco antes de abrir el veredicto (vuelve ahi al cerrarlo)
-    padronFicha: null,       // 'tipo:id' de la ficha del padron desplegada
-    padronCarrier: null,     // id del carrier que filtra unidades y choferes en el padron
+    padronVista: { v: 'lista', tab: 'vigentes', sub: 'unidades', carrier: null, ficha: null, desde: null },   // v0.71.0: vista del padron por carrier
+    padronCarrier: null,     // id del carrier del expediente o la ficha del padron (preselecciona el alta, U-46)
     ultimoCarrierPadron: null,   // U-46: el ultimo carrier dado de alta o usado en un alta de unidad/chofer (solo esta sesion)
     pestana: 'hoy',
     vistaPrealtas: 'borrador', // rediseño de Pre-altas tanda 1 (v0.53.0): la pestaña elegida (borrador · firmada · cerrada)
@@ -671,6 +671,7 @@ function pintarRotulo(p) {
 function irA(p) {
     if (p !== 'bascula') salirDelAsistente();
     ocultarListoPrealta();   // P10: la confirmación no guarda nada; salir o volver por el rail la suelta
+    if (p === 'padron') estado.padronVista.v = 'lista';   // v0.71.0: el rail lleva a la lista de carriers, no al último expediente o ficha
     estado.pestana = p;
     for (const b of botonesRail()) { if (b.dataset.p === (RAIL_DE[p] || p)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }   // U-57 (v0.29.0): <nav> con aria-current, como .mn-rail de la piel; el role=tablist prometía flechas y tabpanel que no había
     for (const s of SECCIONES) $('p-' + s).classList.toggle('oculto', s !== p);
@@ -2919,138 +2920,241 @@ const CAMPOS_PADRON = {
     unidades: [['Placa plana', 'PlacaPlana'], ['Carrier', 'CarrierId', 'carrier'], ['Tipo', 'TipoUnidad'], ['Marca', 'Marca'], ['No. de serie', 'NumeroSerie'], ['Capacidad', 'CapacidadKg', 'kg'], ['Folio del oficio', 'FolioOficio'], ['Tarjeta de circulación', 'TarjetaCirc'], ['Tarjeta vence', 'TarjetaVigencia', 'fecha'], ['Póliza', 'Poliza'], ['Póliza vence', 'PolizaVigencia', 'fecha'], ['Activo', 'Activo', 'si'], ['Notas', 'Notas']],
     choferes: [['Carrier', 'CarrierId', 'carrier'], ['Licencia', 'Licencia'], ['Licencia vence', 'LicenciaVigencia', 'fecha'], ['Activo', 'Activo', 'si'], ['Notas', 'Notas']],
 };
-function fichaPadron(tipo, x) {
-    const dl = el('dl', 'ficha oculto');
-    for (const [rotulo, col, fmt] of CAMPOS_PADRON[tipo]) {
-        const v = x[col];
-        let txt;
-        if (fmt === 'fecha') txt = fechaCorta(v);
-        else if (fmt === 'lista') txt = lista(v).join(', ') || '—';
-        else if (fmt === 'carrier') txt = nombreDe(estado.carriers, v);
-        else if (fmt === 'kg') txt = v ? `${v} kg` : '—';
-        else if (fmt === 'si') txt = v === false ? 'No (dado de baja)' : 'Sí';
-        else txt = (v === null || v === undefined || v === '') ? '—' : String(v);
-        dl.appendChild(el('dt', null, rotulo)); dl.appendChild(el('dd', null, txt));
-    }
-    return dl;
-}
-// Tocar el renglón despliega/oculta su ficha; para el carrier además filtra unidades y choferes.
-function conFicha(r, tipo, x, extra) {
-    const ficha = fichaPadron(tipo, x);
-    r.firstChild.appendChild(ficha);
-    // Los botones (Editar, Dar de baja…) solo se ven con la ficha abierta: la lista se lee limpia y se actúa sobre un inciso a la vez.
-    r.classList.toggle('plegado', estado.padronFicha !== `${tipo}:${x.id}`);
-    if (estado.padronFicha === `${tipo}:${x.id}`) ficha.classList.remove('oculto');
-    desplegable(r.firstChild, estado.padronFicha === `${tipo}:${x.id}`, () => {
-        const llave = `${tipo}:${x.id}`;
-        estado.padronFicha = estado.padronFicha === llave ? null : llave;
-        if (extra) extra(); else { ficha.classList.toggle('oculto', estado.padronFicha !== llave); r.classList.toggle('plegado', estado.padronFicha !== llave); r.firstChild.setAttribute('aria-expanded', String(estado.padronFicha === llave)); }
-    });
-    return r;
-}
-// Plegar un grupo del padrón suelta lo que tenía seleccionado (pedido de Carlos 2026-09-07): un filtro o una
-// ficha escondidos dentro de un grupo cerrado seguían actuando sin que nadie los viera (la foto del chofer único).
-for (const [id, tipo] of [['pdGrupoCarriers', 'carriers'], ['pdGrupoUnidades', 'unidades'], ['pdGrupoChoferes', 'choferes']]) {
-    // U-56 (v0.29.0): en escritorio la cabecera no tiene chevron ni cursor de mano y los tres grupos van abiertos (C-08); un clic
-    // en «Unidades» para enfocar la columna la plegaba sin señal de cómo volver. Los botones del summary («+ Alta») ya cortan el evento.
-    const sinPlegar = ev => { if (ESCRITORIO.matches && !ev.target.closest('button')) ev.preventDefault(); };
-    $(id).querySelector('summary').addEventListener('click', sinPlegar);
-    $(id).querySelector('summary').addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') sinPlegar(ev); });
-    $(id).addEventListener('toggle', () => {
-        if ($(id).open) return;
-        let cambio = false;
-        if (tipo === 'carriers' && estado.padronCarrier !== null && estado.padronCarrier !== undefined) { estado.padronCarrier = null; cambio = true; }
-        if (estado.padronFicha && estado.padronFicha.startsWith(tipo + ':')) { estado.padronFicha = null; cambio = true; }
-        if (cambio) pintarPadron();
-    });
-}
-function elegirCarrierPadron(c) {
-    estado.padronCarrier = estado.padronCarrier === c.id ? null : c.id;   // segundo toque = quitar el filtro
-    estado.padronFicha = estado.padronCarrier === null ? null : `carriers:${c.id}`;
-    pintarPadron();
-}
-// I1 (7-sep): el resumen de cada grupo dice cuantos hay y cuantos estan vencidos o por vencer, para que el grupo
-// plegado siga informando. En escritorio (>= 900 px) las tres columnas se abren solas porque ahi caben; en celular
-// se quedan plegadas (pedido de Carlos, v0.16.0). Reversible: quitar abrirGruposPadronEscritorio().
 const ESCRITORIO = window.matchMedia('(min-width: 900px)');
-function abrirGruposPadronEscritorio() { if (ESCRITORIO.matches) for (const id of ['pdGrupoCarriers', 'pdGrupoUnidades', 'pdGrupoChoferes']) $(id).open = true; }
-ESCRITORIO.addEventListener('change', abrirGruposPadronEscritorio);
 // U-11 (v0.22.0): en el celular el campo de peso NO levanta el teclado del sistema (inputmode=none): se captura con el
 // teclado propio, que quedaba tapado por el del telefono. En escritorio el propio se oculta por CSS y el campo vuelve a numeric.
 function ajustarTecladoPeso() { $('baKg').inputMode = ESCRITORIO.matches ? 'numeric' : 'none'; }
 ESCRITORIO.addEventListener('change', ajustarTecladoPeso); ajustarTecladoPeso();
-function resumenPadron(tipo, items, unidad) {
-    const vivos = items.filter(x => x.Activo !== false);
-    const vencidos = vivos.filter(x => vigenciasPadron(tipo, x).some(h => !h.ok && !sinFecha(h))).length;
-    const porVencer = vivos.filter(x => { const h = vigenciasPadron(tipo, x); return !h.some(v => !v.ok && !sinFecha(v)) && h.some(v => v.ok); }).length;
-    const [uno, varios] = Array.isArray(unidad) ? unidad : [unidad, unidad + 's'];   // U-36: 'activo' → activos; ['con licencia', 'con licencia'] no cambia
-    const s = el('span', '', plural(vivos.length, uno, varios));
-    if (vencidos) { s.appendChild(document.createTextNode(' · ')); s.appendChild(el('span', 'mal', `${vencidos} vencid${vencidos === 1 ? 'o' : 'os'}`)); }
-    if (porVencer) { s.appendChild(document.createTextNode(' · ')); s.appendChild(el('span', 'ojo', `${porVencer} por vencer`)); }
-    return s;
-}
 const normaliza = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-/** Lo que distingue a cada grupo del padron (C-18): contenedor, campos que busca el filtro de texto, si el carrier elegido lo acota, titulo y extra de la ficha. */
-const GRUPOS_PADRON = {
-    carriers: { contenedor: 'pdCarriers', porCarrier: false, busca: c => [c.Title, c.AutorizacionASEA, c.FolioOficio], titulo: c => c.Title, extra: c => () => elegirCarrierPadron(c) },
-    unidades: { contenedor: 'pdUnidades', porCarrier: true, busca: u => [u.Title, u.PlacaPlana, u.NumeroSerie, nombreDe(estado.carriers, u.CarrierId)], titulo: u => `${u.Title}${u.PlacaPlana ? ' / ' + u.PlacaPlana : ''}` },
-    choferes: { contenedor: 'pdChoferes', porCarrier: true, busca: ch => [ch.Title, ch.Licencia, nombreDe(estado.carriers, ch.CarrierId)], titulo: ch => ch.Title }
-};
-/** Etiqueta de estado del renglon: «baja» si esta inactivo, si no la de vigencia (vencida / por vencer), si la hay. */
-function marcaEstado(r, clave, x) {
-    if (x.Activo === false) { r.classList.add('baja'); r.firstChild.firstChild.appendChild(etiqueta('baja', 'baja')); return; }
-    const v = etiquetaVigencia(clave, x); if (v) r.firstChild.firstChild.appendChild(v);
+/**
+ * v0.71.0 — EL PADRÓN POR CARRIER (artifact G77viANSEuwDFfDvkxVWFS, OK de Carlos 2026-09-24). Tres vistas en la pestaña, con la
+ * banda de Pre-altas: 'lista' (carriers por estado, o la búsqueda de placa/chofer), 'carrier' (el expediente: unidades y choferes
+ * en pestañas y el oficio a un lado) y 'ficha' (un renglón, con «Dar de baja» / «Eliminar» / «Reactivar» grande abajo). Los
+ * estados son etiquetas (texto mono de color, sin píldora). estado.padronCarrier sigue siendo el carrier elegido que preselecciona
+ * el alta de unidad/chofer (U-46): en el expediente y en la ficha es el de la vista; en la lista, ninguno.
+ */
+const activo = x => x.Activo !== false;
+const porTitulo = (a, b) => String(a.Title || '').localeCompare(String(b.Title || ''), 'es');
+const nombrePd = (clave, x) => clave === 'unidades' ? `${x.Title}${x.PlacaPlana ? ' / ' + x.PlacaPlana : ''}` : x.Title;
+const ARTICULO_PADRON = { carriers: 'el carrier', unidades: 'la unidad', choferes: 'el chofer' };
+function tipoUnidadTexto(v) { const o = [...$('puuTipo').options].find(o => o.value === v); return o ? o.textContent : (v || '—'); }
+/** Lo que un renglón trae vencido o por vencer (sin contar «sin fecha», igual que el resumen de antes). */
+function avisosPadron(clave, x) { return vigenciasPadron(clave, x).filter(h => !sinFecha(h)); }
+function delCarrier(clave, c) { return estado[clave].filter(x => Number(x.CarrierId) === c.id); }
+/** Por atender = el oficio del carrier o la póliza/tarjeta/licencia de alguna de sus unidades o choferes ACTIVOS, vencida o por vencer. */
+function pendientesCarrier(c) {
+    return [['carriers', c], ...delCarrier('unidades', c).map(u => ['unidades', u]), ...delCarrier('choferes', c).map(h => ['choferes', h])]
+        .filter(([clave, x]) => activo(x) && avisosPadron(clave, x).length);
 }
-function pintarPadron() {
-    const puede = PUEDE.capturarPrealta(estado.rol);
-    for (const id of ['btnNuevoCarrier', 'btnNuevaUnidad', 'btnNuevoChofer']) $(id).classList.toggle('oculto', !puede);
-    for (const id of ['pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer']) cerrarForma(id);
-    estado.padronEdit = null;
-    abrirGruposPadronEscritorio();
-    const sel = estado.padronCarrier;
-    const q = normaliza($('pdBusca').value.trim());
-    const pega = filtroTexto(q);   // C-26
-    $('pdResCarriers').textContent = ''; $('pdResCarriers').appendChild(resumenPadron('carriers', estado.carriers, 'activo'));
-    $('pdkCarriers').textContent = String(estado.carriers.length); $('pdkUnidades').textContent = String(estado.unidades.length); $('pdkChoferes').textContent = String(estado.choferes.length);   // v0.66.0: la banda
-    $('pdResUnidades').textContent = ''; $('pdResUnidades').appendChild(resumenPadron('unidades', estado.unidades, 'amparada'));
-    $('pdResChoferes').textContent = ''; $('pdResChoferes').appendChild(resumenPadron('choferes', estado.choferes, ['con licencia', 'con licencia']));
-    let encontrados = 0;
-    // C-18 (v0.25.0): un solo bucle sobre GRUPOS_PADRON en vez de tres gemelos; lo que cambia por grupo vive en la tabla.
-    const filtraCarrier = x => !haySel(sel) || Number(x.CarrierId) === Number(sel);   // C-26
-    const contenedores = {};
-    for (const [clave, g] of Object.entries(GRUPOS_PADRON)) {
-        const cont = $(g.contenedor); cont.textContent = ''; contenedores[clave] = cont;
-        for (const x of estado[clave]) {
-            if (g.porCarrier && !filtraCarrier(x)) continue;
-            if (!pega(...g.busca(x))) continue;
-            encontrados++;
-            const r = renglon(g.titulo(x), null, null, null, botonesPadron(clave, x));
-            marcaEstado(r, clave, x);
-            if (clave === 'carriers') { r.classList.toggle('sel', sel === x.id); r.firstChild.setAttribute('aria-pressed', String(sel === x.id)); }   // U-33: el filtro por carrier como estado accesible
-            cont.appendChild(conFicha(r, clave, x, g.extra ? g.extra(x) : undefined));
-        }
-    }
-    const c1 = contenedores.carriers, c2 = contenedores.unidades, c3 = contenedores.choferes;
-    if (haySel(sel)) c1.appendChild(el('p', 'filtro', `Mostrando solo lo de ${nombreDe(estado.carriers, sel)} · toca el carrier otra vez para ver todo`));
-    if (!estado.carriers.length) c1.appendChild(el('p', 'pista', 'Sin carriers. La primera pre-alta necesita uno con su oficio ASEA transcrito.'));
-    // U-18 (v0.22.0): un grupo sin renglones lo dice, y distinto si el vacio es por el filtro de carrier. Antes solo
-    // Carriers tenia estado vacio y «0 unidades» se leia igual que «este carrier no tiene».
-    const filtrado = haySel(sel);
-    if (!q && !c2.querySelector('.renglon')) c2.appendChild(el('p', 'pista', filtrado ? `${nombreDe(estado.carriers, sel)} no tiene unidades en el padrón.` : 'Sin unidades. Se transcriben del oficio del carrier con «+ Alta».'));
-    if (!q && !c3.querySelector('.renglon')) c3.appendChild(el('p', 'pista', filtrado ? `${nombreDe(estado.carriers, sel)} no tiene choferes en el padrón.` : 'Sin choferes. Se dan de alta con su licencia con «+ Alta».'));
-    // Con texto en el buscador: los grupos con resultado se abren, los vacios lo dicen, y la cuenta va junto al campo.
-    if (q) {
-        for (const [g, cont] of [['pdGrupoCarriers', c1], ['pdGrupoUnidades', c2], ['pdGrupoChoferes', c3]]) {
-            const hay = cont.querySelector('.renglon');
-            if (!hay) cont.appendChild(el('p', 'sin-resultado', 'Nada con ese texto.'));
-            $(g).open = !!hay;
-        }
-    }
-    $('pdBuscaCuenta').textContent = q ? plural(encontrados, 'resultado') : '';
-    const sels = [$('puuCarrier'), $('pchCarrier')];
-    for (const s of sels) opciones(s, estado.carriers.filter(c => c.Activo !== false), c => c.id, c => c.Title);
+function grupoCarrier(c) { return !activo(c) ? 'baja' : pendientesCarrier(c).length ? 'atender' : 'vigentes'; }
+/** La etiqueta de un renglón: de baja > vencida > por vencer > sin fecha > vigente. */
+function estadoPadron(clave, x) {
+    if (!activo(x)) return etiqueta('de baja', 'baja');
+    const h = vigenciasPadron(clave, x);
+    const mala = h.find(v => !v.ok && !sinFecha(v)); if (mala) return etiqueta(`${mala.regla} vencida`, 'vencida');
+    const aviso = h.find(v => v.ok); if (aviso) return etiqueta(`${aviso.regla} ${aviso.detalle.replace(/ \(.*\)$/, '')}`, 'aviso');
+    const sf = h.find(sinFecha); if (sf) return etiqueta(`${sf.regla} sin fecha`, sf.clase);
+    return etiqueta(clave === 'unidades' ? 'amparada' : 'vigente', 'ok');
+}
+function usoPadron(clave, x) {
+    const num = Number(x.id), ids = { unidades: 'UnidadesIds', choferes: 'ChoferesIds' }[clave];
+    const pre = clave === 'carriers' ? estado.prealtas.filter(p => Number(p.CarrierId) === num) : estado.prealtas.filter(p => lista(p[ids]).includes(String(x.id)));
+    const emb = estado.embarques.filter(e => Number(e[COLUMNA_PADRON[clave]]) === num);
+    return { prealtas: pre.length, gondolas: emb.length, ultima: emb.map(e => e.Arribo).filter(Boolean).sort().pop() || null };
 }
 
+// ---- piezas de pintura
+const celdaPd = (clase, v) => { const s = el('span', clase); if (v instanceof Node) s.appendChild(v); else s.textContent = v === null || v === undefined || v === '' ? '—' : String(v); return s; };
+function filaPd(celdas, alAbrir, baja) {
+    const f = el('div', 'pd-fila' + (baja ? ' baja' : '')); f.setAttribute('role', 'button'); f.tabIndex = 0;
+    for (const c of celdas) f.appendChild(c);
+    f.addEventListener('click', alAbrir);
+    f.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); alAbrir(); } });
+    return f;
+}
+function tablaPd(cont, cols, cabeza, filas, vacio) {
+    cont.textContent = ''; cont.style.setProperty('--pd-cols', cols);
+    const cab = el('div', 'pd-fila pd-cab'); cab.setAttribute('aria-hidden', 'true');
+    for (const [t, c] of cabeza) cab.appendChild(el('span', c || '', t));
+    cont.appendChild(cab);
+    if (!filas.length) cont.appendChild(el('p', 'vacio', vacio));
+    for (const f of filas) cont.appendChild(f);
+}
+function migasPd(partes) {
+    const m = $('pdMigas'); m.textContent = ''; m.hidden = !partes.length;
+    partes.forEach(([t, alClic], i) => {
+        if (i) { const s = el('span', '', '/'); s.setAttribute('aria-hidden', 'true'); m.appendChild(s); }
+        if (alClic) { const b = el('button', 'miga', t); b.type = 'button'; b.addEventListener('click', alClic); m.appendChild(b); }
+        else { const b = el('b', '', t); b.setAttribute('aria-current', 'page'); m.appendChild(b); }
+    });
+}
+function kpisPd(items) {
+    const k = $('pdKpis'); k.textContent = ''; k.hidden = !items.length;
+    for (const [n, t, puesto, alerta, alClic] of items) {
+        const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(puesto)); if (alerta) b.classList.add('alerta');
+        b.appendChild(el('b', '', String(n))); b.appendChild(el('span', '', t)); b.addEventListener('click', alClic); k.appendChild(b);
+    }
+}
+function cabeceraPd(migas, titulo, etq, sub) {
+    migasPd(migas);
+    const h = $('pdTitulo'); h.textContent = titulo; if (etq) h.appendChild(etq);
+    $('pdSub').textContent = sub;
+}
+function dlPd() {
+    const dl = el('dl');
+    return { dl, sec: t => dl.appendChild(el('span', 'sec', t)), fila: (dt, dd) => {
+        dl.appendChild(el('dt', '', dt));
+        const d = el('dd', dd === null || dd === undefined || dd === '' ? 'f' : '');
+        if (dd instanceof Node) d.appendChild(dd); else d.textContent = dd === null || dd === undefined || dd === '' ? '—' : String(dd);
+        dl.appendChild(d);
+    } };
+}
+function botonPd(a, clase, texto) { const b = el('button', clase, texto || a.texto); b.type = 'button'; b.dataset.accion = a.accion; b.addEventListener('click', a.alClic); return b; }
+
+// ---- navegación
+function irPadron(v, extra = {}) { Object.assign(estado.padronVista, { v }, extra); pintarPadron(); window.scrollTo({ top: 0 }); }
+function volverPadron() {
+    const p = estado.padronVista;
+    if (p.v === 'ficha' && p.desde !== 'buscar' && porId(estado.carriers, p.carrier)) irPadron('carrier');
+    else irPadron('lista');
+}
+
+function pintarPadron() {
+    const puede = PUEDE.capturarPrealta(estado.rol);
+    for (const id of ['pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer']) cerrarForma(id);
+    estado.padronEdit = null;
+    for (const s of [$('puuCarrier'), $('pchCarrier')]) opciones(s, estado.carriers.filter(activo), c => c.id, c => c.Title);
+    const p = estado.padronVista;
+    // Lo que se veía pudo irse (se eliminó, o el refresco ya no lo trae): se cae a la vista de arriba.
+    if (p.v === 'ficha' && !(p.ficha && porId(estado[p.ficha.clave], p.ficha.id))) p.v = porId(estado.carriers, p.carrier) && p.desde !== 'buscar' ? 'carrier' : 'lista';
+    if (p.v === 'carrier' && !porId(estado.carriers, p.carrier)) p.v = 'lista';
+    const c = p.v === 'lista' ? null : porId(estado.carriers, p.carrier);
+    estado.padronCarrier = c ? c.id : null;
+    $('pdLista').hidden = p.v !== 'lista'; $('pdExpediente').hidden = p.v !== 'carrier'; $('pdFicha').hidden = p.v !== 'ficha';
+    $('btnPdVolver').classList.toggle('oculto', p.v === 'lista');
+    $('btnNuevoCarrier').classList.toggle('oculto', !puede || p.v !== 'lista');
+    const altas = puede && p.v === 'carrier' && activo(c);
+    $('btnNuevaUnidad').classList.toggle('oculto', !(altas && p.sub === 'unidades'));
+    $('btnNuevoChofer').classList.toggle('oculto', !(altas && p.sub === 'choferes'));
+    if (p.v === 'lista') pintarListaPd(); else if (p.v === 'carrier') pintarExpedientePd(c); else pintarFichaPd(c);
+}
+
+function pintarListaPd() {
+    const p = estado.padronVista, cs = [...estado.carriers].sort(porTitulo);
+    const n = { vigentes: 0, atender: 0, baja: 0 }; for (const c of cs) n[grupoCarrier(c)]++;
+    cabeceraPd([], 'Padrón', null, 'Un expediente por carrier: su oficio ASEA, sus unidades y sus choferes. Una placa que no está aquí no está amparada.');
+    const tab = t => () => { p.tab = t; pintarPadron(); };
+    kpisPd([[n.vigentes, 'Vigentes', p.tab === 'vigentes', false, tab('vigentes')], [n.atender, 'Por atender', p.tab === 'atender', n.atender > 0, tab('atender')], [n.baja, 'De baja', p.tab === 'baja', false, tab('baja')]]);
+    $('pdnVigentes').textContent = n.vigentes || ''; $('pdnAtender').textContent = n.atender || ''; $('pdnBaja').textContent = n.baja || '';
+    $('pdnAtender').classList.toggle('alerta', n.atender > 0);
+    for (const b of $('pdTabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.pd === p.tab));
+    $('pdpCarriers').hidden = p.tab === 'buscar'; $('pdpBuscar').hidden = p.tab !== 'buscar';
+    if (p.tab === 'buscar') { pintarBusquedaPd(); return; }
+    const filas = cs.filter(c => grupoCarrier(c) === p.tab).map(c => {
+        const pend = pendientesCarrier(c);
+        const est = !activo(c) ? etiqueta('de baja', 'baja')
+            : pend.length ? etiqueta(`${pend.length} por atender`, pend.some(([k, x]) => avisosPadron(k, x).some(h => !h.ok)) ? 'vencida' : 'aviso')
+            : etiqueta('vigente', 'ok');
+        const a = el('span', 'a'); a.appendChild(el('b', 'n', c.Title)); a.appendChild(el('small', '', c.FolioOficio ? `Oficio ${c.FolioOficio}` : 'Sin folio de oficio'));
+        return filaPd([a, celdaPd('x m', c.AutorizacionASEA), celdaPd('x m', delCarrier('unidades', c).filter(activo).length), celdaPd('x m', delCarrier('choferes', c).filter(activo).length), celdaPd('e', est)],
+            () => irPadron('carrier', { carrier: c.id, sub: 'unidades' }), !activo(c));
+    });
+    const vacio = { vigentes: estado.carriers.length ? 'Ningún carrier sin pendientes.' : 'Sin carriers. La primera pre-alta necesita uno con su oficio ASEA transcrito: «+ Nuevo carrier».',
+        atender: 'Nada por atender: todo el padrón está vigente.', baja: 'Ningún carrier de baja.' }[p.tab];
+    tablaPd($('pdCarriers'), 'minmax(0,1.8fr) minmax(0,1fr) 4rem 4rem minmax(10rem,auto)', [['Carrier'], ['Autorización', 'x'], ['Unid.', 'x'], ['Chof.', 'x'], ['Estado', 'e']], filas, vacio);
+    $('pdPieLista').textContent = p.tab === 'atender'
+        ? `Un carrier cae aquí si su oficio, o la póliza, tarjeta o licencia de alguna de sus unidades o choferes, vence en ${CONFIG.avisoVigenciaDias} días o ya venció.`
+        : filas.length ? 'El renglón abre el expediente del carrier.' : '';
+}
+
+function pintarBusquedaPd() {
+    const texto = $('pdBusca').value.trim(), q = normaliza(texto), pega = filtroTexto(q);   // C-26
+    const r = !q ? [] : [
+        ...estado.unidades.filter(u => pega(u.Title, u.PlacaPlana, u.NumeroSerie)).map(u => ['unidades', u]),
+        ...estado.choferes.filter(h => pega(h.Title, h.Licencia)).map(h => ['choferes', h]),
+        ...estado.carriers.filter(c => pega(c.Title, c.AutorizacionASEA, c.FolioOficio)).map(c => ['carriers', c]),
+    ];
+    $('pdBuscaCuenta').textContent = q ? plural(r.length, 'resultado') : '';
+    const filas = r.map(([clave, x]) => filaPd([celdaPd('x m', NOMBRE_PADRON[clave]), celdaPd('a t', nombrePd(clave, x)),
+        celdaPd('c', clave === 'carriers' ? (x.FolioOficio ? `Oficio ${x.FolioOficio}` : '') : nombreDe(estado.carriers, x.CarrierId)), celdaPd('e', estadoPadron(clave, x))],
+        () => irPadron('ficha', { ficha: { clave, id: x.id }, carrier: clave === 'carriers' ? x.id : Number(x.CarrierId), desde: 'buscar' }), !activo(x)));
+    tablaPd($('pdResultados'), '5rem minmax(0,1.2fr) minmax(0,1.4fr) minmax(10rem,auto)', [['Tipo', 'x'], ['Unidad, chofer o carrier'], ['Carrier'], ['Estado', 'e']], filas,
+        q ? `Nada con «${texto}». Si la placa no está, no está amparada: se transcribe del oficio del carrier.` : 'Escribe una placa, una serie, un nombre o una licencia.');
+}
+
+function pintarExpedientePd(c) {
+    const p = estado.padronVista, us = delCarrier('unidades', c).sort(porTitulo), hs = delCarrier('choferes', c).sort(porTitulo), pend = pendientesCarrier(c);
+    cabeceraPd([['Padrón', () => irPadron('lista')], [c.Title]], c.Title, activo(c) ? null : etiqueta('de baja', 'baja'),
+        [c.FolioOficio && `Oficio ${c.FolioOficio}`, c.AutorizacionASEA && `Autorización ${c.AutorizacionASEA}`].filter(Boolean).join(' · ') || 'Sin datos del oficio capturados.');
+    const sub = s => () => { p.sub = s; pintarPadron(); };
+    const subPend = pend.some(([k]) => k === 'unidades') || !pend.some(([k]) => k === 'choferes') ? 'unidades' : 'choferes';
+    kpisPd([[us.filter(activo).length, 'Unidades', p.sub === 'unidades', false, sub('unidades')], [hs.filter(activo).length, 'Choferes', p.sub === 'choferes', false, sub('choferes')],
+        [pend.length, 'Por atender', false, pend.length > 0, sub(subPend)]]);
+    $('pdnUnidades').textContent = us.length || ''; $('pdnChoferes').textContent = hs.length || '';
+    for (const b of $('pdSubTabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.sub === p.sub));
+    $('pdpUnidades').hidden = p.sub !== 'unidades'; $('pdpChoferes').hidden = p.sub !== 'choferes';
+    const ficha = (clave, x) => () => irPadron('ficha', { ficha: { clave, id: x.id }, desde: 'carrier' });
+    tablaPd($('pdUnidades'), 'minmax(0,1.4fr) 7rem minmax(0,1fr) minmax(10rem,auto)', [['Placas'], ['Tipo', 'x'], ['Serie', 'x'], ['Estado', 'e']],
+        us.map(u => filaPd([celdaPd('a t', nombrePd('unidades', u)), celdaPd('x m', tipoUnidadTexto(u.TipoUnidad)), celdaPd('x m', u.NumeroSerie ? '…' + String(u.NumeroSerie).slice(-6) : ''), celdaPd('e', estadoPadron('unidades', u))], ficha('unidades', u), !activo(u))),
+        'Sin unidades. Se transcriben del oficio del carrier con «+ Alta de unidad».');
+    tablaPd($('pdChoferes'), 'minmax(0,1.6fr) minmax(0,1fr) minmax(10rem,auto)', [['Nombre'], ['Licencia', 'x'], ['Estado', 'e']],
+        hs.map(h => filaPd([celdaPd('a n', h.Title), celdaPd('x m', h.Licencia), celdaPd('e', estadoPadron('choferes', h))], ficha('choferes', h), !activo(h))),
+        'Sin choferes. Se dan de alta con su licencia con «+ Alta de chofer».');
+    const o = $('pdOficio'); o.textContent = ''; o.appendChild(el('h2', '', 'Oficio ASEA'));
+    const { dl, sec, fila } = dlPd();
+    sec('Autorización'); fila('Número', c.AutorizacionASEA); fila('Vence', c.VigenciaASEA ? fechaCorta(c.VigenciaASEA) : ''); fila('Estado', estadoPadron('carriers', c));
+    sec('Oficio'); fila('Folio', c.FolioOficio); fila('Corrientes', lista(c.Corrientes).map(etiquetaCorriente).join(', '));
+    sec('Registro'); fila('SCT', c.RegistroSCT); fila('CSF vence', c.CSFVigencia ? fechaCorta(c.CSFVigencia) : '');
+    o.appendChild(dl);
+    const b = el('button', 'secundario', 'Ver la ficha del carrier'); b.type = 'button'; b.id = 'btnPdFichaCarrier';
+    b.addEventListener('click', () => irPadron('ficha', { ficha: { clave: 'carriers', id: c.id }, desde: 'carrier' }));
+    o.appendChild(b);
+}
+
+function pintarFichaPd(c) {
+    const p = estado.padronVista, clave = p.ficha.clave, x = porId(estado[clave], p.ficha.id);
+    const migas = [['Padrón', () => irPadron('lista')]];
+    if (c) migas.push([c.Title, () => irPadron('carrier')]);
+    migas.push([clave === 'carriers' ? 'Ficha del carrier' : nombrePd(clave, x)]);
+    const sub = clave === 'carriers' ? `Carrier${x.FolioOficio ? ' · oficio ' + x.FolioOficio : ''}`
+        : clave === 'unidades' ? `${c ? c.Title : 'Sin carrier'} · ${tipoUnidadTexto(x.TipoUnidad)}`
+        : `${c ? c.Title : 'Sin carrier'} · licencia ${x.Licencia || 'sin capturar'}`;
+    cabeceraPd(migas, nombrePd(clave, x), estadoPadron(clave, x), sub);
+    kpisPd([]);
+    const d = $('pdFichaDatos'); d.textContent = '';
+    const acciones = botonesPadron(clave, x);
+    const cab = el('div', 'pd-cabeza'); cab.appendChild(el('h2', '', { carriers: 'Datos del oficio', unidades: 'Vehículo', choferes: 'Chofer' }[clave]));
+    const editar = acciones.find(a => a.accion === 'editar'); if (editar) cab.appendChild(botonPd(editar, 'secundario'));
+    d.appendChild(cab);
+    const dl = el('dl', 'pd-pares');
+    for (const [rotulo, col, fmt] of CAMPOS_PADRON[clave]) {
+        if (fmt === 'fecha' || col === 'Activo' || col === 'Notas' || (fmt === 'carrier')) continue;
+        const v = x[col];
+        const txt = fmt === 'lista' ? lista(v).map(etiquetaCorriente).join(', ') : fmt === 'kg' ? (v ? `${Number(v).toLocaleString('es-MX')} kg` : '') : col === 'TipoUnidad' ? tipoUnidadTexto(v) : v;
+        const par = el('div'); par.appendChild(el('dt', '', rotulo)); par.appendChild(el('dd', txt ? 'mono' : 'f', txt ? String(txt) : '—')); dl.appendChild(par);
+    }
+    d.appendChild(dl);
+    d.appendChild(el('h3', '', 'Vigencias'));
+    const ul = el('ul', 'pd-vigs');
+    for (const [n, col, cl] of VIGENCIAS_PADRON[clave]) {
+        const h = evaluarVigencia(n, x[col], cl, CONFIG.avisoVigenciaDias);
+        const li = el('li'); li.appendChild(el('b', '', n[0].toUpperCase() + n.slice(1))); li.appendChild(el('span', 'f', x[col] ? fechaCorta(x[col]) : 'sin fecha'));
+        li.appendChild(!h ? etiqueta('vigente', 'ok') : sinFecha(h) ? etiqueta('sin fecha', h.clase) : etiqueta(h.detalle.replace(/ \(.*\)$/, ''), h.ok ? 'aviso' : 'vencida'));
+        ul.appendChild(li);
+    }
+    d.appendChild(ul);
+    if (!activo(x)) d.appendChild(el('p', 'pista', `De baja: la puerta ya no ${clave === 'unidades' ? 'la' : 'lo'} ampara y el historial ${clave === 'unidades' ? 'la' : 'lo'} sigue viendo.`));
+    // La acción que no se deshace va sola, grande, abajo (como «Cerrar el programa» en el detalle de la pre-alta, v0.68.0).
+    const grande = acciones.find(a => a.accion !== 'editar');
+    if (grande) d.appendChild(botonPd(grande, 'pd-grande' + (grande.accion === 'reactivar' ? ' bien' : ''), `${grande.texto} ${ARTICULO_PADRON[clave]}`));
+    const u = usoPadron(clave, x), a = $('pdUso'); a.textContent = ''; a.appendChild(el('h2', '', 'Dónde se ha usado'));
+    const { dl: dlu, sec, fila } = dlPd();
+    sec('Historial'); fila(`Pre-altas que ${clave === 'unidades' ? 'la' : 'lo'} citan`, String(u.prealtas)); fila(`Góndolas (últimos ${CONFIG.ventanaDias} días)`, String(u.gondolas));
+    if (clave !== 'carriers') fila('Última entrada', u.ultima ? fechaCorta(u.ultima) : '');
+    if (x.Notas) { sec('Notas'); const nt = el('p', 'pd-notas', String(x.Notas)); dlu.appendChild(nt); }
+    a.appendChild(dlu);
+    a.appendChild(el('p', 'pista', referenciasPadron(clave, x) ? 'Ya lo cita el historial: no se elimina, se da de baja.' : 'Nada lo cita todavía: se puede eliminar si se transcribió mal.'));
+}
 /**
  * Corregir el padron (2026-09-05). No hay edicion en sitio: una placa mal transcrita se corrige
  * dando de baja el renglon y transcribiendola de nuevo del oficio (misma regla del padron §4).
@@ -3148,9 +3252,9 @@ async function activarPadron(clave, x, activo) {
 // Editar es un PATCH sobre el mismo renglón (SharePoint guarda la versión anterior): un dedazo en la póliza no obliga a
 // dar de baja y transcribir de nuevo. Lo que se vacía en el formulario se borra en la lista (null), no se conserva.
 const FORMA_PADRON = {
-    carriers: { forma: 'pdFormaCarrier', grupo: 'pdGrupoCarriers', titulo: 'carrier', campos: ['pcTitle', 'pcAut', 'pcVig', 'pcFolio', 'pcSCT', 'pcCSF'] },
-    unidades: { forma: 'pdFormaUnidad', grupo: 'pdGrupoUnidades', titulo: 'unidad', campos: ['puuPlaca', 'puuPlana', 'puuFolio', 'puuCap', 'puuSerie', 'puuMarca', 'puuTarjeta', 'puuTarjetaVig', 'puuPoliza', 'puuPolizaVig'] },
-    choferes: { forma: 'pdFormaChofer', grupo: 'pdGrupoChoferes', titulo: 'chofer', campos: ['pchNombre', 'pchLic', 'pchLicVig'] },
+    carriers: { forma: 'pdFormaCarrier',titulo: 'carrier', campos: ['pcTitle', 'pcAut', 'pcVig', 'pcFolio', 'pcSCT', 'pcCSF'] },
+    unidades: { forma: 'pdFormaUnidad',titulo: 'unidad', campos: ['puuPlaca', 'puuPlana', 'puuFolio', 'puuCap', 'puuSerie', 'puuMarca', 'puuTarjeta', 'puuTarjetaVig', 'puuPoliza', 'puuPolizaVig'] },
+    choferes: { forma: 'pdFormaChofer',titulo: 'chofer', campos: ['pchNombre', 'pchLic', 'pchLicVig'] },
 };
 function leerFormaPadron(clave) {
     if (clave === 'carriers') return {
@@ -3214,7 +3318,6 @@ function abrirFormaPadron(clave, x = null) {
         if (quiero !== null && quiero !== undefined && [...sel.options].some(o => o.value === String(quiero))) sel.value = String(quiero);
     }
     tituloFormaPadron(clave);
-    $(FORMA_PADRON[clave].grupo).open = true;
     abrirForma(FORMA_PADRON[clave].forma);
 }
 function cerrarFormaPadron(clave) {
@@ -3267,6 +3370,7 @@ async function guardarPadron(clave) {
             else avisarAlta(AVISO_ALTA[clave], clave, nuevo);
             // U-10 (v0.23.0): si el alta vino desde la pre-alta (que sigue abierta atras), el carrier nuevo queda elegido en ella.
             if (clave === 'carriers' && asistentePrealtaAbierto()) elegirCarrierEnPrealta(nuevo);
+            if (clave === 'carriers' && estado.pestana === 'padron') Object.assign(estado.padronVista, { v: 'carrier', carrier: nuevo.id, sub: 'unidades' });   // v0.71.0
             pintarPadron();
         }
     } catch (e) { avisar('No se pudo guardar: ' + e.message, 'error'); } });
@@ -3624,11 +3728,13 @@ function exportarCsv() {
     avisar(`CSV con ${plural(filas.length, 'embarque')} descargado.`, 'bien');
 }
 $('btnExportar').addEventListener('click', exportarCsv);
-$('pdBusca').addEventListener('input', () => { estado.padronFicha = null; pintarPadron(); });
+$('pdBusca').addEventListener('input', () => { if (estado.padronVista.tab === 'buscar') pintarBusquedaPd(); });
+for (const b of $('pdTabs').querySelectorAll('button')) b.addEventListener('click', () => { estado.padronVista.tab = b.dataset.pd; pintarPadron(); if (b.dataset.pd === 'buscar') $('pdBusca').focus(); });
+for (const b of $('pdSubTabs').querySelectorAll('button')) b.addEventListener('click', () => { estado.padronVista.sub = b.dataset.sub; pintarPadron(); });
+$('btnPdVolver').addEventListener('click', volverPadron);
 $('baBusca').addEventListener('input', pintarHistorial);
 for (const b of document.querySelectorAll('#gTabs button, #gKpis button')) b.addEventListener('click', () => elegirVistaGondolas(b.dataset.g));
 // v0.66.0: cada conteo del padrón abre su grupo y lo trae a la vista.
-for (const b of $('pdKpis').querySelectorAll('button')) b.addEventListener('click', () => { const g = $(b.dataset.grupo); g.open = true; g.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
 
 // ================================================================ arranque
 
@@ -3701,7 +3807,7 @@ $('migaGondolasPuerta').addEventListener('click', () => irDesdePestana('bascula'
 /** U-40: el programa elegido también es captura. */
 function camposCapturaPuerta() { return ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo', 'puPrealta']; }   // función y no const: capturaAMedias() la llama desde arriba
 function puertaConCaptura() { return camposCapturaPuerta().some(id => $(id).value.trim()); }
-/** v0.70.0 (a pedido de Carlos): Cancelar con algo capturado pregunta, como en Pre-altas; Descartar deja la puerta en cero. */
+/** v0.71.0 (a pedido de Carlos): Cancelar con algo capturado pregunta, como en Pre-altas; Descartar deja la puerta en cero. */
 $('btnCancelarPuerta').addEventListener('click', async () => {
     if (puertaConCaptura()) {
         const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: 'Esta góndola tiene datos sin guardar. Si sales, se pierden.' });
@@ -3715,7 +3821,7 @@ $('btnCancelarPuerta').addEventListener('click', async () => {
     }
     irDesdePestana('bascula');
 });
-// v0.70.0 (bug que reportó Carlos): regresar y cambiar de programa dejaba las placas y el chofer del programa anterior
+// v0.71.0 (bug que reportó Carlos): regresar y cambiar de programa dejaba las placas y el chofer del programa anterior
 // —de otro carrier— capturados y en «Así va la góndola». Al cambiar de programa se limpian los datos que dependen de él.
 let prealtaPuertaPrevia = '';
 $('puPrealta').addEventListener('change', () => {

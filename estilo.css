@@ -370,7 +370,6 @@ button:not(:disabled):active { transform: scale(.98); }
 .renglon .s { font-size: .78rem; color: var(--mute); }
 .renglon .acciones { display: flex; flex-direction: column; gap: var(--sp-1); flex: 0 0 auto; margin: 0; padding: 0; }
 .renglon .acciones button { width: 100%; }
-#p-padron .renglon.plegado > button, #p-padron .renglon.plegado > .acciones { display: none; }
 .renglon.baja .t { color: var(--mute); }
 .renglon.baja .t { text-decoration: line-through; }
 .sesion-botones { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
@@ -627,28 +626,7 @@ button:not(:disabled):active { transform: scale(.98); }
 
 /* ---------------------------------------------------------------- padrón y pre-altas (acordeones) */
 
-.padron details { background: var(--surf); border: 1px solid var(--line-soft); border-radius: var(--r-md); margin-bottom: var(--sp-3); }
-.padron summary { list-style: none; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); cursor: pointer; }
-.padron summary::-webkit-details-marker { display: none; }
 /* icono del grupo: cuadro tenue del color del grupo, letras del color (el `.eqi` de Proyectos) */
-.padron summary .ic { --c: var(--idle); width: 30px; height: 30px; border-radius: var(--r-sm); display: grid; place-items: center; font-family: var(--mono); font-size: .62rem; font-weight: 700; flex: none; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
-.padron .ic.ca { --c: var(--acc); }
-.padron .ic.un { --c: var(--ok); color: var(--ok-fg); }
-.padron .ic.ch, .padron .ic.bo { --c: var(--warn); color: var(--warn-fg); }
-.padron .ic.fi { --c: var(--ok); color: var(--ok-fg); }
-.padron .ic.ce { --c: var(--idle); color: var(--mute); }
-.padron summary .t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
-.padron summary .t b { font-size: .92rem; font-weight: 600; color: var(--ink); }
-.padron summary .t small { font-size: .74rem; color: var(--mute); }
-.padron summary .alta { flex: none; }
-.padron summary .chev { width: 16px; height: 16px; stroke: var(--faint); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .15s; flex: none; }
-.padron details[open] summary .chev { transform: rotate(90deg); }
-.padron .gcuerpo { border-top: 1px solid var(--line-soft); padding: var(--sp-1) var(--sp-4) var(--sp-3); }
-.padron .gcuerpo > .pista { margin: var(--sp-2) 0 var(--sp-1); }
-.padron .gcuerpo .tarjeta.forma { box-shadow: none; border: 0; padding: var(--sp-3) 0 0; margin: var(--sp-2) 0 0; border-top: 1px solid var(--line-soft); border-radius: 0; }
-.padron .renglon.sel { box-shadow: inset 3px 0 0 var(--acc); padding-left: var(--sp-2); margin-left: calc(-1 * var(--sp-2)); border-radius: 4px 0 0 4px; }
-.padron .renglon > div:first-child { cursor: pointer; }
-.padron .filtro { font-size: .78rem; color: var(--acc); font-weight: 500; margin: var(--sp-1) 0 0; }
 /* avance de góndolas de una pre-alta: recibidas contra esperadas. El renglón con barra necesita que su columna izquierda crezca. */
 .renglon.conavance > div:first-child { flex: 1; }
 .renglon .avance { display: flex; align-items: center; gap: var(--sp-2); margin-top: .35rem; }
@@ -657,14 +635,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .renglon .avance .barra.esp i { background: var(--warn); }
 .renglon .avance .cifra { flex: none; font-family: var(--mono); font-size: .72rem; color: var(--mute); font-variant-numeric: tabular-nums; }
 .renglon .folio { font-family: var(--mono); font-size: .66rem; color: var(--mute); font-weight: 500; margin-left: .35rem; }
-@media (prefers-reduced-motion: reduce) { .padron summary .chev { transition: none; } }
 /* ficha completa de un renglón del padrón (v0.11.0) */
-.padron .ficha { display: grid; grid-template-columns: auto 1fr; gap: .15rem var(--sp-3); margin: .45rem 0 .2rem; font-size: .78rem; }
-.padron .ficha dt { color: var(--mute); }
-.padron .ficha dd { margin: 0; overflow-wrap: anywhere; }
-.padron summary .t small .mal { color: var(--bad-fg); font-weight: 600; }
-.padron summary .t small .ojo { color: var(--warn-fg); font-weight: 600; }
-.padron .sin-resultado { font-size: .8rem; color: var(--mute); margin: var(--sp-2) 0 var(--sp-1); }
 
 /* ---------------------------------------------------------------- báscula */
 
@@ -1098,13 +1069,8 @@ select, .archivos-filtros select, .con-boton select {
     .rail .tema.seg .mn-btn { min-height: 26px; height: 26px; }   /* U-59: el segmento Claro | Oscuro compacto de Proyectos, solo con ratón */
     /* Formularios y listas no se estiran a todo lo ancho: leen mejor en una columna acotada. */
     #p-puerta .tarjeta, #p-puerta .bloque, #p-bascula .tarjeta, #p-prealtas .tarjeta { max-width: 40rem; }
-    /* Padrón en tres columnas: los tres grupos abiertos (lo fija app.js), sin chevron, el carrier elegido filtra las otras dos. */
-    #p-padron .padron { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: var(--sp-4); align-items: start; }
-    #p-padron .padron details { margin-bottom: 0; }
-    #p-padron .padron summary { cursor: default; }
-    #p-padron .padron summary .chev { display: none; }
+    /* (v0.71.0: el padrón ya no va en tres columnas) Padrón en tres columnas: los tres grupos abiertos (lo fija app.js), sin chevron, el carrier elegido filtra las otras dos. */
     #p-padron .busca { max-width: 40rem; }
-    #p-prealtas .padron { max-width: 40rem; }
     #avisos { max-width: 40rem; }   /* U-42: sigue sticky */
     .cols { display: grid; grid-template-columns: minmax(0, 1.8fr) 1fr; gap: var(--sp-4); align-items: start; }
     .cols.pares { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }   /* Hoy sin la Fila del día: vigencias | rechazos */
@@ -1250,3 +1216,74 @@ select, .archivos-filtros select, .con-boton select {
 #paDetalle .pd-cerrar-programa { display: block; width: 100%; min-height: 56px; margin-top: var(--sp-4); font-size: 1.05rem; font-weight: 600; color: var(--bad-ink); background: var(--bad); border: 1px solid var(--bad); border-radius: var(--r-sm, 6px); cursor: pointer; }
 #paDetalle .pd-cerrar-programa:hover:not(:disabled) { filter: brightness(.92); }
 #paDetalle .pd-cerrar-programa.oculto { display: none; }
+
+/* v0.71.0 — PADRÓN POR CARRIER (artifact G77viANSEuwDFfDvkxVWFS): la tabla de Pre-altas (encabezado mono, renglón entero que
+   abre, bandas alternas), expediente y ficha en dos columnas con el resumen a la derecha (= .pa-resumen, pero también en
+   celular), y la acción que no se deshace grande abajo (= «Cerrar el programa»). Estados = .etiqueta: sin píldora. */
+#p-padron .pa-banda h1 { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 6px; overflow-wrap: anywhere; }
+#p-padron .pa-banda h1 .etiqueta { font-size: .72rem; }
+#p-padron .gtabs { margin-top: 0; }
+.pd-tabla { background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.pd-tabla > .vacio { padding: 12px 16px; margin: 0; color: var(--mute); }
+.pd-fila { display: grid; grid-template-columns: var(--pd-cols); gap: 4px 16px; align-items: center; padding: 12px 16px; background: var(--surf); cursor: pointer; min-width: 0; }
+.pd-fila:nth-child(odd):not(.pd-cab) { background: var(--banda); }
+.pd-fila:hover:not(.pd-cab) { background: var(--rail-chip); }
+.pd-fila:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+.pd-fila.pd-cab { cursor: default; padding-block: 9px; background: var(--surf2); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.pd-fila > span { min-width: 0; }
+.pd-fila .a { display: flex; flex-direction: column; gap: 2px; }
+.pd-fila .n { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.pd-fila .t { font-family: var(--mono); font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+.pd-fila .a small { font-family: var(--mono); font-size: .76rem; color: var(--mute); overflow-wrap: anywhere; }
+.pd-fila .m { font-family: var(--mono); font-size: .8rem; color: var(--mute); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-fila .c { font-size: .88rem; color: var(--ink-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-fila .e { justify-self: end; text-align: right; }
+.pd-fila .e .etiqueta { margin-left: 0; }
+.pd-fila.baja :is(.n, .t) { color: var(--mute); }
+.pd-dos { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: var(--sp-4); align-items: start; }
+.pd-pila { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.pd-pila > .pista { margin: 0; }
+.pd-resumen { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); align-content: start; margin: 0; min-width: 0; }   /* minmax: una etiqueta larga no ensancha la página en el celular */
+.pd-dos > * { min-width: 0; }
+.pd-resumen dd .etiqueta { white-space: normal; }
+.pd-resumen h2, .pd-datos h2 { margin: 0; font-family: var(--titulo); font-weight: 600; font-size: 1.05rem; text-transform: none; letter-spacing: 0; color: var(--ink); }
+.pd-resumen dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; font-size: .87rem; }
+.pd-resumen dt { color: var(--mute); }
+.pd-resumen dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; text-align: right; font-family: var(--mono); font-weight: 500; }
+.pd-resumen dd.f { color: var(--faint); }
+.pd-resumen dd .etiqueta { margin-left: 0; }
+.pd-resumen .sec { grid-column: 1 / -1; font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+.pd-resumen .sec:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.pd-resumen .pd-notas { grid-column: 1 / -1; margin: 0; white-space: pre-wrap; font-size: .82rem; color: var(--ink-body); overflow-wrap: anywhere; }
+.pd-resumen > .pista { margin: 0; padding-top: 10px; border-top: 1px solid var(--line-soft); font-size: .82rem; }
+.pd-resumen > button { width: auto; margin: 0; justify-self: start; }
+.pd-datos { display: flex; flex-direction: column; gap: var(--sp-3); margin: 0; }
+.pd-datos h3 { margin: var(--sp-2) 0 0; font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; }
+.pd-datos .pd-cabeza { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.pd-datos .pd-cabeza button { width: auto; margin: 0; }
+.pd-pares { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 12px 18px; margin: 0; }
+.pd-pares > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pd-pares dt { font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; }
+.pd-pares dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.pd-pares dd.mono { font-family: var(--mono); font-weight: 500; }
+.pd-pares dd.f { color: var(--faint); }
+.pd-vigs { list-style: none; margin: 0; padding: 0; }
+.pd-vigs li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 9px 0; border-top: 1px solid var(--line-soft); align-items: baseline; }
+.pd-vigs li:first-child { border-top: 0; padding-top: 0; }
+.pd-vigs b { font-weight: 600; color: var(--ink); font-size: .9rem; }
+.pd-vigs .f { grid-column: 1; font-family: var(--mono); font-size: .82rem; color: var(--mute); }
+.pd-vigs .etiqueta { grid-row: 1 / 3; grid-column: 2; align-self: center; margin-left: 0; }
+.pd-datos > .pista { margin: 0; }
+.pd-grande { display: block; width: 100%; min-height: 56px; margin: var(--sp-2) 0 0; font: inherit; font-size: 1.05rem; font-weight: 600; color: var(--bad-ink); background: var(--bad); border: 1px solid var(--bad); border-radius: var(--r-sm); cursor: pointer; }
+.pd-grande.bien { color: var(--acc-ink); background: var(--acc); border-color: var(--acc); }
+.pd-grande:hover:not(:disabled) { filter: brightness(.92); }
+.pd-grande:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+@media (max-width: 900px) { .pd-dos { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 720px) {
+    .pd-fila:not(.pd-cab) { grid-template-columns: minmax(0, 1fr) auto; }
+    .pd-fila.pd-cab, .pd-fila > .x { display: none; }
+    .pd-fila > .a { grid-column: 1; }
+    .pd-fila > .e { grid-column: 2; grid-row: 1; }
+    .pd-fila > .c { grid-column: 1 / -1; }
+    #p-padron .pa-kpis:empty { display: none; }
+}

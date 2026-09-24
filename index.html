@@ -456,32 +456,59 @@
     <!-- PADRON: acordeones en celular (P3), tres columnas en escritorio (P6); elegido por Carlos 2026-09-05.
          Tocar un carrier filtra unidades y choferes a los suyos; tocarlo otra vez quita el filtro. -->
     <section id="p-padron" class="oculto">
-      <section class="pa-banda"><div class="pa-banda-t"><h1>Carriers, unidades y choferes</h1><p>Transcrito del oficio ASEA de cada carrier. Una placa que no está aquí no está amparada.</p></div><div class="bn-kpis" id="pdKpis" role="group" aria-label="Conteos del padrón"><button type="button" data-grupo="pdGrupoCarriers"><b id="pdkCarriers">0</b><span>Carriers</span></button><button type="button" data-grupo="pdGrupoUnidades"><b id="pdkUnidades">0</b><span>Unidades</span></button><button type="button" data-grupo="pdGrupoChoferes"><b id="pdkChoferes">0</b><span>Choferes</span></button></div></section>
-      <!-- I1 (7-sep): un buscador que filtra los tres grupos a la vez (carrier, placa, chofer, licencia). -->
-      <div class="busca"><input type="search" id="pdBusca" placeholder="Buscar carrier, placa o chofer" autocomplete="off" aria-label="Buscar en el padrón"><span class="cuenta" id="pdBuscaCuenta"></span></div>
-      <div class="padron">
-      <details class="grupo" id="pdGrupoCarriers">
-        <summary><span class="ic ca">CA</span><span class="t"><b>Carriers</b><small id="pdResCarriers"></small></span><button id="btnNuevoCarrier" class="alta mn-btn is-sm" type="button">+ Alta</button><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-        <div class="gcuerpo">
-          <div id="pdCarriers"></div>
+      <!-- v0.71.0 (artifact G77viANSEuwDFfDvkxVWFS, OK de Carlos 2026-09-24): el padrón POR CARRIER. Tres vistas en la misma
+           pestaña, con la banda de Pre-altas encima: la lista de carriers por estado (#pdLista), el expediente de un carrier con
+           sus unidades y choferes y el oficio a un lado (#pdExpediente), y la ficha de un renglón con «Dar de baja» grande abajo
+           (#pdFicha). Las altas y la edición siguen en los <dialog> pdForma* (los usa también Pre-altas): tanda 2. -->
+      <section class="pa-banda">
+        <div class="pa-banda-t">
+          <nav class="migas" id="pdMigas" aria-label="Ruta" hidden></nav>
+          <h1 id="pdTitulo">Padrón</h1>
+          <p id="pdSub">Un expediente por carrier: su oficio ASEA, sus unidades y sus choferes. Una placa que no está aquí no está amparada.</p>
         </div>
-      </details>
-      <details class="grupo" id="pdGrupoUnidades">
-        <summary><span class="ic un">UN</span><span class="t"><b>Unidades</b><small id="pdResUnidades"></small></span><button id="btnNuevaUnidad" class="alta mn-btn is-sm" type="button">+ Alta</button><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-        <div class="gcuerpo">
-          <p class="pista sin-margen">Transcritas del oficio. Una placa que no está aquí no está amparada: se abre el oficio, nunca se agrega de memoria.</p>
-          <div id="pdUnidades"></div>
+        <div class="pa-kpis" id="pdKpis" role="group" aria-label="Conteos del padrón"></div>
+        <div class="pa-acciones">
+          <button id="btnPdVolver" class="secundario oculto" type="button">Volver</button>
+          <button id="btnNuevoCarrier" class="principal mn-btn" type="button">+ Nuevo carrier</button>
+          <button id="btnNuevaUnidad" class="principal mn-btn oculto" type="button">+ Alta de unidad</button>
+          <button id="btnNuevoChofer" class="principal mn-btn oculto" type="button">+ Alta de chofer</button>
         </div>
-      </details>
-      <details class="grupo" id="pdGrupoChoferes">
-        <summary><span class="ic ch">CH</span><span class="t"><b>Choferes</b><small id="pdResChoferes"></small></span><button id="btnNuevoChofer" class="alta mn-btn is-sm" type="button">+ Alta</button><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-        <div class="gcuerpo">
-          <div id="pdChoferes"></div>
+      </section>
+      <div id="pdLista">
+        <div class="gtabs" id="pdTabs" role="group" aria-label="Carriers por estado">
+          <button type="button" data-pd="vigentes" aria-pressed="true">Vigentes<i id="pdnVigentes"></i></button>
+          <button type="button" data-pd="atender" aria-pressed="false">Por atender<i id="pdnAtender"></i></button>
+          <button type="button" data-pd="baja" aria-pressed="false">De baja<i id="pdnBaja"></i></button>
+          <button type="button" data-pd="buscar" aria-pressed="false">Buscar placa o chofer</button>
         </div>
-      </details>
+        <div class="gpanel" id="pdpCarriers"><div class="pd-tabla" id="pdCarriers"></div><p class="pista" id="pdPieLista"></p></div>
+        <div class="gpanel" id="pdpBuscar" hidden>
+          <div class="busca"><input type="search" id="pdBusca" placeholder="Placa, serie, chofer o licencia" autocomplete="off" aria-label="Buscar en el padrón"><span class="cuenta" id="pdBuscaCuenta"></span></div>
+          <div class="pd-tabla" id="pdResultados"></div>
+        </div>
+        <ul class="pa-fases" aria-label="Cómo se ampara">
+          <li><b>Carrier</b><small>con su oficio ASEA</small></li>
+          <li><b>Unidades y choferes</b><small>transcritos del oficio</small></li>
+          <li><b>La puerta</b><small>los reconoce</small></li>
+        </ul>
+      </div>
+      <div id="pdExpediente" class="pd-dos" hidden>
+        <div class="pd-pila">
+          <div class="gtabs" id="pdSubTabs" role="group" aria-label="Del carrier">
+            <button type="button" data-sub="unidades" aria-pressed="true">Unidades<i id="pdnUnidades"></i></button>
+            <button type="button" data-sub="choferes" aria-pressed="false">Choferes<i id="pdnChoferes"></i></button>
+          </div>
+          <div class="gpanel" id="pdpUnidades"><div class="pd-tabla" id="pdUnidades"></div></div>
+          <div class="gpanel" id="pdpChoferes" hidden><div class="pd-tabla" id="pdChoferes"></div></div>
+          <p class="pista">El renglón abre su ficha.</p>
+        </div>
+        <aside class="tarjeta pd-resumen" id="pdOficio" aria-label="Oficio ASEA"></aside>
+      </div>
+      <div id="pdFicha" class="pd-dos" hidden>
+        <div class="tarjeta pd-datos" id="pdFichaDatos"></div>
+        <aside class="tarjeta pd-resumen" id="pdUso" aria-label="Dónde se ha usado"></aside>
       </div>
     </section>
-
     <!-- REPORTES (v0.32.0, sección aparte): los cinco KPI que vivían en Hoy, más avance por programa, por carrier y toneladas
          por semana. Todo se calcula de lo que la app ya carga (CONFIG.ventanaDias más lo abierto). Lo pinta pintarReportes. -->
     <section id="p-reportes" class="oculto">
