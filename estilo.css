@@ -148,7 +148,7 @@ h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-tra
 .rail nav button, .rail .extra button {
     position: relative; display: flex; align-items: center; gap: var(--sp-3);
     min-height: var(--control-h); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-sm); background: none;
-    font-weight: 600; font-size: .88rem; color: var(--mute); cursor: pointer; text-align: left;
+    font-weight: 600; font-size: 1rem; color: var(--mute); cursor: pointer; text-align: left;   /* v0.66.1: .88 -> 1rem, a pedido de Carlos; el celular conserva su .6rem */
 }
 .rail nav button:hover, .rail .extra button:hover { background: var(--rail-hover); }
 /* la pestaña activa es una PASTILLA con hairline y sombra corta (Proyectos v0.44.0) */
