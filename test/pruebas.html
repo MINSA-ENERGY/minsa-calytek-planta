@@ -457,6 +457,13 @@ try {
             R.ok('tanda 2: la miga «Góndolas» regresa a la lista', visible('p-bascula') && !visible('p-puerta'));
             clic('btnNuevaGondola'); clic('btnCancelarPuerta');
             R.ok('v0.66.3: «Cancelar» de Nueva góndola regresa a la lista', visible('p-bascula') && !visible('p-puerta'));
+            // v0.70.0: con algo capturado, Cancelar pregunta «Descartar lo capturado»; al no confirmar se queda, al confirmar sale en cero.
+            clic('btnNuevaGondola'); $('puManifiesto').value = 'MAN-PRUEBA'; clic('btnCancelarPuerta'); await dormir(30);
+            R.ok('v0.70.0: Cancelar con captura abre «Descartar lo capturado»', $('dlg').open && $('dlgTitulo').textContent.includes('Descartar lo capturado'));
+            clic('dlgCancelar'); await dormir(30);
+            R.ok('v0.70.0: al no confirmar, sigue en Nueva góndola con lo tecleado', visible('p-puerta') && $('puManifiesto').value === 'MAN-PRUEBA');
+            clic('btnCancelarPuerta'); await dormir(30); clic('dlgOk'); await dormir(30);
+            R.ok('v0.70.0: Descartar regresa a la lista y deja la puerta vacía', visible('p-bascula') && !visible('p-puerta') && !$('puManifiesto').value);
         }
         document.querySelector('#pestanas button[data-p="hoy"]').click();
     }

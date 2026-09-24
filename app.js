@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.69.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.70.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -583,7 +583,7 @@ function capturaAMedias() {
     if (abierto('baAsis') || abierto('veredicto')) return true;
     if (estado.pestana === 'prealtas' && asistentePrealtaAbierto()) return true;   // v0.54.0: el asistente de pre-alta a la vista
     if (['paDetalle', 'paRecientes', 'pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer'].some(id => $(id).open)) return true;
-    if (estado.pestana === 'puerta' && ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo', 'puPrealta'].some(id => $(id).value.trim())) return true;   // U-40: el programa elegido también es captura
+    if (estado.pestana === 'puerta' && puertaConCaptura()) return true;
     return false;
 }
 
@@ -3698,8 +3698,24 @@ $('btnNuevaGondola').addEventListener('click', () => {
     irDesdePestana('puerta');
 });
 $('migaGondolasPuerta').addEventListener('click', () => irDesdePestana('bascula'));
-$('btnCancelarPuerta').addEventListener('click', () => irDesdePestana('bascula'));   // v0.66.3: Cancelar hace lo mismo que la miga
-// v0.69.0 (bug que reportó Carlos): regresar y cambiar de programa dejaba las placas y el chofer del programa anterior
+/** U-40: el programa elegido también es captura. */
+function camposCapturaPuerta() { return ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo', 'puPrealta']; }   // función y no const: capturaAMedias() la llama desde arriba
+function puertaConCaptura() { return camposCapturaPuerta().some(id => $(id).value.trim()); }
+/** v0.70.0 (a pedido de Carlos): Cancelar con algo capturado pregunta, como en Pre-altas; Descartar deja la puerta en cero. */
+$('btnCancelarPuerta').addEventListener('click', async () => {
+    if (puertaConCaptura()) {
+        const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: 'Esta góndola tiene datos sin guardar. Si sales, se pierden.' });
+        if (!ok) return;
+        for (const id of [...camposCapturaPuerta(), 'puChofer']) $(id).value = '';
+        $('pu79').checked = false; delete $('puChoferNombre').dataset.auto;
+        $('puTeclear').open = false; $('puChoferOtro').open = false;
+        cerrarVeredicto(); estado.ultimaCompuerta = null;
+        pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta();
+        irSubpaso(subpasoInicial());
+    }
+    irDesdePestana('bascula');
+});
+// v0.70.0 (bug que reportó Carlos): regresar y cambiar de programa dejaba las placas y el chofer del programa anterior
 // —de otro carrier— capturados y en «Así va la góndola». Al cambiar de programa se limpian los datos que dependen de él.
 let prealtaPuertaPrevia = '';
 $('puPrealta').addEventListener('change', () => {
