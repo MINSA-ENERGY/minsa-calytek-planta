@@ -437,7 +437,6 @@ button:not(:disabled):active { transform: scale(.98); }
    del estado (cero píldoras) separados por un filete; las fases son una línea bajo la tabla. */
 .pa-banda { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: var(--sp-5); margin: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-5)) var(--sp-5); padding: var(--sp-6) var(--sp-5) var(--sp-5); background: none; border-bottom: 1px solid var(--line); }   /* R6 (v0.65.0): transparente, la rejilla pasa detrás */
 .pa-banda-t { min-width: 0; }
-.pa-kicker { display: block; margin-bottom: 4px; font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
 .pa-banda h1 { margin: 0; font-family: var(--titulo); font-weight: 600; font-size: 1.75rem; line-height: 1.1; text-transform: none; letter-spacing: 0; color: var(--ink); }
 .pa-banda p { margin: 6px 0 0; color: var(--mute); max-width: 60ch; }
 :is(.pa-kpis, .bn-kpis) { display: flex; margin: 0; }

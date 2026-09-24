@@ -90,7 +90,7 @@
     <!-- HOY -->
     <section id="p-hoy" class="oculto">
       <!-- v0.66.0: las seis cabeceras son la banda de Pre-altas (artifact 4G8Wp5SXhUEAxbdDVx8nQ3, OK de Carlos 2026-09-24). -->
-      <section class="pa-banda"><div class="pa-banda-t"><span class="pa-kicker">CALYTEK · Planta</span><h1>Hoy</h1><p id="hoyTitulo"></p></div></section>
+      <section class="pa-banda"><div class="pa-banda-t"><h1>Hoy</h1><p id="hoyTitulo"></p></div></section>
       <!-- Tanda 2 (v0.47.0, decisión 6): Hoy es el escritorio de oficina. Salieron el carril Puerta → Báscula → Ticket
            (D2) y la Fila del día, que vive en Góndolas. -->
       <div id="hoyFranja" class="franja oculto"></div>
@@ -108,7 +108,7 @@
 
     <!-- PUERTA -->
     <section id="p-puerta" class="oculto">
-      <section class="pa-banda"><div class="pa-banda-t"><nav class="migas" aria-label="Ruta"><button type="button" class="miga" id="migaGondolasPuerta">Góndolas</button><span aria-hidden="true">/</span><b aria-current="page">Nueva góndola</b></nav><span class="pa-kicker">CALYTEK · Recepción</span><h1>Nueva góndola</h1><p>Programa · vehículo y chofer · carga, una pregunta a la vez.</p></div></section>
+      <section class="pa-banda"><div class="pa-banda-t"><nav class="migas" aria-label="Ruta"><button type="button" class="miga" id="migaGondolasPuerta">Góndolas</button><span aria-hidden="true">/</span><b aria-current="page">Nueva góndola</b></nav><h1>Nueva góndola</h1><p>Programa · vehículo y chofer · carga, una pregunta a la vez.</p></div></section>
       <!-- Solo informa (Carlos, 2026-09-08): borradores sin firmar; la puerta no puede recibir sus gondolas. -->
       <p id="puPendientes" class="mensaje ojo oculto" role="status"></p>
       <!-- U-38 (v0.26.0): el rol de lectura se dice aquí, fijo, no como aviso: el refresco silencioso lo repetía cada 2 min. -->
@@ -187,7 +187,7 @@
 
     <!-- BASCULA -->
     <section id="p-bascula" class="oculto">
-      <section class="pa-banda"><div class="pa-banda-t"><span class="pa-kicker">CALYTEK · Recepción</span><h1>Góndolas</h1><p>De la puerta a la báscula: cada góndola con su pre-alta, sus pesadas y su ticket.</p></div><div class="bn-kpis" id="gKpis" role="group" aria-label="Conteos de góndolas"><button type="button" data-g="planta"><b id="gkPlanta">0</b><span>En planta</span></button><button type="button" data-g="hoy"><b id="gkHoy">0</b><span>Cerradas hoy</span></button><button type="button" data-g="rechazos"><b id="gkRechazos">0</b><span>Rechazos</span></button></div><div class="pa-acciones"><button id="btnNuevaGondola" class="principal mn-btn oculto" type="button">+ Nueva góndola</button></div></section>
+      <section class="pa-banda"><div class="pa-banda-t"><h1>Góndolas</h1><p>De la puerta a la báscula: cada góndola con su pre-alta, sus pesadas y su ticket.</p></div><div class="bn-kpis" id="gKpis" role="group" aria-label="Conteos de góndolas"><button type="button" data-g="planta"><b id="gkPlanta">0</b><span>En planta</span></button><button type="button" data-g="hoy"><b id="gkHoy">0</b><span>Cerradas hoy</span></button><button type="button" data-g="rechazos"><b id="gkRechazos">0</b><span>Rechazos</span></button></div><div class="pa-acciones"><button id="btnNuevaGondola" class="principal mn-btn oculto" type="button">+ Nueva góndola</button></div></section>
       <!-- Tanda 3 (v0.48.0, decisión 6): cuatro pestañas con conteo que funden la lista En planta, la Fila del día y Cerrados.
            Las cuatro se pintan en cada repintado (pintarGondolas) y solo se ve la elegida. Un solo DOM por renglón: tabla
            en escritorio, tarjeta en celular (estilo.css .gtabla). -->
@@ -314,7 +314,6 @@
            captura (la E2E lo mira como «la lista está a la vista»). Las fases bajan a una línea bajo la tabla. -->
       <section class="pa-banda">
         <div class="pa-banda-t">
-          <span class="pa-kicker">CALYTEK · Recepción</span>
           <h1>Pre-altas</h1>
           <p>Los programas que el cliente manda por correo, firmados antes de que llegue la primera góndola.</p>
         </div>
@@ -451,7 +450,7 @@
     <!-- PADRON: acordeones en celular (P3), tres columnas en escritorio (P6); elegido por Carlos 2026-09-05.
          Tocar un carrier filtra unidades y choferes a los suyos; tocarlo otra vez quita el filtro. -->
     <section id="p-padron" class="oculto">
-      <section class="pa-banda"><div class="pa-banda-t"><span class="pa-kicker">CALYTEK · Padrón</span><h1>Carriers, unidades y choferes</h1><p>Transcrito del oficio ASEA de cada carrier. Una placa que no está aquí no está amparada.</p></div><div class="bn-kpis" id="pdKpis" role="group" aria-label="Conteos del padrón"><button type="button" data-grupo="pdGrupoCarriers"><b id="pdkCarriers">0</b><span>Carriers</span></button><button type="button" data-grupo="pdGrupoUnidades"><b id="pdkUnidades">0</b><span>Unidades</span></button><button type="button" data-grupo="pdGrupoChoferes"><b id="pdkChoferes">0</b><span>Choferes</span></button></div></section>
+      <section class="pa-banda"><div class="pa-banda-t"><h1>Carriers, unidades y choferes</h1><p>Transcrito del oficio ASEA de cada carrier. Una placa que no está aquí no está amparada.</p></div><div class="bn-kpis" id="pdKpis" role="group" aria-label="Conteos del padrón"><button type="button" data-grupo="pdGrupoCarriers"><b id="pdkCarriers">0</b><span>Carriers</span></button><button type="button" data-grupo="pdGrupoUnidades"><b id="pdkUnidades">0</b><span>Unidades</span></button><button type="button" data-grupo="pdGrupoChoferes"><b id="pdkChoferes">0</b><span>Choferes</span></button></div></section>
       <!-- I1 (7-sep): un buscador que filtra los tres grupos a la vez (carrier, placa, chofer, licencia). -->
       <div class="busca"><input type="search" id="pdBusca" placeholder="Buscar carrier, placa o chofer" autocomplete="off" aria-label="Buscar en el padrón"><span class="cuenta" id="pdBuscaCuenta"></span></div>
       <div class="padron">
@@ -480,7 +479,7 @@
     <!-- REPORTES (v0.32.0, sección aparte): los cinco KPI que vivían en Hoy, más avance por programa, por carrier y toneladas
          por semana. Todo se calcula de lo que la app ya carga (CONFIG.ventanaDias más lo abierto). Lo pinta pintarReportes. -->
     <section id="p-reportes" class="oculto">
-      <section class="pa-banda"><div class="pa-banda-t"><span class="pa-kicker">CALYTEK · Reportes</span><h1>Reportes</h1><p id="repSub"></p></div><div class="pa-acciones"><button id="btnImprimirReportes" class="secundario" type="button" title="Imprimir o guardar como PDF lo que está en pantalla">Imprimir</button></div></section>
+      <section class="pa-banda"><div class="pa-banda-t"><h1>Reportes</h1><p id="repSub"></p></div><div class="pa-acciones"><button id="btnImprimirReportes" class="secundario" type="button" title="Imprimir o guardar como PDF lo que está en pantalla">Imprimir</button></div></section>
       <div class="kpis" id="tbKpis"></div>
       <div class="rep-rejilla">
         <div class="tarjeta"><h2>Avance por programa · góndolas recibidas</h2><div class="barras" id="repProgramas"></div></div>
@@ -495,7 +494,7 @@
          báscula por mes y lote · oficios y CSF de los carriers · el buzón 99_Pendiente-Archivar). Cada carpeta se lee al abrirla.
          Los filtros actúan sobre lo ya leído. Lo pinta pintarArchivos; las rutas base viven en config.js. -->
     <section id="p-archivos" class="oculto">
-      <section class="pa-banda"><div class="pa-banda-t"><span class="pa-kicker">CALYTEK · Archivos</span><h1>Archivos</h1><p>Lo que la planta genera y lo que la ampara, en la biblioteca Ambiental-CALYTEK: fotos del indicador, tickets y manifiestos por lote; oficios ASEA y CSF por carrier.</p></div><div class="pa-acciones"><a id="lnkArchivosSharePoint" class="mn-btn" href="#" target="_blank" rel="noopener" title="La biblioteca entera en SharePoint">Ver en SharePoint</a></div></section>
+      <section class="pa-banda"><div class="pa-banda-t"><h1>Archivos</h1><p>Lo que la planta genera y lo que la ampara, en la biblioteca Ambiental-CALYTEK: fotos del indicador, tickets y manifiestos por lote; oficios ASEA y CSF por carrier.</p></div><div class="pa-acciones"><a id="lnkArchivosSharePoint" class="mn-btn" href="#" target="_blank" rel="noopener" title="La biblioteca entera en SharePoint">Ver en SharePoint</a></div></section>
       <div class="archivos-filtros">
         <select id="arPrograma" aria-label="Programa"></select>
         <select id="arTipo" aria-label="Tipo"><option value="">Todo tipo</option><option value="ticket">Tickets</option><option value="foto">Fotos del indicador</option><option value="manifiesto">Manifiestos</option><option value="oficio">Oficios ASEA</option><option value="csf">CSF</option><option value="lote">Registros del pesaje</option><option value="otro">Otros</option></select>
