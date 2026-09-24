@@ -1,7 +1,7 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, textoHuellaPrealta, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, claveMes, mesesPrealtas } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, textoHuellaPrealta, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, claveMes, mesesPrealtas, registroPuerta, registroCertificado } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -384,4 +384,29 @@ assert.ok(!firmaAmparaPrealta('', pf), 'firma sin huella y sin Created: no ampar
     assert.deepEqual(b.map(x => x.mes), ['Septiembre 2026', 'Agosto 2026', 'Sin fecha']);
     assert.deepEqual(b.map(x => x.ps.map(p => p.id)), [[5, 4, 2], [1], [3]], 'la fecha mas nueva primero; empate por id');
     assert.deepEqual(mesesPrealtas([], 'firmada'), []);
+}
+
+// C-77 (v0.74.0): el armado de los renglones que escriben la puerta y el certificado, fuera de app.js.
+{
+    const r = { resultado: 'pasa', hallazgos: [], pre: prealta, carrier, unidad, chofer,
+        campos: { manifiesto: 'MINSA/RME/000/2026', placaTractor: '77-an-5c', placaPlana: '66ZW3M', choferNombre: '', corriente: 'base-aceite', art79: true } };
+    const pasa = registroPuerta(r, { folio: 'R-26-00009', ahora: '2026-10-15T12:00:00Z', motivo: 'no aplica', usuario: 'puerta@example.invalid' });
+    assert.equal(pasa.Title, undefined, 'el que pasa no lleva folio: el E- nace en la báscula (aunque llegue uno)');
+    assert.equal(pasa.Etapa, 'compuerta');
+    assert.equal(pasa.PlacaTractor, placaNormal('77-an-5c'));
+    assert.equal(pasa.ExcepcionMotivo, undefined, 'el motivo solo viaja en la excepción');
+    assert.equal(pasa.ChoferNombre, undefined, 'lo vacío no se escribe (limpiar)');
+    assert.equal(pasa.Verificacion79, true);
+    assert.equal(pasa.CompuertaDetalle, '[]');
+    const rech = registroPuerta({ ...r, resultado: 'rechazo-legal', hallazgos: [{ regla: 'Placa', clase: 'legal' }] }, { folio: 'R-26-00009', ahora: 'x', usuario: 'u' });
+    assert.equal(rech.Title, 'R-26-00009'); assert.equal(rech.Etapa, 'rechazado');
+    const exc = registroPuerta({ ...r, resultado: 'excepcion-comercial' }, { ahora: 'x', motivo: '  llegó sin oficio  ', usuario: 'u' });
+    assert.equal(exc.ExcepcionMotivo, 'llegó sin oficio');
+    const sinPre = registroPuerta({ ...r, pre: null, unidad: null }, { ahora: 'x', usuario: 'u' });
+    assert.equal(sinPre.PreAltaId, undefined); assert.equal(sinPre.UnidadId, undefined);
+
+    const c = registroCertificado({ folio: 'C-26-00001', prealtaId: 5, embarqueId: 7, papel: { Generador: 'DEMO', Ticket: '' }, sufijo: 'AB12', usuario: 'g', ahora: 'x', version: '0.74.0' });
+    assert.equal(c.Estado, 'vigente'); assert.equal(c.Generador, 'DEMO'); assert.equal(c.Ticket, undefined); assert.equal(c.Motivo, undefined);
+    const s2 = registroCertificado({ folio: 'C-26-00002', prealtaId: 5, embarqueId: 7, papel: {}, sufijo: 'x', usuario: 'g', ahora: 'x', version: 'v', sustituye: { Title: 'C-26-00001' }, motivoSust: 'x'.repeat(400) });
+    assert.ok(s2.Motivo.startsWith('Sustituye a C-26-00001: ')); assert.equal(s2.Motivo.length, 255);
 }

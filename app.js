@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, registroPuerta, registroCertificado, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.73.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.74.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1108,17 +1108,7 @@ async function registrarPuerta() {
         const delAno = esRechazo ? await embarquesDelAno(av) : [];
         if (esRechazo) fundirEnVentana(delAno);
         const folio = esRechazo ? siguienteFolio('R', delAno.map(e => e.Title)) : '';
-        const campos = limpiar({
-            Title: folio, Etapa: esRechazo ? 'rechazado' : 'compuerta',
-            PreAltaId: r.pre ? r.pre.id : null, Manifiesto: r.campos.manifiesto, Arribo: ahora,
-            CarrierId: r.carrier ? r.carrier.id : null, UnidadId: r.unidad ? r.unidad.id : null,
-            PlacaTractor: placaNormal(r.campos.placaTractor), PlacaPlana: placaNormal(r.campos.placaPlana),
-            ChoferId: r.chofer ? r.chofer.id : null, ChoferNombre: r.campos.choferNombre,
-            CorrienteDeclarada: r.campos.corriente, Compuerta: r.resultado,
-            CompuertaDetalle: JSON.stringify(r.hallazgos), Verificacion79: !!r.campos.art79,
-            ExcepcionMotivo: r.resultado === 'excepcion-comercial' ? $('puMotivo').value.trim() : null,
-            CapturadoPor: estado.cuenta.username
-        });
+        const campos = registroPuerta(r, { folio, ahora, motivo: $('puMotivo').value, usuario: estado.cuenta.username });   // C-77 (v0.74.0): el armado vive en reglas.js
         const nuevo = await estado.cliente.crearRenglon(estado.siteId, L.embarques, campos, av);
         if (esRechazo) await asegurarFolioUnico(nuevo, 'R', av);
         anclar('embarques', nuevo);   // C-23: sin duplicar el id si el refresco ya lo trajo
@@ -2723,11 +2713,8 @@ async function emitirCertificado(sustituye = null, motivoSust = '', corr = null)
         if (sustituye && !deLaGondola.some(x => x.id === sustituye.id && x.Estado === 'vigente')) throw new Error(`${sustituye.Title} ya no está vigente. Actualiza`);
         const folio = siguienteFolio('C', [...estado.certificados, ...deLaGondola].map(x => x.Title));
         const ahora = new Date().toISOString();
-        nuevo = await estado.cliente.crearRenglon(estado.siteId, L.certificados, limpiar({
-            Title: folio, PreAltaId: p.id, EmbarqueId: e.id, Estado: 'vigente', ...papel,
-            Sufijo: sufijoVerificacion(), EmitidoPor: estado.cuenta.username, EmitidoEl: ahora, Version: VERSION,
-            Motivo: sustituye ? `Sustituye a ${sustituye.Title}: ${motivoSust}`.slice(0, 255) : null
-        }));
+        nuevo = await estado.cliente.crearRenglon(estado.siteId, L.certificados, registroCertificado({   // C-77 (v0.74.0)
+            folio, prealtaId: p.id, embarqueId: e.id, papel, sufijo: sufijoVerificacion(), usuario: estado.cuenta.username, ahora, version: VERSION, sustituye, motivoSust }));
         try {
             paso = 'asegurar el folio'; await asegurarFolioUnico(nuevo, 'C');
             paso = 'firmar'; await firmar('certificado', nuevo);
@@ -3781,6 +3768,14 @@ function filtrarArbol() {
         d.classList.toggle('oculto', hayFiltro && d.dataset.leida === '1' && !alguno && !propio);   // una carpeta sin leer no se juzga
     }
     $('arVacio').classList.toggle('oculto', !hayFiltro || [...caja.children].some(x => !x.classList.contains('oculto')));
+    // U-135 (v0.74.0): con un filtro puesto, decir cuántas carpetas no se buscaron porque nadie las ha abierto, y ofrecer leerlas.
+    const sinLeer = hayFiltro ? [...caja.querySelectorAll('details')].filter(d => d.dataset.leida !== '1') : [];
+    $('arSinLeer').classList.toggle('oculto', !sinLeer.length);
+    $('arSinLeerTexto').textContent = sinLeer.length ? `${sinLeer.length === 1 ? '1 carpeta sin abrir no se buscó' : `${sinLeer.length} carpetas sin abrir no se buscaron`}.` : '';
+}
+/** U-135: lee las carpetas que el filtro no pudo juzgar (un nivel; lo que traigan dentro vuelve a contarse). */
+function leerCarpetasSinLeer() {
+    for (const d of $('arArbol').querySelectorAll('details')) if (d.dataset.leida !== '1' && d.leer) d.leer();
 }
 
 // Pendiente revisar: pre-altas por firmar, excepciones y programas dormidos. Con algo, la tarjeta se pinta en ambar
@@ -3812,7 +3807,7 @@ function hallazgosDe(e, ...clases) {
 const reglasDe = (e, ...clases) => hallazgosDe(e, ...clases).map(h => h.regla).join(', ');
 function renglonRechazo(e) {
     const causa = reglasDe(e, 'legal', 'comercial');
-    const r = renglon(`${e.Title || '(excepción)'} · ${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + quien(e.ExcepcionAutorizo) : ''}`);
+    const r = renglon(`${e.Title || '(excepción)'} · ${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + quien(e.ExcepcionAutorizo) : ''}`, 'Ver', () => abrirGondolaDe(vivo('embarques', e)));   // U-134 (v0.74.0)
     r.firstChild.firstChild.prepend(etiquetaCompuertaDe(e));   // U-143 (v0.73.0): la etiqueta va primero; al final caía sola en otro renglón
     return r;
 }
@@ -3837,11 +3832,22 @@ function vigenciasPadronHoy() {
             for (const [n, col] of VIGENCIAS_PADRON[tipo]) {
                 if (tipo === 'carriers' && col === 'VigenciaASEA' && vigenciasDelCarrier(it).length) continue;
                 const d = diasPara(it[col]);
-                if (d !== null && d <= CONFIG.avisoVigenciaDias) v.push({ Title: `${NOMBRE_PADRON[tipo].replace(/^./, c => c.toUpperCase())} ${it.Title} · ${n}`, Vence: it[col], Fuente: 'padrón', AvisoDias: CONFIG.avisoVigenciaDias });
+                if (d !== null && d <= CONFIG.avisoVigenciaDias) v.push({ Title: `${NOMBRE_PADRON[tipo].replace(/^./, c => c.toUpperCase())} ${it.Title} · ${n}`, Vence: it[col], Fuente: 'padrón', AvisoDias: CONFIG.avisoVigenciaDias, ficha: { clave: tipo, id: it.id, carrier: tipo === 'carriers' ? it.id : Number(it.CarrierId) } });   // U-134: el renglón abre su ficha
             }
         }
     }
     return v;
+}
+/** U-134: de Hoy a la ficha del padrón; Volver lleva al expediente de su carrier. */
+function abrirFichaDesdeHoy(f) {
+    irA('padron');
+    irPadron('ficha', { ficha: { clave: f.clave, id: f.id }, carrier: f.carrier, desde: 'carrier' });
+}
+/** U-134: de un rechazo a su góndola — En planta si sigue ahí (excepción en espera), si no el Historial buscando su folio o placa. */
+function abrirGondolaDe(e) {
+    estado.vistaGondolas = enPlanta(e) || esperaAutorizacion(e) ? 'planta' : 'historial';
+    $('baBusca').value = estado.vistaGondolas === 'historial' ? (e.Title || e.PlacaTractor || '') : '';
+    irA('bascula');
 }
 function pintarVigenciasHoy() {
     const vg = $('tbVigencias'); vg.textContent = '';
@@ -3850,7 +3856,9 @@ function pintarVigenciasHoy() {
     for (const { v, d } of prox) {
         const ventana = Number(v.AvisoDias) || CONFIG.avisoVigenciaDias;
         const clase = d < 0 ? 'mal' : d <= 7 ? 'ojo' : '';
-        const r = el('div', 'vig');
+        // U-134 (v0.74.0): la del padrón es un botón que abre la ficha del chofer, unidad o carrier; la del tablero no tiene ficha.
+        const r = el(v.ficha ? 'button' : 'div', v.ficha ? 'vig abre' : 'vig');
+        if (v.ficha) { r.type = 'button'; r.title = 'Abrir su ficha en el Padrón'; r.addEventListener('click', () => abrirFichaDesdeHoy(v.ficha)); }
         const t = el('span', '', v.Title); t.appendChild(el('small', '', `${fechaCorta(v.Vence)} · ${v.Fuente || ''}${v.Dueno ? ' · dueño ' + v.Dueno : ''}`)); r.appendChild(t);
         r.appendChild(el('span', 'd ' + clase, d < 0 ? `−${-d} d` : `${d} d`));
         const bar = el('span', 'bar'); const i = el('i', clase); i.style.width = Math.max(4, Math.min(100, Math.round((1 - d / ventana) * 100))) + '%'; bar.appendChild(i); r.appendChild(bar);
@@ -3922,6 +3930,7 @@ $('btnPdSiguiente').addEventListener('click', siguientePadron);
 $('btnPdAtras').addEventListener('click', () => { const a = estado.padronVista.asis; if (a && a.paso > 1) irPasoPadron(a.paso - 1); });
 for (const ev of ['input', 'change']) $('pdAsisCuerpo').addEventListener(ev, pintarAsiVaPadron);
 $('baBusca').addEventListener('input', pintarHistorial);
+$('btnArLeerTodas').addEventListener('click', leerCarpetasSinLeer);
 for (const b of document.querySelectorAll('#gTabs button, #gKpis button')) b.addEventListener('click', () => elegirVistaGondolas(b.dataset.g));
 // v0.66.0: cada conteo del padrón abre su grupo y lo trae a la vista.
 

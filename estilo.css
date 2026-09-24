@@ -730,6 +730,12 @@ button:not(:disabled):active { transform: scale(.98); }
 .vig .d.ojo { color: var(--warn-fg); font-weight: 600; }
 .vig small { color: var(--mute); font-size: .78rem; display: block; font-weight: 400; }
 .vig .bar { display: none; }
+/* U-134 (v0.74.0): la vigencia del padrón es un botón que abre su ficha */
+button.vig.abre { width: 100%; background: none; border: 0; border-top: 1px solid var(--line-soft); font: inherit; text-align: left; color: inherit; cursor: pointer; min-height: 44px; }
+button.vig.abre:first-child { border-top: 0; }
+button.vig.abre:hover > span:first-child { text-decoration: underline; }
+button.vig.abre .d::after { content: ' ›'; color: var(--mute); font-weight: 400; }
+.ar-sinleer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
 .vacio { font-size: .85rem; color: var(--mute); margin: 0; }
 /* Título de tarjeta con un botón a la derecha (Exportar CSV en «Hoy», F4 del 7-sep). */
 .h2-con-boton { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3); }

@@ -356,6 +356,7 @@ async function probarArchivos(emb1) {
     poner('arBusca', 'no-existe-zzz');
     const raizBuzon = arbol().querySelectorAll(':scope > details')[2];
     R.ok('v0.33.0: sin coincidencias en lo leído se esconden las ramas leídas; la que no se ha abierto no se juzga (y no hay #arVacio)', oculto(raizEv) && oculto(raizPadron) && !oculto(raizBuzon) && !visible('arVacio'));
+    R.ok('U-135: con filtro y carpetas sin abrir, lo dice (#arSinLeer) y ofrece «Buscar también ahí»', visible('arSinLeer') && /sin abrir no se busc/.test($('arSinLeerTexto').textContent) && !!$('btnArLeerTodas'), $('arSinLeerTexto').textContent);
     await abrir('details[data-ruta="99_Pendiente-Archivar"]', 'buzón');
     {
         const hijosBuzon = [...raizBuzon.querySelectorAll(':scope > .hijos > details, :scope > .hijos > .arch')];
@@ -375,6 +376,7 @@ async function probarArchivos(emb1) {
     R.ok('v0.33.0: leídas las tres ramas (y los lotes del buzón) sin coincidencia, lo dice (#arVacio)', visible('arVacio') && oculto(raizBuzon), `buzón leído ${raizBuzon.dataset.leida} · lotes ${raizBuzon.querySelectorAll(':scope > .hijos > details').length}`);
     poner('arBusca', '');
     R.ok('v0.33.0: sin filtro todo vuelve', !oculto(raizEv) && !oculto(raizPadron) && !oculto(ticket) && !visible('arVacio'));
+    R.ok('U-135: sin filtro no hay aviso de carpetas sin abrir', !visible('arSinLeer'));
     if (emb1) {
         // el programa filtra por los folios de sus gondolas: el lote de ESTA corrida (en el buzon) pega, el sembrado (e-25-…) no
         const buzon = raizBuzon;
@@ -1388,6 +1390,17 @@ try {
         }
         document.querySelector('#pestanas button[data-p="hoy"]').click();
         R.ok('C-29: Hoy pinta los mismos rechazos que Reportes (hasta 10), con la misma etiqueta de compuerta', $('tbRechazos').querySelectorAll('.renglon').length === Math.min(10, $('repRechazos').querySelectorAll('.renglon').length) && [...$('tbRechazos').querySelectorAll('.renglon')].every(r => r.querySelector('.etiqueta')), `hoy ${$('tbRechazos').querySelectorAll('.renglon').length} · reportes ${$('repRechazos').querySelectorAll('.renglon').length}`);
+        {   // U-134 (v0.74.0): el renglón del rechazo lleva «Ver» y abre su góndola en Góndolas
+            const rr = $('tbRechazos').querySelector('.renglon');
+            const ver = rr && [...rr.querySelectorAll('button')].find(b => b.textContent === 'Ver');
+            R.ok('U-134: el rechazo en Hoy trae «Ver»', !!ver, rr ? rr.textContent.slice(0, 80) : 'sin rechazos');
+            if (ver) {
+                const t = rr.querySelector('.t').textContent;
+                ver.click();
+                R.ok('U-134: «Ver» lleva a Góndolas con la góndola a la vista (Historial filtrado por su folio o placa, o En planta)', visible('p-bascula') && (document.querySelector('#gTabs button[data-g="planta"]').getAttribute('aria-pressed') === 'true' || ($('baBusca').value && t.includes($('baBusca').value) && document.querySelector('#gTabs button[data-g="historial"]').getAttribute('aria-pressed') === 'true')), `góndolas ${visible('p-bascula')} · «${$('baBusca').value}»`);
+                $('baBusca').value = ''; document.querySelector('#pestanas button[data-p="hoy"]').click();
+            }
+        }
         R.ok('KPI góndolas cerradas hoy = 2', /Góndolascerradashoy2/.test(kp.replace(/\s+/g, '')), kp.slice(0, 80));
         R.ok('KPI toneladas hoy = 25.8 t (21,220 + 4,600)', kp.includes('25.8'), kp.match(/[\d.]+t/g)?.join(' '));
         R.ok('rechazos de la semana = 1', /Rechazosestasemana1/.test(kp.replace(/\s+/g, '')));
@@ -1782,6 +1795,14 @@ try {
             document.querySelector('#pestanas button[data-p="hoy"]').click();
             const vigLic = await esperar(() => [...document.querySelectorAll('#tbVigencias .vig')].find(v => v.textContent.includes('licencia')), 'licencia en la tarjeta de vigencias').catch(() => null);
             R.ok('C-19/U-29: la licencia del chofer a 5 días aparece en #tbVigencias con clase ojo y fuente padrón', !!vigLic && !!vigLic.querySelector('.d.ojo') && vigLic.textContent.includes('padrón') && vigLic.textContent.includes('Chofer'), $('tbVigencias').textContent.slice(0, 160));
+            if (vigLic) {   // U-134 (v0.74.0): el renglón del padrón es un botón que abre la ficha del chofer
+                const nombreCh = filas('choferes')[0].fields.Title;
+                R.ok('U-134: la vigencia del padrón en Hoy es un botón', vigLic.tagName === 'BUTTON' && vigLic.classList.contains('abre'), vigLic.tagName);
+                vigLic.click();
+                const fichaOk = await esperar(() => visible('p-padron') && !$('pdFicha').hidden && $('pdTitulo').textContent.includes(nombreCh), 'ficha del chofer desde Hoy').then(() => true).catch(() => false);
+                R.ok('U-134: tocarla abre la ficha del chofer en el Padrón', fichaOk, `padrón ${visible('p-padron')} · ficha ${!$('pdFicha').hidden}`);
+                document.querySelector('#pestanas button[data-p="hoy"]').click();
+            }
             R.ok('C-19/U-29: la ASEA del carrier (2028) no sale: vive en el tablero y está fuera de la ventana', ![...document.querySelectorAll('#tbVigencias .vig')].some(v => v.textContent.includes('ASEA')), $('tbVigencias').textContent.slice(0, 160));
             // (b) eliminar un carrier sin referencias borra ANTES su vigencia del tablero (orden C-05) y filas(vigencias) queda sin ella.
             document.querySelector('#pestanas button[data-p="padron"]').click();

@@ -605,3 +605,31 @@ export function urlVerificacion(base, cert) {
 
 /** Toneladas con dos decimales y separador de miles (es-MX): 21220 -> «21.22». */
 export function toneladas(kg) { return (Number(kg || 0) / 1000).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+/**
+ * C-77 (v0.74.0): el armado PURO del renglón que escribe la puerta en PLANTA_Embarques. `r` es el veredicto (evaluarPuerta):
+ * { resultado, hallazgos, pre, carrier, unidad, chofer, campos }. El folio R- solo lo trae el rechazo; el E- nace en la báscula.
+ */
+export function registroPuerta(r, { folio = '', ahora, motivo = '', usuario }) {
+    const esRechazo = r.resultado === 'rechazo-legal';
+    return limpiar({
+        Title: esRechazo ? folio : '', Etapa: esRechazo ? 'rechazado' : 'compuerta',
+        PreAltaId: r.pre ? r.pre.id : null, Manifiesto: r.campos.manifiesto, Arribo: ahora,
+        CarrierId: r.carrier ? r.carrier.id : null, UnidadId: r.unidad ? r.unidad.id : null,
+        PlacaTractor: placaNormal(r.campos.placaTractor), PlacaPlana: placaNormal(r.campos.placaPlana),
+        ChoferId: r.chofer ? r.chofer.id : null, ChoferNombre: r.campos.choferNombre,
+        CorrienteDeclarada: r.campos.corriente, Compuerta: r.resultado,
+        CompuertaDetalle: JSON.stringify(r.hallazgos), Verificacion79: !!r.campos.art79,
+        ExcepcionMotivo: r.resultado === 'excepcion-comercial' ? String(motivo).trim() : null,
+        CapturadoPor: usuario
+    });
+}
+
+/** C-77 (v0.74.0): el renglón de PLANTA_Certificados que se crea al emitir (o sustituir, con `sustituye` y su motivo). */
+export function registroCertificado({ folio, prealtaId, embarqueId, papel, sufijo, usuario, ahora, version, sustituye = null, motivoSust = '' }) {
+    return limpiar({
+        Title: folio, PreAltaId: prealtaId, EmbarqueId: embarqueId, Estado: 'vigente', ...papel,
+        Sufijo: sufijo, EmitidoPor: usuario, EmitidoEl: ahora, Version: version,
+        Motivo: sustituye ? `Sustituye a ${sustituye.Title}: ${motivoSust}`.slice(0, 255) : null
+    });
+}
