@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta } from './reglas.js';
 
-const VERSION = '0.57.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.58.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1736,21 +1736,6 @@ function renglonPrograma(p, grupo) {
     r.insertBefore(barraAvance(gondolasDe(p)), r.children[2]);
     return r;
 }
-/**
- * P2: los programas recientes que sirven de base (ya firmados o cerrados: un borrador todavía no es un precedente), uno por
- * cliente y corriente para que los tres no sean el mismo programa repetido.
- */
-function basesRecientes(n = 3) {
-    const vistos = new Set(), out = [];
-    for (const p of [...estado.prealtas].sort((a, b) => b.id - a.id)) {
-        if (p.Estado !== 'firmada' && p.Estado !== 'cerrada') continue;
-        const k = clienteDe(p) + '|' + p.Corriente;
-        if (vistos.has(k)) continue;
-        vistos.add(k); out.push(p);
-        if (out.length === n) break;
-    }
-    return out;
-}
 function pintarPrealtas() {
     cerrarForma('paDetalle');
     const captura = PUEDE.capturarPrealta(estado.rol);
@@ -1761,7 +1746,7 @@ function pintarPrealtas() {
     const grupos = { borrador: [], firmada: [], cerrada: [] };
     for (const p of [...estado.prealtas].sort((a, b) => b.id - a.id)) (grupos[p.Estado] || grupos.cerrada).push(p);
 
-    const bases = captura ? basesRecientes() : [];
+    const bases = captura ? basesRecientes(estado.prealtas) : [];
     $('paRecientes').classList.toggle('oculto', !bases.length);
     const cb = $('paBases'); cb.textContent = '';
     for (const p of bases) {
@@ -1825,7 +1810,7 @@ async function usarComoBase(p) {
     pintarUnidadesChoferesPrealta(seleccionDe(p));   // U-94 (v0.56.0): la seleccion de la base, no todas
     armarTituloPrealta();
     Object.assign(estado.paAsis, { paso: 2, max: 3, baseId: p.id, genDeId: p.id });
-    pintarAsistentePrealta();
+    marcarOtroClientePrealta(); pintarAsistentePrealta();
     $('paAsis').dataset.huella = huellaForma($('paAsis'));   // lo copiado de la base no cuenta como captura: Cancelar no pregunta
     $('paPozoTitulo').focus();
 }
@@ -1927,6 +1912,7 @@ function abrirAsistentePrealta() {
     ocultarListoPrealta(); limpiarAvisos();
     $('p-prealtas').classList.add('asistiendo');
     $('paAsis').classList.remove('oculto');
+    marcarOtroClientePrealta();   // C-64: al editar, un cliente que no es de los conocidos abre en «Otro»
     pintarAsistentePrealta();
     $('paAsis').dataset.huella = huellaForma($('paAsis'));
     window.scrollTo({ top: 0 });
@@ -1981,15 +1967,6 @@ function faltaPrealta(n) {
     return null;
 }
 function carrierAmpara(c, corriente) { const l = lista(c.Corrientes); return !corriente || !l.length || l.includes(corriente); }   // la misma regla que la compuerta
-function clientesPrealta() {
-    const m = new Map();
-    for (const p of [...estado.prealtas].sort((a, b) => b.id - a.id)) {
-        const c = clienteDe(p); if (!c) continue;
-        if (!m.has(c)) m.set(c, { clave: c, n: 0, ultimo: p });
-        m.get(c).n++;
-    }
-    return [...m.values()].sort((a, b) => b.n - a.n || a.clave.localeCompare(b.clave));
-}
 /**
  * P3: elegir un cliente conocido trae el generador de su último programa (con «Cambiar» en el paso 2). C-67 (v0.57.0): el
  * programa se resuelve por su id al tocar, no con el objeto que el renglón capturó al pintarse. U-105: y avanza al paso 2.
@@ -2021,8 +1998,31 @@ function pintarOpcionesPa(cont, items) {
     }
     if (v !== null) { const n = [...cont.children].find(x => x.dataset.v === v); if (n) n.focus(); }
 }
+/**
+ * C-64 (v0.58.0): el asistente se pinta por partes —la barra, el paso visible y el pie, más el resumen de escritorio— y los
+ * pasos ocultos no se tocan: se pintan al entrar (irPasoPrealta). El pintor ya no escribe estado; a.otro lo fija quien carga
+ * el cliente (marcarOtroClientePrealta). Antes eran 86 líneas que reconstruían los cinco pasos con cada tecla, Notas incluida.
+ */
+const PINTORES_PASO_PREALTA = { 1: pintarPaso1Prealta, 2: pintarPaso2Prealta, 3: pintarPaso3Prealta, 5: pintarPaso5Prealta };   // el 4 son campos fijos
 function pintarAsistentePrealta() {
     const a = estado.paAsis; if (!a) return;
+    pintarBarraPrealta(a);
+    const pintor = PINTORES_PASO_PREALTA[a.paso]; if (pintor) pintor(a);
+    pintarPiePrealta(a);
+    pintarResumenPrealta(carrierPrealta());
+}
+const carrierPrealta = () => $('paCarrier').value ? porId(estado.carriers, $('paCarrier').value) : null;
+/** «3 de 4» de las casillas de unidades o choferes; vacío si el carrier no tiene. */
+function cuentaMarcadosPrealta(cont) {
+    const t = $(cont).querySelectorAll('input').length;
+    return t ? `${$(cont).querySelectorAll('input:checked').length} de ${t}` : '';
+}
+/** Un cliente escrito que no es de los conocidos es «Otro cliente». Lo llama quien carga el cliente en la forma, no el pintor. */
+function marcarOtroClientePrealta() {
+    const a = estado.paAsis, cli = parteTitulo('paCliente'); if (!a) return;
+    a.otro = a.otro || (!!cli && !clientesPrealta(estado.prealtas).some(c => c.clave === cli));
+}
+function pintarBarraPrealta(a) {
     const n = a.paso;
     for (const b of $('paPasos').querySelectorAll('button')) {
         const i = Number(b.dataset.p), hecho = i !== n && i <= a.max && !faltaPrealta(i) && (i < n || a.revisar);
@@ -2032,19 +2032,20 @@ function pintarAsistentePrealta() {
     }
     for (let i = 1; i <= 5; i++) $('paPaso' + i).hidden = i !== n;
     $('paPasoK').textContent = `Paso ${n} de 5 · ${PASOS_PREALTA[n - 1]}${n === 4 ? ' · opcional' : ''}`;
-
-    // Paso 1: clientes conocidos (por número de programas) y «Otro cliente».
-    const cli = parteTitulo('paCliente'), conocidos = clientesPrealta();
-    a.otro = a.otro || (!!cli && !conocidos.some(c => c.clave === cli));
-    pintarOpcionesPa($('paClientes'), [...conocidos.map(c => ({
+}
+/** Paso 1: clientes conocidos (por número de programas) y «Otro cliente». */
+function pintarPaso1Prealta(a) {
+    const cli = parteTitulo('paCliente');
+    pintarOpcionesPa($('paClientes'), [...clientesPrealta(estado.prealtas).map(c => ({
         valor: c.clave, sel: !a.otro && cli === c.clave, titulo: c.clave, dato: plural(c.n, 'programa'),
         detalle: `${c.ultimo.Generador || 'sin generador'} · último ${c.ultimo.Campana || c.ultimo.Title}${c.ultimo.Pozo ? ', ' + c.ultimo.Pozo : ''}`,
         alClic: () => elegirClientePrealta(c.clave, c.ultimo.id)   // C-67: la clave y el id, no el objeto
     })), { valor: '__otro', sel: a.otro, titulo: 'Otro cliente', detalle: 'se captura una vez y queda para la próxima', clase: 'otro',
         alClic: () => { if (!a.otro) { a.otro = true; $('paCliente').value = ''; a.genDeId = null; armarTituloPrealta(); pintarAsistentePrealta(); } $('paCliente').focus(); } }]);
     $('paClienteOtro').classList.toggle('oculto', !a.otro);
-
-    // Paso 2: la base, la corriente y el generador (aviso con «Cambiar», o sus campos si no hay o se pidió cambiarlo).
+}
+/** Paso 2: la base, la corriente y el generador (aviso con «Cambiar», o sus campos si no hay o se pidió cambiarlo). */
+function pintarPaso2Prealta(a) {
     const base = a.baseId ? porId(estado.prealtas, a.baseId) : null, genDe = a.genDeId ? porId(estado.prealtas, a.genDeId) : null;
     $('paBaseAviso').classList.toggle('oculto', !base);
     if (base) $('paBaseAviso').firstChild.textContent = $('paCarrier').value ? `Copiado de ${base.Title}: cliente, generador, corriente y transporte. Solo escribe el pozo.`
@@ -2059,11 +2060,12 @@ function pintarAsistentePrealta() {
         const reg = valorPa('paGeneradorRegistro');
         $('paGenAviso').firstChild.textContent = `Generador ${gen}${reg ? `, registro ${reg}` : ''}.${genDe ? ` Tomado de ${genDe.Campana || genDe.Title}.` : ''}`;
     }
-
-    // Paso 3: el carrier se coteja ANTES de elegirlo (P5): vigencia a la vista; si su oficio no ampara la corriente, apagado.
-    const cid = $('paCarrier').value;
+}
+/** Paso 3: el carrier se coteja ANTES de elegirlo (P5): vigencia a la vista; si su oficio no ampara la corriente, apagado. */
+function pintarPaso3Prealta() {
+    const cid = $('paCarrier').value, corr = $('paCorriente').value;
     const carriers = [...$('paCarrier').options].filter(o => o.value).map(o => porId(estado.carriers, o.value)).filter(Boolean);
-    const elegido = cid ? porId(estado.carriers, cid) : null;
+    const elegido = carrierPrealta();
     // C-62 (v0.56.0): el pintor ya no suelta el carrier (lo hace cambiarCorrientePrealta, que avisa); un carrier que no ampara
     // —p. ej. al editar un borrador viejo— lo marca faltaPrealta(3) y Guardar no pasa.
     const cuenta = (col, c) => col.filter(x => Number(x.CarrierId) === Number(c.id) && x.Activo !== false).length;
@@ -2081,39 +2083,36 @@ function pintarAsistentePrealta() {
     // U-99 (v0.57.0): el remate de rechazo solo con algo ya vencido; «por vencer» (ok: true) dice su fecha límite, que ya trae el detalle.
     if (h.length) $('paCarrierAviso').firstChild.textContent = `${elegido.Title}: ${h.map(x => `${x.regla} ${x.detalle}`).join(' · ')}.${h.some(x => !x.ok) ? ' Si el envío llega con esto así, la puerta lo rechaza.' : ' Después de esa fecha la puerta lo rechaza.'}`;
     $('paTransporte').classList.toggle('oculto', !elegido);
-    for (const [cont, nn] of [['paUnidades', 'paNUnidades'], ['paChoferes', 'paNChoferes']]) {
-        const t = $(cont).querySelectorAll('input').length;
-        $(nn).textContent = t ? `${$(cont).querySelectorAll('input:checked').length} de ${t}` : '';
-    }
-
-    // Paso 5: Revisar, con «Cambiar» por sección (P9: cambias una y Siguiente te regresa aquí).
-    if (n === 5) {
-        const rv = $('paRevisar'); rv.textContent = '';
-        const sec = (titulo, texto, paso, antes) => {
-            const d = el('section'); d.appendChild(el('h3', '', titulo)); d.appendChild(el('p', '', texto));
-            const b = el('button', 'enlace', 'Cambiar'); b.type = 'button'; b.addEventListener('click', () => { a.revisar = true; if (antes) antes(); irPasoPrealta(paso); }); d.appendChild(b);
-            rv.appendChild(d);
-        };
-        const nom = valorPa('paTitulo'); const r0 = el('div', 'pa-nombre'); r0.appendChild(el('small', '', 'Programa')); r0.appendChild(el('b', 'mono', nom || '—')); rv.appendChild(r0);
-        // U-90 (v0.57.0): cliente y generador en secciones aparte, porque viven en pasos distintos; «Cambiar» del generador abre
-        // sus campos en el paso 2. U-104: lo que se guarda se repasa —dirección, pozo / instalación y notas incluidos—.
-        sec('Cliente', cli || '—', 1);
-        sec('Generador y origen', [valorPa('paGenerador') || 'sin generador', valorPa('paGeneradorRegistro'), valorPa('paGeneradorDireccion'), valorPa('paPozo') && `pozo / instalación ${valorPa('paPozo')}`].filter(Boolean).join(' · '), 2, () => { a.genEdit = true; });
-        sec('Pozo y corriente', [parteTitulo('paPozoTitulo'), etiquetaCorriente(corr)].filter(Boolean).join(' · '), 2);
-        sec('Transporte', elegido ? `${elegido.Title} · ${plural($('paUnidades').querySelectorAll('input:checked').length, 'unidad', 'unidades')} · ${plural($('paChoferes').querySelectorAll('input:checked').length, 'chofer', 'choferes')}` : '—', 3);
-        sec('Envío y correo', [valorPa('paFecha') && `primer envío ${valorPa('paFecha')}`, valorPa('paGondolas') && plural(Number(valorPa('paGondolas')), 'góndola'), valorPa('paCorreoFecha') && `correo del ${valorPa('paCorreoFecha')}`, valorPa('paCorreoRemitente'), valorPa('paNotas') && `notas: ${valorPa('paNotas')}`].filter(Boolean).join(' · ') || 'sin datos (opcional)', 4);
-    }
-
-    // P8: el botón dice qué falta; Atrás nombra a dónde vuelve. U-91 (v0.57.0): en Revisar, Guardar dice lo que le falte a 1–4.
-    const falta = n === 5 ? pendientePrealta() : faltaPrealta(n), sig = $('btnPaSiguiente'), gu = $('btnGuardarPrealta');
+    $('paNUnidades').textContent = cuentaMarcadosPrealta('paUnidades');
+    $('paNChoferes').textContent = cuentaMarcadosPrealta('paChoferes');
+}
+/** Paso 5: Revisar, con «Cambiar» por sección (P9: cambias una y Siguiente te regresa aquí). */
+function pintarPaso5Prealta(a) {
+    const rv = $('paRevisar'); rv.textContent = '';
+    const sec = (titulo, texto, paso, antes) => {
+        const d = el('section'); d.appendChild(el('h3', '', titulo)); d.appendChild(el('p', '', texto));
+        const b = el('button', 'enlace', 'Cambiar'); b.type = 'button'; b.addEventListener('click', () => { a.revisar = true; if (antes) antes(); irPasoPrealta(paso); }); d.appendChild(b);
+        rv.appendChild(d);
+    };
+    const corr = $('paCorriente').value, elegido = carrierPrealta();
+    const nom = valorPa('paTitulo'); const r0 = el('div', 'pa-nombre'); r0.appendChild(el('small', '', 'Programa')); r0.appendChild(el('b', 'mono', nom || '—')); rv.appendChild(r0);
+    // U-90 (v0.57.0): cliente y generador en secciones aparte, porque viven en pasos distintos; «Cambiar» del generador abre
+    // sus campos en el paso 2. U-104: lo que se guarda se repasa —dirección, pozo / instalación y notas incluidos—.
+    sec('Cliente', parteTitulo('paCliente') || '—', 1);
+    sec('Generador y origen', [valorPa('paGenerador') || 'sin generador', valorPa('paGeneradorRegistro'), valorPa('paGeneradorDireccion'), valorPa('paPozo') && `pozo / instalación ${valorPa('paPozo')}`].filter(Boolean).join(' · '), 2, () => { a.genEdit = true; });
+    sec('Pozo y corriente', [parteTitulo('paPozoTitulo'), etiquetaCorriente(corr)].filter(Boolean).join(' · '), 2);
+    sec('Transporte', elegido ? `${elegido.Title} · ${plural($('paUnidades').querySelectorAll('input:checked').length, 'unidad', 'unidades')} · ${plural($('paChoferes').querySelectorAll('input:checked').length, 'chofer', 'choferes')}` : '—', 3);
+    sec('Envío y correo', [valorPa('paFecha') && `primer envío ${valorPa('paFecha')}`, valorPa('paGondolas') && plural(Number(valorPa('paGondolas')), 'góndola'), valorPa('paCorreoFecha') && `correo del ${valorPa('paCorreoFecha')}`, valorPa('paCorreoRemitente'), valorPa('paNotas') && `notas: ${valorPa('paNotas')}`].filter(Boolean).join(' · ') || 'sin datos (opcional)', 4);
+}
+/** P8: el botón dice qué falta; Atrás nombra a dónde vuelve. U-91 (v0.57.0): en Revisar, Guardar dice lo que le falte a 1–4. */
+function pintarPiePrealta(a) {
+    const n = a.paso, falta = n === 5 ? pendientePrealta() : faltaPrealta(n), sig = $('btnPaSiguiente'), gu = $('btnGuardarPrealta');
     $('btnPaAtras').hidden = n === 1; $('btnPaAtras').textContent = n > 1 ? `‹ ${PASOS_PREALTA[n - 2]}` : '';
     $('btnPaSaltar').hidden = n !== 4 || a.revisar;   // P7: el envío es opcional; desde «Cambiar» el botón ya regresa a Revisar
     sig.hidden = n === 5; gu.hidden = n !== 5;
     sig.classList.toggle('falta', n !== 5 && !!falta); gu.classList.toggle('falta', n === 5 && !!falta);
     sig.textContent = n === 5 ? '' : falta ? falta.t : a.revisar ? 'Volver a revisar ›' : n === 4 ? 'Revisar ›' : `Siguiente: ${PASOS_PREALTA[n]} ›`;
     if (n === 5) gu.textContent = falta ? falta.f.t : estado.prealtaEdit ? 'Guardar cambios' : 'Guardar para firma';
-
-    pintarResumenPrealta(elegido);
 }
 /** P4, escritorio: «Así va la pre-alta» a la derecha, en vivo. En celular no se ve: el nombre ya va arriba. */
 function pintarResumenPrealta(carrier) {
@@ -2125,7 +2124,7 @@ function pintarResumenPrealta(carrier) {
     sec('Programa'); fila('Cliente', parteTitulo('paCliente')); fila('Pozo', parteTitulo('paPozoTitulo')); fila('Corriente', etiquetaCorriente($('paCorriente').value));
     sec('Generador'); fila('Razón social', valorPa('paGenerador')); fila('Registro', valorPa('paGeneradorRegistro'));
     sec('Transporte'); fila('Carrier', carrier ? carrier.Title : '');
-    if (carrier) { fila('Unidades', $('paNUnidades').textContent); fila('Choferes', $('paNChoferes').textContent); }
+    if (carrier) { fila('Unidades', cuentaMarcadosPrealta('paUnidades')); fila('Choferes', cuentaMarcadosPrealta('paChoferes')); }
     sec('Envío'); fila('Primer envío', valorPa('paFecha')); fila('Góndolas', valorPa('paGondolas'));
     r.appendChild(dl);
     r.appendChild(el('p', 'pista', 'Obligatorio: cliente, pozo, año, corriente y carrier. Lo demás se puede completar después.'));
@@ -2156,8 +2155,8 @@ $('paAsis').addEventListener('keydown', ev => {
     if (estado.paAsis.paso === 5) guardarPrealta(); else siguientePrealta();
 });
 for (const id of PARTES_TITULO) $(id).addEventListener('input', armarTituloPrealta);
-$('paAsis').addEventListener('input', pintarAsistentePrealta);
-$('paAsis').addEventListener('change', pintarAsistentePrealta);
+$('paCliente').addEventListener('input', marcarOtroClientePrealta);   // C-64: antes lo derivaba el pintor en cada repintado
+$('paAsis').addEventListener('input', pintarAsistentePrealta);   // C-64: sin «change», que repintaba otra vez al salir de cada campo
 $('btnPaSiguiente').addEventListener('click', siguientePrealta);
 $('btnPaSaltar').addEventListener('click', siguientePrealta);   // el paso 4 no tiene obligatorios: saltar es seguir sin llenarlo
 /** P7: − / + de góndolas esperadas; nunca baja de 0. Asignar .value no dispara «input», así que se repinta aquí. */

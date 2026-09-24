@@ -236,6 +236,36 @@ export function clienteDe(p) {
 }
 
 /**
+ * P2: los programas recientes que sirven de base (ya firmados o cerrados: un borrador todavía no es un precedente), uno por
+ * cliente y corriente para que los tres no sean el mismo programa repetido. C-66 (v0.58.0): vino de app.js para probarla.
+ */
+export function basesRecientes(prealtas, n = 3) {
+    const vistos = new Set(), out = [];
+    for (const p of [...(prealtas || [])].sort((a, b) => b.id - a.id)) {
+        if (p.Estado !== 'firmada' && p.Estado !== 'cerrada') continue;
+        const k = clienteDe(p) + '|' + p.Corriente;
+        if (vistos.has(k)) continue;
+        vistos.add(k); out.push(p);
+        if (out.length === n) break;
+    }
+    return out;
+}
+
+/**
+ * P3: los clientes conocidos para el paso 1 del asistente — uno por clave, con cuántos programas tiene y el más reciente
+ * (de ahí sale el generador que se propone). Orden: más programas primero, empate alfabético. C-66 (v0.58.0): vino de app.js.
+ */
+export function clientesPrealta(prealtas) {
+    const m = new Map();
+    for (const p of [...(prealtas || [])].sort((a, b) => b.id - a.id)) {
+        const c = clienteDe(p); if (!c) continue;
+        if (!m.has(c)) m.set(c, { clave: c, n: 0, ultimo: p });
+        m.get(c).n++;
+    }
+    return [...m.values()].sort((a, b) => b.n - a.n || a.clave.localeCompare(b.clave));
+}
+
+/**
  * S-27 (v0.56.0): la HUELLA de lo que ampara la firma de una pre-alta. Se guarda en PLANTA_Firmas.Motivo (columna que la
  * firma de pre-alta dejaba vacia: sin tocar el tenant) y la firma solo vale mientras el renglon siga diciendo lo mismo:
  * cambiar despues el carrier, la corriente, las unidades, los choferes o el generador de una firmada la deja sin firma.

@@ -811,10 +811,26 @@ try {
             R.ok('tanda 1: «Usar como base» copia cliente, generador, corriente y carrier; el pozo queda vacío y con el foco', $('paCliente').value === 'CLIENTE DEMO' && $('paGenerador').value === 'GENERADOR DEMO' && $('paCorriente').value === 'base-aceite' && $('paCarrier').value === String(carrierId) && $('paPozoTitulo').value === '' && document.activeElement === $('paPozoTitulo') && $('paTitulo').value === '', `${$('paCliente').value} · ${$('paCarrier').value} · ${$('paPozoTitulo').value}`);
             // v0.57.0 (U-93): «Quitar la base» suelta lo copiado y vuelve al paso 1; (U-105) elegir un cliente conocido avanza al 2.
             poner('paPozoTitulo', 'pozo 9'); clic('btnPaQuitarBase');
-            R.ok('U-93: «Quitar la base» limpia cliente, generador, corriente y carrier y vuelve al paso 1; el pozo tecleado se queda', !$('paPaso1').hidden && !visible('paBaseAviso') && $('paCliente').value === '' && $('paGenerador').value === '' && $('paCorriente').value === '' && $('paCarrier').value === '' && $('paPozoTitulo').value === 'pozo 9');
+            R.ok('U-93: «Quitar la base» limpia cliente, generador, corriente y carrier y vuelve al paso 1; el pozo tecleado se queda', !$('paPaso1').hidden && $('paCliente').value === '' && $('paGenerador').value === '' && $('paCorriente').value === '' && $('paCarrier').value === '' && $('paPozoTitulo').value === 'pozo 9');
             [...$('paClientes').querySelectorAll('.o')].find(o => o.textContent.includes('CLIENTE DEMO')).click();
-            R.ok('U-105: elegir un cliente conocido avanza al paso 2 con el generador de su último programa', !$('paPaso2').hidden && $('paGenerador').value === 'GENERADOR DEMO', $('paPasoK').textContent);
-            clic('btnCancelarPrealta'); await confirmar(); await esperar(() => !visible('paAsis'), 'base soltada');
+            // C-64 (v0.58.0): el aviso de la base vive en el paso 2 y se cotejaba con el 1 a la vista; ahora se mira al volver al 2.
+            R.ok('U-105: elegir un cliente conocido avanza al paso 2 con el generador de su último programa (y ya sin el aviso de la base, U-93)', !$('paPaso2').hidden && $('paGenerador').value === 'GENERADOR DEMO' && !visible('paBaseAviso'), $('paPasoK').textContent);
+            // C-66 (v0.58.0): P3 — el generador traído se muestra como aviso con su origen, y «Cambiar» abre sus campos con el foco.
+            const progDemo = filas('prealtas').find(p => p.fields.Title === 'CLIENTE DEMO-POZO 1-2026').fields;
+            R.ok('C-66/P3: el generador traído sale como aviso «Tomado de» su programa, sin los campos', visible('paGenAviso') && $('paGenAviso').textContent.includes(`Tomado de ${progDemo.Campana || progDemo.Title}`) && !visible('paGenCampos'), $('paGenAviso').textContent);
+            clic('btnPaGenCambiar');
+            R.ok('C-66/P3: «Cambiar» del generador abre sus campos con el foco en la razón social', visible('paGenCampos') && !visible('paGenAviso') && document.activeElement === $('paGenerador'));
+            // C-64 (v0.58.0): una tecla repinta solo el paso visible; la lista de clientes del paso 1 (oculto) no se reconstruye.
+            const nodoCli = $('paClientes').firstElementChild;
+            poner('paPozoTitulo', 'pozo 10');
+            R.ok('C-64: escribir en el paso 2 no reconstruye la lista del paso 1, que está oculto', !!nodoCli && $('paClientes').firstElementChild === nodoCli);
+            // C-66: la miga «Pre-altas» es una salida como Cancelar: con captura pregunta antes de soltarla.
+            clic('btnPaMiga'); await esperar(() => $('dlg').open, 'la miga pregunta antes de soltar la captura'); clic('dlgOk');
+            await esperar(() => !visible('paAsis'), 'base soltada por la miga');
+            R.ok('C-66: la miga con captura pregunta y, descartado, vuelve a la lista', !visible('paAsis') && visible('paInicio'));
+            clic('btnNuevaPrealta'); await esperar(() => visible('paAsis'), 'asistente vacío');
+            clic('btnPaMiga'); await dormir(30);
+            R.ok('C-66: la miga sin captura sale sin preguntar', !visible('paAsis') && !$('dlg').open);
         }
         document.querySelector('#paTabs button[data-pa="firmada"]').click();
         R.ok('tanda 1: la pestaña Firmadas muestra su panel', visible('ppFirmadas') && !visible('ppBorradores'));
@@ -1418,7 +1434,9 @@ try {
         R.ok('U-54: «+ Nueva» prellena el año en curso', $('paMes').value === String(new Date().getFullYear()), $('paMes').value);
         // Tanda 2 (P5): el carrier se coteja antes de elegirlo: con una corriente que su oficio no ampara sale apagado y con el motivo.
         R.ok('tanda 2 (P3): el cliente ya capturado sale en la lista con su conteo', [...$('paClientes').querySelectorAll('.o')].some(o => o.textContent.includes('CLIENTE DEMO') && o.textContent.includes('1 programa')));
-        poner('paCorriente', 'fluidos-base-agua');
+        // C-64 (v0.58.0): el paso 3 se pinta al entrar, no con el 1 a la vista: se llega por el camino del asistente.
+        [...$('paClientes').querySelectorAll('.o')].find(o => o.textContent.includes('CLIENTE DEMO')).click();
+        poner('paPozoTitulo', 'pozo p5'); poner('paCorriente', 'fluidos-base-agua'); clic('btnPaSiguiente');
         {
             const oc = $('paCarriers').querySelector(`.o[data-v="${carrierId}"]`);
             R.ok('tanda 2 (P5): con una corriente que el oficio no ampara, el carrier sale apagado y dice por qué', !!oc && oc.disabled && oc.textContent.includes('no ampara'), oc && oc.textContent);

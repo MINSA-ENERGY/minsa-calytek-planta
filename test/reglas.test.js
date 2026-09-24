@@ -1,7 +1,7 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, huellaPrealta, firmaAmparaPrealta } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -312,6 +312,31 @@ assert.equal(clienteDe({ Cliente: 'gsm', Title: 'LATINA-IXACHI 1-2026' }), 'GSM'
 assert.equal(clienteDe({ Cliente: '', Title: 'LATINA-IXACHI 1052-2026' }), 'LATINA', 'sin columna: el inicio del titulo');
 assert.equal(clienteDe({ Title: 'CLIENTE DEMO-POZO 1-2026' }), 'CLIENTE DEMO');
 assert.equal(clienteDe(null), '');
+
+// C-66 (v0.58.0): basesRecientes y clientesPrealta, que vinieron de app.js para poder probarlas sin la E2E.
+{
+    const pa = [
+        { id: 1, Estado: 'cerrada', Cliente: 'GSM', Corriente: 'base-aceite', Title: 'GSM-A-2026' },
+        { id: 2, Estado: 'firmada', Cliente: '', Corriente: 'base-aceite', Title: 'gsm-B-2026' },   // sin columna: cliente del titulo, en mayusculas
+        { id: 3, Estado: 'borrador', Cliente: 'LATINA', Corriente: 'base-agua', Title: 'LATINA-C-2026' },
+        { id: 4, Estado: 'firmada', Cliente: 'GSM', Corriente: 'base-agua', Title: 'GSM-D-2026' },
+        { id: 5, Estado: 'cerrada', Cliente: 'PEMEX', Corriente: 'base-aceite', Title: 'PEMEX-E-2026' },
+        { id: 6, Estado: 'firmada', Cliente: 'ZETA', Corriente: 'base-aceite', Title: 'ZETA-F-2026' },
+        { id: 7, Estado: 'firmada', Cliente: 'LATINA', Corriente: '', Title: 'LATINA-G-2026' }
+    ];
+    const ids = xs => xs.map(p => p.id);
+    assert.deepEqual(ids(basesRecientes(pa)), [7, 6, 5], 'las tres mas nuevas, firmadas o cerradas');
+    assert.deepEqual(ids(basesRecientes(pa, 10)), [7, 6, 5, 4, 2], 'borrador fuera; GSM|base-aceite una sola vez (la mas nueva, id 2)');
+    assert.deepEqual(ids(basesRecientes([...pa].reverse(), 10)), [7, 6, 5, 4, 2], 'no depende del orden de entrada');
+    assert.deepEqual(basesRecientes([]), []);
+    assert.deepEqual(basesRecientes(undefined), [], 'sin lista cargada no truena');
+    assert.equal(pa[0].id, 1, 'no reordena la lista que recibe');
+
+    const cl = clientesPrealta([...pa, { id: 8, Estado: 'borrador', Cliente: '', Title: '' }]);
+    assert.deepEqual(cl.map(c => [c.clave, c.n, c.ultimo.id]), [['GSM', 3, 4], ['LATINA', 2, 7], ['PEMEX', 1, 5], ['ZETA', 1, 6]],
+        'por numero de programas, empate alfabetico; ultimo = el id mas alto; sin cliente no cuenta; los borradores si');
+    assert.deepEqual(clientesPrealta(undefined), []);
+}
 
 // S-27 (v0.56.0): la huella de la firma de pre-alta. SHA-256 propio contra node:crypto; el orden de los ids no la cambia;
 // cambiar una unidad, el carrier o la corriente la rompe; una firma sin huella (antes de v0.56.0) sigue valiendo.
