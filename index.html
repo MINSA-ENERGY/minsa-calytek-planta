@@ -400,10 +400,10 @@
               </div>
               <div class="asis-pantalla" id="paPaso4" data-p="4" hidden>
                 <h2 class="pregunta" tabindex="-1">¿Cuándo llega y cuántas góndolas?</h2>
-                <p class="sub">Opcional: si todavía no lo sabes, sigue; se puede completar después.</p>
+                <p class="sub">Si todavía no lo sabes, sáltalo; se puede completar después.</p>
                 <div class="dos">
                   <div class="campo"><label for="paFecha">Primer envío (estimado)</label><input type="text" id="paFecha" class="fecha mono" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off"></div>
-                  <div class="campo"><label for="paGondolas">Góndolas esperadas</label><input type="number" id="paGondolas" min="0"></div>
+                  <div class="campo"><label for="paGondolas">Góndolas esperadas</label><div class="pa-cont"><button type="button" id="btnPaGonMenos" aria-label="Una góndola menos">−</button><input type="number" id="paGondolas" min="0" inputmode="numeric" placeholder="0"><button type="button" id="btnPaGonMas" aria-label="Una góndola más">+</button></div></div>
                 </div>
                 <div class="dos">
                   <div class="campo"><label for="paCorreoFecha">Fecha del correo del cliente</label><input type="text" id="paCorreoFecha" class="fecha mono" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off"></div>
@@ -419,6 +419,7 @@
               <div class="asis-pie">
                 <div class="asis-botones">
                   <button id="btnPaAtras" class="secundario" type="button" hidden>‹ Atrás</button>
+                  <button id="btnPaSaltar" class="enlace pa-saltar" type="button" hidden>Saltar</button>
                   <button id="btnPaSiguiente" class="principal" type="button">Siguiente</button>
                   <button id="btnGuardarPrealta" class="principal" type="button" hidden>Guardar para firma</button>
                 </div>
@@ -427,6 +428,16 @@
           </div>
           <aside class="tarjeta pa-resumen" id="paResumen" aria-label="Así va la pre-alta"></aside>
         </div>
+      </div>
+      <!-- P10 (tanda 3, v0.55.0): al guardar una pre-alta NUEVA, qué sigue. Editar un borrador no pasa por aquí: abre su detalle. -->
+      <div class="tarjeta pa-listo oculto" id="paListo">
+        <span class="ok-c" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <div><h2 id="paListoTitulo" tabindex="-1">Quedó por firmar</h2><span class="mono pa-listo-folio" id="paListoFolio"></span></div>
+        <ul class="pa-siguen">
+          <li><span class="ic bo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14.5 4.5l5 5L10 19H5v-5z"/><path d="M12.5 6.5l5 5"/><path d="M4 21h16"/></svg></span><b>La Responsable Ambiental la revisa y la firma</b><small>Le aparece en su lista de «Por firmar», con el cotejo de vigencias del carrier.</small></li>
+          <li><span class="ic fi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><b>Ya firmada, la puerta la recibe</b><small id="paListoPuerta"></small></li>
+        </ul>
+        <div class="pa-listo-botones"><button id="btnPaOtra" class="principal" type="button">+ Capturar otra</button><button id="btnPaIrLista" class="secundario" type="button">Ir a Pre-altas</button></div>
       </div>
     </section>
 

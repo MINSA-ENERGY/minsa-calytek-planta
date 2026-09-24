@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe } from './reglas.js';
 
-const VERSION = '0.54.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.55.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -622,6 +622,7 @@ function irDesdePestana(p) {
 function salirDelAsistente() { if (!$('baAsis').classList.contains('oculto') || estado.pesando) descartarPesaje(); }
 function irA(p) {
     if (p !== 'bascula') salirDelAsistente();
+    ocultarListoPrealta();   // P10: la confirmación no guarda nada; salir o volver por el rail la suelta
     estado.pestana = p;
     for (const b of botonesRail()) { if (b.dataset.p === (RAIL_DE[p] || p)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }   // U-57 (v0.29.0): <nav> con aria-current, como .mn-rail de la piel; el role=tablist prometía flechas y tabpanel que no había
     for (const s of SECCIONES) $('p-' + s).classList.toggle('oculto', s !== p);
@@ -1883,7 +1884,7 @@ const PASOS_PREALTA = ['Cliente', 'Pozo y corriente', 'Transporte', 'Envío', 'R
 const asistentePrealtaAbierto = () => !$('paAsis').classList.contains('oculto');
 function abrirAsistentePrealta() {
     if (estado.pestana !== 'prealtas') irA('prealtas');   // Editar desde el detalle abierto en Hoy
-    limpiarAvisos();
+    ocultarListoPrealta(); limpiarAvisos();
     $('p-prealtas').classList.add('asistiendo');
     $('paAsis').classList.remove('oculto');
     pintarAsistentePrealta();
@@ -2042,6 +2043,7 @@ function pintarAsistentePrealta() {
     // P8: el botón dice qué falta; Atrás nombra a dónde vuelve.
     const falta = faltaPrealta(n), sig = $('btnPaSiguiente');
     $('btnPaAtras').hidden = n === 1; $('btnPaAtras').textContent = n > 1 ? `‹ ${PASOS_PREALTA[n - 2]}` : '';
+    $('btnPaSaltar').hidden = n !== 4 || a.revisar;   // P7: el envío es opcional; desde «Cambiar» el botón ya regresa a Revisar
     sig.hidden = n === 5; $('btnGuardarPrealta').hidden = n !== 5;
     sig.classList.toggle('falta', !!falta);
     sig.textContent = n === 5 ? '' : falta ? falta.t : a.revisar ? 'Volver a revisar ›' : n === 4 ? 'Revisar ›' : `Siguiente: ${PASOS_PREALTA[n]} ›`;
@@ -2079,6 +2081,14 @@ for (const id of PARTES_TITULO) $(id).addEventListener('input', armarTituloPreal
 $('paAsis').addEventListener('input', pintarAsistentePrealta);
 $('paAsis').addEventListener('change', pintarAsistentePrealta);
 $('btnPaSiguiente').addEventListener('click', siguientePrealta);
+$('btnPaSaltar').addEventListener('click', siguientePrealta);   // el paso 4 no tiene obligatorios: saltar es seguir sin llenarlo
+/** P7: − / + de góndolas esperadas; nunca baja de 0. Asignar .value no dispara «input», así que se repinta aquí. */
+function sumarGondolasPrealta(d) {
+    $('paGondolas').value = String(Math.max(0, (parseInt($('paGondolas').value, 10) || 0) + d));
+    pintarAsistentePrealta();
+}
+$('btnPaGonMenos').addEventListener('click', () => sumarGondolasPrealta(-1));
+$('btnPaGonMas').addEventListener('click', () => sumarGondolasPrealta(1));
 $('btnPaAtras').addEventListener('click', () => irPasoPrealta(estado.paAsis.paso - 1));
 for (const b of $('paPasos').querySelectorAll('button')) b.addEventListener('click', () => irPasoPrealta(Number(b.dataset.p)));
 $('btnPaMiga').addEventListener('click', salirAsistentePrealta);
@@ -2097,7 +2107,7 @@ async function guardarPrealta() {
         await refrescarCliente();
         if (edit) {
             const cambios = paraPatch({
-                Title: $('paTitulo').value.trim(), Generador: $('paGenerador').value.trim(), GeneradorRegistro: $('paGeneradorRegistro').value.trim(), GeneradorDireccion: $('paGeneradorDireccion').value.trim(),
+                Title: $('paTitulo').value.trim(), Cliente: parteTitulo('paCliente'), Generador: $('paGenerador').value.trim(), GeneradorRegistro: $('paGeneradorRegistro').value.trim(), GeneradorDireccion: $('paGeneradorDireccion').value.trim(),
                 Pozo: $('paPozo').value.trim(), Corriente: $('paCorriente').value, CarrierId: Number($('paCarrier').value),
                 UnidadesIds: marcados('paUnidades'), ChoferesIds: marcados('paChoferes'),
                 FechaEstimada: aIsoDia($('paFecha').value), GondolasEsperadas: $('paGondolas').value ? Number($('paGondolas').value) : null,
@@ -2116,7 +2126,7 @@ async function guardarPrealta() {
         const todas = await estado.cliente.renglones(estado.siteId, L.prealtas);
         estado.prealtas = todas; reanclar();
         const campos = limpiar({
-            Title: $('paTitulo').value.trim(), Estado: 'borrador', Generador: $('paGenerador').value.trim(),
+            Title: $('paTitulo').value.trim(), Cliente: parteTitulo('paCliente'), Estado: 'borrador', Generador: $('paGenerador').value.trim(),   // Cliente: esquema v8, tanda 3
             GeneradorRegistro: $('paGeneradorRegistro').value.trim(), GeneradorDireccion: $('paGeneradorDireccion').value.trim(), Pozo: $('paPozo').value.trim(),
             Corriente: $('paCorriente').value, CarrierId: Number($('paCarrier').value),
             UnidadesIds: marcados('paUnidades'), ChoferesIds: marcados('paChoferes'),
@@ -2129,10 +2139,22 @@ async function guardarPrealta() {
         await asegurarFolioUnico(nuevo, 'L');
         anclar('prealtas', nuevo);   // C-23
         cerrarAsistentePrealta();
-        avisar('Pre-alta guardada como borrador. Falta la firma del validador.', 'bien');
         pintarPrealtas();
+        mostrarListoPrealta(nuevo);
     } catch (e) { avisar('No se pudo guardar: ' + e.message, 'error'); } });
 }
+/** P10: tras guardar una pre-alta nueva, la pestaña muestra qué sigue en vez de un aviso. «Capturar otra» abre el asistente vacío. */
+function mostrarListoPrealta(p) {
+    const carrier = porId(estado.carriers, p.CarrierId);
+    $('paListoFolio').textContent = [p.Campana, p.Title].filter(Boolean).join(' · ');
+    $('paListoPuerta').textContent = `Las góndolas de ${carrier ? carrier.Title : 'su carrier'} se cotejan solas contra este programa.`;
+    $('p-prealtas').classList.add('en-listo'); $('paListo').classList.remove('oculto');
+    window.scrollTo({ top: 0 });
+    $('paListoTitulo').focus({ preventScroll: true });
+}
+function ocultarListoPrealta() { $('paListo').classList.add('oculto'); $('p-prealtas').classList.remove('en-listo'); }
+$('btnPaOtra').addEventListener('click', nuevaPrealta);
+$('btnPaIrLista').addEventListener('click', () => { ocultarListoPrealta(); pintarPrealtas(); });
 
 // Tras firmar / cerrar / eliminar: se cierra el pop-up y se repinta la pestana que esta abierta (Hoy o Pre-altas) sin
 // borrar el aviso. Antes saltaba a Pre-altas aunque se hubiera abierto desde Hoy (Carlos, 2026-09-08).

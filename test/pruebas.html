@@ -73,6 +73,10 @@
     function error(status, mensaje) { return json(status, { error: { code: CODIGO[status] || 'falso', message: mensaje } }); }
     function validarChoices(l, campos) {
         const esq = DB.esquema.listas.find(x => x.nombre === l.nombre);
+        // Tanda 3 de Pre-altas (v0.55.0): SharePoint contesta 400 a una columna que la lista no tiene. Antes el falso la
+        // guardaba callado, así que escribir una columna nueva (Cliente, v8) pasaba la E2E aunque no estuviera en el esquema.
+        const conocidas = new Set(esq.columnas.map(c => c.nombre));
+        for (const k in campos) if (!conocidas.has(k)) return `Field '${k}' is not recognized (la columna no existe en ${l.nombre})`;
         for (const c of esq.columnas) {
             if (c.tipo === 'choice' && campos[c.nombre] !== undefined && campos[c.nombre] !== null && !c.opciones.includes(campos[c.nombre]))
                 return `El valor "${campos[c.nombre]}" no es una opción de la columna ${c.nombre} (choice sin allowTextEntry)`;
@@ -591,16 +595,35 @@ try {
         const ajena = { id: DB.siguienteId++, fields: { Title: 'OTRO-POZO-2026', Estado: 'borrador', Corriente: 'base-agua', CarrierId: carrierId, Campana: `L-${aaL}-001` } };
         filas('prealtas').push(ajena);
         // Tanda 2: con lo obligatorio, cuatro «Siguiente» llegan a Revisar (P9); «Cambiar» regresa y Siguiente vuelve a Revisar.
-        for (let i = 0; i < 4; i++) clic('btnPaSiguiente');
-        R.ok('tanda 2: cuatro «Siguiente» llegan a Revisar con el programa, el carrier y Guardar a la vista', !$('paPaso5').hidden && visible('btnGuardarPrealta') && !visible('btnPaSiguiente') && $('paRevisar').textContent.includes('CLIENTE DEMO-POZO 1-2026') && $('paRevisar').textContent.includes('TRANSPORTES DEMO'), $('paPasoK').textContent);
+        for (let i = 0; i < 3; i++) clic('btnPaSiguiente');
+        // Tanda 3 (P7): el paso 4 es opcional: «Saltar» a la vista y el contador − / + de góndolas (nunca baja de 0).
+        R.ok('tanda 3 (P7): el paso 4 ofrece «Saltar»', !$('paPaso4').hidden && visible('btnPaSaltar'), $('paPasoK').textContent);
+        clic('btnPaGonMas'); clic('btnPaGonMas'); clic('btnPaGonMenos');
+        R.ok('tanda 3 (P7): + + − sobre 10 deja 11 y el resumen lo ve', $('paGondolas').value === '11' && $('paResumen').textContent.includes('11'), $('paGondolas').value);
+        poner('paGondolas', '0'); clic('btnPaGonMenos');
+        R.ok('tanda 3 (P7): − sobre 0 se queda en 0', $('paGondolas').value === '0', $('paGondolas').value);
+        poner('paGondolas', '10');
+        clic('btnPaSaltar');
+        R.ok('tanda 3 (P7): «Saltar» lleva a Revisar y ahí ya no se ve', !$('paPaso5').hidden && !visible('btnPaSaltar'));
+        $('paRevisar').querySelectorAll('.enlace')[3].click();
+        R.ok('tanda 3 (P7): desde «Cambiar» el paso 4 no ofrece «Saltar» (el botón ya regresa a Revisar)', !$('paPaso4').hidden && !visible('btnPaSaltar') && $('btnPaSiguiente').textContent === 'Volver a revisar ›', $('btnPaSiguiente').textContent);
+        clic('btnPaSiguiente');
+        R.ok('tanda 2: el recorrido llega a Revisar con el programa, el carrier y Guardar a la vista', !$('paPaso5').hidden && visible('btnGuardarPrealta') && !visible('btnPaSiguiente') && $('paRevisar').textContent.includes('CLIENTE DEMO-POZO 1-2026') && $('paRevisar').textContent.includes('TRANSPORTES DEMO'), $('paPasoK').textContent);
         R.ok('tanda 2: los pasos recorridos quedan hechos con su resumen', $('paPasos').querySelector('[data-p="2"]').classList.contains('hecho') && $('paPasos').querySelector('[data-p="2"] small').textContent.includes('POZO 1'), $('paPasos').querySelector('[data-p="2"] small').textContent);
         $('paRevisar').querySelectorAll('.enlace')[1].click();
         R.ok('tanda 2 (P9): «Cambiar» abre ese paso y el botón regresa a Revisar', !$('paPaso2').hidden && $('btnPaSiguiente').textContent === 'Volver a revisar ›', $('btnPaSiguiente').textContent);
         clic('btnPaSiguiente');
         R.ok('tanda 2 (P9): y regresa', !$('paPaso5').hidden);
         clic('btnGuardarPrealta');
-        await esperar(() => avisoCon('Pre-alta guardada como borrador'), 'pre-alta guardada');
+        // Tanda 3 (P10): guardar una nueva muestra «Quedó por firmar» con el folio y qué sigue, en vez de un aviso.
+        await esperar(() => visible('paListo'), 'pantalla «Quedó por firmar»');
         const nuestra = filas('prealtas').find(p => p.fields.Title === 'CLIENTE DEMO-POZO 1-2026');
+        R.ok('tanda 3 (P10): «Quedó por firmar» con el folio, el nombre y el carrier; la lista y el asistente escondidos', !visible('paAsis') && getComputedStyle($('paInicio')).display === 'none' && $('p-prealtas').classList.contains('en-listo') && !!nuestra && $('paListoFolio').textContent === `${nuestra.fields.Campana} · CLIENTE DEMO-POZO 1-2026` && $('paListoPuerta').textContent.includes('TRANSPORTES DEMO') && document.activeElement === $('paListoTitulo'), JSON.stringify([visible('paAsis'), getComputedStyle($('paInicio')).display, $('paListoFolio').textContent, $('paListoPuerta').textContent, document.activeElement && document.activeElement.id]));
+        R.ok('tanda 3: la pre-alta nueva escribe la columna Cliente (esquema v8)', !!nuestra && nuestra.fields.Cliente === 'CLIENTE DEMO', nuestra && nuestra.fields.Cliente);
+        clic('btnPaOtra');
+        R.ok('tanda 3 (P10): «Capturar otra» abre el asistente vacío en el paso 1', visible('paAsis') && !visible('paListo') && !$('paPaso1').hidden && $('paCliente').value === '' && $('paTitulo').value === '');
+        clic('btnCancelarPrealta'); await dormir(30);
+        R.ok('tanda 3: y «Cancelar» sin capturar nada regresa a la lista', !$('dlg').open && !visible('paAsis') && getComputedStyle($('paInicio')).display !== 'none');
         R.ok('C-04: la campaña se escoge con la lista releída, no con la memoria (la ajena L-AA-001 no se repite)', nuestra && nuestra.fields.Campana === `L-${aaL}-002`, nuestra && nuestra.fields.Campana);
         filas('prealtas').splice(filas('prealtas').indexOf(ajena), 1);
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras la campaña ajena');
@@ -646,7 +669,7 @@ try {
         poner('paPozo', 'Pozo-2'); poner('paGondolas', '12'); clic('btnGuardarPrealta');
         await esperar(() => avisoCon('Borrador actualizado'), 'borrador actualizado');
         const pe = filas('prealtas')[0].fields;
-        R.ok('editar el borrador cambia pozo y góndolas y conserva campaña, estado y unidades', pe.Pozo === 'Pozo-2' && pe.GondolasEsperadas === 12 && pe.Campana === campanaAntes && pe.Estado === 'borrador' && pe.UnidadesIds === String(unidadId) && filas('prealtas').length === 1, JSON.stringify([pe.Pozo, pe.GondolasEsperadas, pe.Campana, pe.Estado]));
+        R.ok('editar el borrador cambia pozo y góndolas, escribe Cliente y conserva campaña, estado y unidades', pe.Pozo === 'Pozo-2' && pe.GondolasEsperadas === 12 && pe.Cliente === 'CLIENTE DEMO' && pe.Campana === campanaAntes && pe.Estado === 'borrador' && pe.UnidadesIds === String(unidadId) && filas('prealtas').length === 1, JSON.stringify([pe.Pozo, pe.GondolasEsperadas, pe.Campana, pe.Estado]));
         clic('btnVolverPrealtas');
     } else {
         R.ok('rol sin captura: no hay botón Nueva pre-alta', !visible('btnNuevaPrealta'));
@@ -1338,7 +1361,9 @@ try {
         await dormir(30);
         R.ok('U-54: un año que no es de cuatro cifras no se guarda y lo dice la forma', filas('prealtas').length === 1 && $('paAvisos').textContent.includes('cuatro cifras'), $('paAvisos').textContent);
         poner('paMes', '2026'); clic('btnGuardarPrealta');
-        await esperar(() => filas('prealtas').length === 2, 'segunda pre-alta');
+        await esperar(() => filas('prealtas').length === 2 && visible('paListo'), 'segunda pre-alta');
+        clic('btnPaIrLista');
+        R.ok('tanda 3 (P10): «Ir a Pre-altas» suelta la confirmación y muestra la lista', !visible('paListo') && getComputedStyle($('paInicio')).display !== 'none');
         const rBorr = [...document.querySelectorAll('#paBorradores .renglon')].find(r => r.textContent.includes('BORRADOR-EQUIVOCADO-2026'));
         rBorr.querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle borrador');
         const btnElimPa = $('btnEliminarPrealta');

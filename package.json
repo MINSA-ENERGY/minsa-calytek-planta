@@ -1,6 +1,6 @@
 {
   "name": "calytek-planta",
-  "version": "0.54.0",
+  "version": "0.55.0",
   "private": true,
   "type": "module",
   "description": "PWA de control de recepcion de la planta CALYTEK (MINSA ENERGY): pre-alta, compuerta documental y bascula",
