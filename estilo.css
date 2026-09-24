@@ -40,6 +40,7 @@
     --info: #0f8fd6; --info-fg: #0a76b4; --info-soft: #e8f6ff;
     --idle: var(--slate-400); --idle-fg: var(--slate-600); --idle-soft: var(--slate-100);
     --hero-ok: #2f9e44; --hero-warn: #c8891a; --hero-bad: #b3261e; --hero-ink: #ffffff;
+    --rejilla-1: rgba(8, 51, 163, .08); --rejilla-2: rgba(8, 51, 163, .2);   /* R6 (v0.65.0) */
     --rail: var(--bg); --rail-on: #ffffff; --rail-hover: var(--slate-150); --rail-chip: var(--slate-200);
     --sombra-pop: 0 10px 34px rgba(11, 18, 32, .18), 0 2px 6px rgba(11, 18, 32, .10);
     /* Rediseño 2026-09-23, tanda 1 (docs/rediseno-2026-09-23.md): esquinas más finas, pedido de Carlos con su captura
@@ -82,6 +83,7 @@
         --bad: #f4948b; --bad-fg: #f4948b; --bad-soft: rgba(200, 50, 43, .20); --bad-ink: #0f0f0f;
         --info: #8fd6ff; --info-fg: #8fd6ff; --info-soft: rgba(15, 143, 214, .16);
         --idle: #454545; --idle-fg: var(--slate-300); --idle-soft: #2b2b2b;
+        --rejilla-1: rgba(127, 155, 255, .10); --rejilla-2: rgba(127, 155, 255, .24);
         --rail: var(--bg); --rail-on: #242424; --rail-hover: rgba(255, 255, 255, .05); --rail-chip: rgba(255, 255, 255, .09);
         --sombra-pop: 0 10px 34px rgba(0, 0, 0, .55), 0 2px 6px rgba(0, 0, 0, .40);
         --muestra-claro: none; --muestra-oscuro: block;
@@ -98,6 +100,7 @@
     --bad: #f4948b; --bad-fg: #f4948b; --bad-soft: rgba(200, 50, 43, .20); --bad-ink: #0f0f0f;
     --info: #8fd6ff; --info-fg: #8fd6ff; --info-soft: rgba(15, 143, 214, .16);
     --idle: #454545; --idle-fg: var(--slate-300); --idle-soft: #2b2b2b;
+    --rejilla-1: rgba(127, 155, 255, .10); --rejilla-2: rgba(127, 155, 255, .24);
     --rail: var(--bg); --rail-on: #242424; --rail-hover: rgba(255, 255, 255, .05); --rail-chip: rgba(255, 255, 255, .09);
     --sombra-pop: 0 10px 34px rgba(0, 0, 0, .55), 0 2px 6px rgba(0, 0, 0, .40);
     --muestra-claro: none; --muestra-oscuro: block;
@@ -443,7 +446,7 @@ button:not(:disabled):active { transform: scale(.98); }
 /* Pantalla principal, tanda 1 (v0.60.0; lienzo EhJVtU3d4X6jUNuhJb6KQR, K en escritorio y L en celular, OK de Carlos
    2026-09-24): la banda blanca de cabecera sangra hasta las orillas de .contenido; los conteos son texto mono con el color
    del estado (cero píldoras) separados por un filete; las fases son una línea bajo la tabla. */
-.pa-banda { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: var(--sp-5); margin: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-5)) var(--sp-5); padding: var(--sp-6) var(--sp-5) var(--sp-5); background: var(--surf); border-bottom: 1px solid var(--line); }
+.pa-banda { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: var(--sp-5); margin: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-5)) var(--sp-5); padding: var(--sp-6) var(--sp-5) var(--sp-5); background: none; border-bottom: 1px solid var(--line); }   /* R6 (v0.65.0): transparente, la rejilla pasa detrás */
 .pa-banda-t { min-width: 0; }
 .pa-kicker { display: block; margin-bottom: 4px; font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
 .pa-banda h1 { margin: 0; font-family: var(--titulo); font-weight: 600; font-size: 1.75rem; line-height: 1.1; text-transform: none; letter-spacing: 0; color: var(--ink); }
@@ -1219,3 +1222,36 @@ select, .archivos-filtros select, .con-boton select {
 .ct-qr .qr { width: 84px; height: 84px; border: 2px solid #131c2c; padding: 4px; box-sizing: border-box; background: #fff; }
 .ct-qr-leyenda { font-size: 10px; color: #6b7b96; text-align: center; line-height: 1.35; white-space: pre-line; }
 .ct-pie { width: 100%; font-size: 10px; line-height: 1.4; color: #6b7b96; text-align: center; border-top: 1px solid #d8dfe9; padding-top: 6px; position: relative; }
+
+/* R6 (v0.65.0; artifact EV1NuF9LfxKHJAhSpu6neP, Carlos 2026-09-24): en escritorio, rejilla de plano de 24 px (mayor cada 120)
+   detrás del rail y del contenido, que se apaga desde la esquina del logo; el cuadro de rótulo abajo a la derecha, tapado
+   por las tarjetas; y la pestaña activa del rail como degradado del acento que se desvanece a la derecha. */
+.rotulo { display: none; }
+@media (min-width: 721px) {
+    .app { isolation: isolate; }
+    .app::before {
+        content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+        background-image: radial-gradient(circle farthest-corner at 0 0, transparent 21%, var(--bg) 85%),
+            linear-gradient(var(--rejilla-2) 1px, transparent 1px), linear-gradient(90deg, var(--rejilla-2) 1px, transparent 1px),
+            linear-gradient(var(--rejilla-1) 1px, transparent 1px), linear-gradient(90deg, var(--rejilla-1) 1px, transparent 1px);
+        background-size: 100% 100%, 120px 120px, 120px 120px, 24px 24px, 24px 24px;   /* la primera capa apaga la rejilla hacia la derecha */
+        mask-image: radial-gradient(circle farthest-corner at 0 0, #000 21%, transparent 85%);
+    }
+    .rail { background: transparent; }
+    .rail nav button[aria-current="page"], .rail .extra button[aria-current="page"] {
+        background: linear-gradient(90deg, color-mix(in srgb, var(--acc) 30%, transparent) 0%, color-mix(in srgb, var(--acc) 18%, transparent) 45%, color-mix(in srgb, var(--acc) 7%, transparent) 80%, transparent 100%);
+        box-shadow: none;
+    }
+    .rotulo {
+        display: grid; grid-template-columns: 180px 120px; position: fixed; right: 24px; bottom: 20px; z-index: -1; pointer-events: none;
+        background: color-mix(in srgb, var(--bg) 85%, transparent); border: 1px solid var(--rejilla-2);
+        font-family: var(--mono); font-weight: 500; font-size: 11px; line-height: 1.25; color: var(--mute);
+    }
+    .rotulo > b { grid-column: 1 / -1; padding: 8px 10px; font-weight: 600; border-bottom: 1px solid var(--rejilla-2); white-space: nowrap; }
+    .rotulo > span { padding: 5px 10px 6px; }
+    .rotulo > span:nth-of-type(odd) { border-right: 1px solid var(--rejilla-2); }
+    .rotulo > span:nth-of-type(-n+2) { border-bottom: 1px solid var(--rejilla-2); }
+    .rotulo small { display: block; font-size: 9px; }
+    .rotulo i { font-style: normal; }
+    .app:has(#pantallaEntrar:not(.oculto)) .rotulo { display: none; }
+}

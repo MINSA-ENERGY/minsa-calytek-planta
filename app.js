@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.64.1';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.65.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -660,12 +660,21 @@ function irDesdePestana(p) {
  * todas las pestañas. Una sola salida, llamada desde irA(): el rail, la miga y registrarPuerta pasan por ahí.
  */
 function salirDelAsistente() { if (!$('baAsis').classList.contains('oculto') || estado.pesando) descartarPesaje(); }
+/* R6 (v0.65.0): el cuadro de rótulo dice la sección, su número de hoja entre las del rail y la fecha de hoy. */
+function pintarRotulo(p) {
+    const bs = [...botonesRail()], i = bs.findIndex(b => b.dataset.p === p);
+    if (i < 0) return;
+    $('rotuloT').textContent = 'MINSA ENERGY - PLANTA CALYTEK - ' + bs[i].querySelector('span').textContent.toUpperCase();
+    $('rotuloH').textContent = (i + 1) + ' / ' + bs.length;
+    $('rotuloF').textContent = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-').replace('.', '');
+}
 function irA(p) {
     if (p !== 'bascula') salirDelAsistente();
     ocultarListoPrealta();   // P10: la confirmación no guarda nada; salir o volver por el rail la suelta
     estado.pestana = p;
     for (const b of botonesRail()) { if (b.dataset.p === (RAIL_DE[p] || p)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }   // U-57 (v0.29.0): <nav> con aria-current, como .mn-rail de la piel; el role=tablist prometía flechas y tabpanel que no había
     for (const s of SECCIONES) $('p-' + s).classList.toggle('oculto', s !== p);
+    pintarRotulo(RAIL_DE[p] || p);
     limpiarAvisos();
     cerrarVeredicto();
     repintar();
