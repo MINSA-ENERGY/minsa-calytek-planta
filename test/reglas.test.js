@@ -1,7 +1,7 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, claveMes, mesesPrealtas } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -350,3 +350,24 @@ assert.ok(!firmaAmparaPrealta(hf, { ...pf, UnidadesIds: '3;12;99' }), 'una unida
 assert.ok(!firmaAmparaPrealta(hf, { ...pf, CarrierId: 6 }), 'otro carrier tras firmar');
 assert.ok(!firmaAmparaPrealta(hf, { ...pf, Corriente: 'base-agua' }), 'otra corriente tras firmar');
 assert.ok(firmaAmparaPrealta('', { ...pf, CarrierId: 6 }), 'firma sin huella: transitorio');
+
+// Pantalla principal de Pre-altas, tanda 2 (v0.61.0): los programas de una pestaña en bloques por mes.
+{
+    assert.equal(fechaDePestana({ FechaEstimada: '2026-09-30', FirmadaEl: '2026-09-01T18:00:00Z' }, 'borrador'), '2026-09-30');
+    assert.equal(fechaDePestana({ FirmadaEl: '2026-09-01T18:00:00Z', CerradaEl: null }, 'cerrada'), '2026-09-01T18:00:00Z', 'cerrada sin sello cae en su firma');
+    assert.equal(claveMes('2026-10-01'), '2026-10', 'fecha de calendario tal cual');
+    assert.equal(claveMes('2026-10-01T00:00:00Z'), '2026-10', 'medianoche UTC de una fecha de calendario no se corre al 30-sep');
+    assert.equal(claveMes('2026-10-01T03:00:00Z'), '2026-09', 'la de reloj va en hora de Mexico: las 21:00 del 30-sep');
+    assert.equal(claveMes(null), '');
+    const ps = [
+        { id: 1, FirmadaEl: '2026-08-20T17:00:00Z' },
+        { id: 2, FirmadaEl: '2026-09-02T17:00:00Z' },
+        { id: 3, FirmadaEl: null },
+        { id: 4, FirmadaEl: '2026-09-15T17:00:00Z' },
+        { id: 5, FirmadaEl: '2026-09-15T17:00:00Z' }
+    ];
+    const b = mesesPrealtas(ps, 'firmada');
+    assert.deepEqual(b.map(x => x.mes), ['Septiembre 2026', 'Agosto 2026', 'Sin fecha']);
+    assert.deepEqual(b.map(x => x.ps.map(p => p.id)), [[5, 4, 2], [1], [3]], 'la fecha mas nueva primero; empate por id');
+    assert.deepEqual(mesesPrealtas([], 'firmada'), []);
+}

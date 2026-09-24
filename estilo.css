@@ -473,13 +473,28 @@ button:not(:disabled):active { transform: scale(.98); }
 .pa-fases b { color: var(--ink); font-weight: 600; }
 .pa-tabla { background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
 .pa-tabla > .vacio { padding: 12px 16px; }
-.pa-tabla .renglon.prog { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 170px auto; gap: 4px 16px; align-items: center; padding: 12px 16px; }
-.pa-tabla .renglon.prog:first-child { padding-top: 12px; }
+/* Tanda 2 (v0.61.0; la K del lienzo EhJVtU3d4X6jUNuhJb6KQR): columnas reales con encabezado, barras de mes con su subtotal,
+   renglones en CEBRA (blanco / --banda, los alterna app.js con .non) y renglón Total. La cebra sustituye aquí —solo en esta
+   tabla— el hairline entre renglones de la piel del 20-sep, a pedido de Carlos. Un solo juego de columnas para encabezado,
+   renglón y total: --pa-cols. */
+#p-prealtas { --pa-cols: minmax(0, 1.45fr) 92px minmax(0, 1fr) minmax(0, 1fr) 96px minmax(120px, 160px) 64px; }
+.pa-tabla .pa-cab, .pa-tabla .renglon.prog, .pa-tabla .pa-total { display: grid; grid-template-columns: var(--pa-cols); gap: 4px 16px; align-items: center; padding: 12px 16px; }
+.pa-tabla .pa-cab { padding-block: 9px; background: var(--surf2); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.pa-tabla .renglon.prog { border-top: 0; background: var(--surf); }
+.pa-tabla .renglon.prog.non { background: var(--banda); }
 .pa-tabla .renglon.prog:hover { background: var(--rail-hover); }
 .pa-tabla .renglon.prog .t { font-family: var(--mono); font-weight: 500; overflow-wrap: anywhere; }
-.pa-tabla .renglon.prog .c2 { font-size: .86rem; color: var(--ink-body); min-width: 0; }
-.pa-tabla .renglon.prog .c2 small { display: block; color: var(--mute); font-size: .8rem; }
+.pa-tabla .renglon.prog .cc { display: contents; }
+.pa-tabla .renglon.prog :is(.cor, .car) { font-size: .86rem; color: var(--ink-body); min-width: 0; overflow-wrap: anywhere; }
+.pa-tabla .renglon.prog :is(.fol, .fe) { font-family: var(--mono); font-size: .8rem; color: var(--mute); font-variant-numeric: tabular-nums; }
 .pa-tabla .renglon.prog .avance { margin: 0; }
+.pa-tabla .pa-mes { display: flex; align-items: center; gap: var(--sp-3); padding: 8px 16px; background: var(--acc-soft); border-block: 1px solid var(--line); }
+.pa-tabla .pa-mes b { font-family: var(--mono); font-weight: 500; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--acc); }
+.pa-tabla .pa-mes .n { font-size: .8rem; color: var(--mute); }
+.pa-tabla .pa-mes .g { margin-left: auto; font-family: var(--mono); font-size: .78rem; color: var(--ink-body); }
+.pa-tabla .pa-total { border-top: 1px solid var(--ink); background: var(--surf); }
+.pa-tabla .pa-total b { color: var(--ink); }
+.pa-tabla .pa-total .g { grid-column: 6; font-family: var(--mono); font-size: .8rem; font-weight: 500; color: var(--ink); }
 @media (max-width: 720px) {
     .pa-banda { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); margin: calc(-1 * var(--sp-3)) calc(-1 * var(--sp-3)) var(--sp-4); padding: var(--sp-5) var(--sp-3) var(--sp-4); }
     .pa-banda p { display: none; }
@@ -490,9 +505,13 @@ button:not(:disabled):active { transform: scale(.98); }
     .pa-acciones button { width: 100%; padding-inline: var(--sp-2); }
     .pa-fases { flex-direction: column; align-items: flex-start; }
     .pa-fases li + li::before { content: none; }
+    /* Tanda 2: bajo 720 px, mientras llega la L (tanda 3), el renglón es nombre + Ver y el avance debajo, como antes. */
+    .pa-tabla .pa-cab { display: none; }
     .pa-tabla .renglon.prog { grid-template-columns: minmax(0, 1fr) auto; }
-    .pa-tabla .renglon.prog .c2 { display: none; }
+    .pa-tabla .renglon.prog :is(.fol, .cc, .fe) { display: none; }
     .pa-tabla .renglon.prog .avance { grid-column: 1 / -1; grid-row: 2; }
+    .pa-tabla .pa-total { grid-template-columns: minmax(0, 1fr) auto; }
+    .pa-tabla .pa-total .g { grid-column: 2; }
 }
 
 /* ---------------------------------------------------------------- pre-altas: el asistente (rediseño tanda 2, v0.54.0)

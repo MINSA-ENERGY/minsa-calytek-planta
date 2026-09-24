@@ -803,6 +803,17 @@ try {
         R.ok('firmada la pre-alta, la puerta ya no avisa pendientes de firma', !visible('puPendientes'));
         document.querySelector('#pestanas button[data-p="prealtas"]').click();
         R.ok('una firmada reciente con fecha futura no se señala como dormida', !$('paFirmadas').textContent.includes('¿se cierra?'));
+        // Pantalla principal, tanda 2 (v0.61.0): la tabla de la K — encabezado con la fecha de la pestaña, barra del mes con
+        // subtotal, renglón Total, y los renglones en cebra (el 2º, 4º… con .non).
+        {
+            const tf = $('paFirmadas'), mes = tf.querySelector('.pa-mes'), cab = tf.querySelector('.pa-cab');
+            R.ok('v0.61.0: Firmadas trae encabezado con «Firmada», barra de mes con subtotal y renglón Total', !!cab && cab.textContent.includes('Firmada') && !!mes && /\d/.test(mes.textContent) && mes.textContent.includes('góndolas') && !!tf.querySelector('.pa-total'), mes && mes.textContent);
+            const rs = [...document.querySelectorAll('#paBorradores .renglon.prog'), ...document.querySelectorAll('#paFirmadas .renglon.prog')];
+            const cebra = t => [...t.querySelectorAll('.renglon.prog')].every((r, i) => r.classList.contains('non') === (i % 2 === 1));
+            R.ok('v0.61.0: los renglones de programa van en cebra', rs.length > 0 && cebra($('paBorradores')) && cebra($('paFirmadas')), String(rs.length));
+            const r0 = tf.querySelector('.renglon.prog');
+            R.ok('v0.61.0: el renglón trae folio, corriente, carrier y fecha en su columna', !!r0.querySelector('.fol') && !!r0.querySelector('.cc .cor') && !!r0.querySelector('.cc .car') && /\d{2}\/\d{2}\/\d{4}/.test(r0.querySelector('.fe').textContent), r0.querySelector('.fe').textContent);
+        }
         // Rediseño de Pre-altas, tanda 1 (P2): ya firmada, sale como base; usarla llena cliente, generador, corriente y carrier y
         // deja el pozo vacío con el foco. La pestaña Firmadas la cuenta.
         {

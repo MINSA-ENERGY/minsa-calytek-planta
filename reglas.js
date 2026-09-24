@@ -266,6 +266,42 @@ export function clientesPrealta(prealtas) {
 }
 
 /**
+ * Pantalla principal de Pre-altas, tanda 2 (v0.61.0; la K del lienzo EhJVtU3d4X6jUNuhJb6KQR): la fecha con que cada pestaña
+ * ordena y agrupa sus programas — la del momento en que el programa ENTRÓ a esa pestaña. Por firmar muestra el 1er envío
+ * estimado (no ordena por ella: sigue el orden de captura). Una cerrada sin sello (lista sin CerradaEl, tarea 10) cae en su firma.
+ */
+export function fechaDePestana(p, grupo) {
+    if (!p) return null;
+    if (grupo === 'borrador') return p.FechaEstimada || null;
+    if (grupo === 'cerrada') return p.CerradaEl || p.FirmadaEl || null;
+    return p.FirmadaEl || null;
+}
+const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+/** «2026-09» de una fecha: la de calendario tal cual (aaaa-mm-dd), la de reloj en hora de México. '' si no hay o no se lee. */
+export function claveMes(iso) {
+    if (!iso) return '';
+    const s = String(iso);
+    if (/^\d{4}-\d{2}-\d{2}(T00:00:00(\.0+)?Z)?$/.test(s)) return s.slice(0, 7);
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(horaMexico(s, 'fecha'));   // «30/09/2026, 21:00»
+    return m ? `${m[3]}-${m[2]}` : '';
+}
+/**
+ * Los programas de una pestaña en bloques por mes de fechaDePestana, el más nuevo primero y dentro de cada mes la fecha
+ * más nueva primero (empate: el id más nuevo). Los que no tienen fecha van al final en «Sin fecha».
+ */
+export function mesesPrealtas(ps, grupo) {
+    const conClave = [...(ps || [])].map(p => ({ p, f: String(fechaDePestana(p, grupo) || ''), k: claveMes(fechaDePestana(p, grupo)) }));
+    conClave.sort((a, b) => (!a.k) - (!b.k) || b.f.localeCompare(a.f) || b.p.id - a.p.id);
+    const bloques = [];
+    for (const x of conClave) {
+        const ult = bloques[bloques.length - 1];
+        if (ult && ult.clave === x.k) ult.ps.push(x.p);
+        else bloques.push({ clave: x.k, mes: x.k ? `${NOMBRES_MES[Number(x.k.slice(5, 7)) - 1]} ${x.k.slice(0, 4)}` : 'Sin fecha', ps: [x.p] });
+    }
+    return bloques;
+}
+
+/**
  * S-27 (v0.56.0): la HUELLA de lo que ampara la firma de una pre-alta. Se guarda en PLANTA_Firmas.Motivo (columna que la
  * firma de pre-alta dejaba vacia: sin tocar el tenant) y la firma solo vale mientras el renglon siga diciendo lo mismo:
  * cambiar despues el carrier, la corriente, las unidades, los choferes o el generador de una firmada la deja sin firma.

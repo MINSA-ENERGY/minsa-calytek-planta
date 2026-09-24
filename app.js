@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.60.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.61.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1718,23 +1718,46 @@ function elegirVistaPrealtas(v) {
     for (const [k, id] of Object.entries(VISTAS_PREALTAS)) $(id).hidden = k !== estado.vistaPrealtas;
 }
 /**
- * Un programa en la tabla de Pre-altas: nombre y folio · corriente y carrier · avance · Ver. Un solo DOM; en celular la
- * segunda columna se esconde y el avance baja a lo ancho (estilo.css .pa-tabla). Las etiquetas de excepción (estado que no
- * es el de su pestaña, «sin firma», «¿se cierra?») van junto al nombre, como antes.
+ * Pantalla principal, tanda 2 (v0.61.0; la K del lienzo EhJVtU3d4X6jUNuhJb6KQR): un programa es un renglón de columnas reales
+ * —Programa · Folio · Corriente · Carrier · fecha de la pestaña · Góndolas · Ver— y los renglones van en cebra (`non`, lo
+ * alterna pintarPrealtas porque las barras de mes cortan el nth-child). Corriente y carrier van juntos en `.cc` para que en
+ * celular (la L) bajen a un renglón; en escritorio `.cc` es display: contents y cada uno es su columna. Las etiquetas de
+ * excepción (estado que no es el de su pestaña, «sin firma», «¿se cierra?») van junto al nombre, como antes.
  */
-function renglonPrograma(p, grupo) {
-    const r = renglon(p.Title, p.Campana || '', 'Ver', () => verPrealta(vivo('prealtas', p)));
+const FECHA_PESTANA = { borrador: '1er envío', firmada: 'Firmada', cerrada: 'Cerrada' };
+const fechaPestanaCorta = (p, grupo) => {
+    const f = fechaDePestana(p, grupo);
+    return !f ? '—' : grupo === 'borrador' ? fechaCorta(f) : fechaCorta(fechaMexico(new Date(f)));
+};
+const cuentaGondolas = ({ rec, esp }) => esp ? `${rec}/${esp}` : `${rec} recibidas`;
+function sumaGondolas(ps) { return ps.reduce((a, p) => { const g = gondolasDe(p); a.rec += g.rec; a.esp += g.esp; return a; }, { rec: 0, esp: 0 }); }
+function renglonPrograma(p, grupo, non = false) {
+    const r = renglon(p.Title, '', 'Ver', () => verPrealta(vivo('prealtas', p)));
     r.classList.add('prog');
+    if (non) r.classList.add('non');
     const t = r.firstChild.firstChild;
     if (p.Estado !== grupo) t.appendChild(etiqueta(estadoPrealta(p.Estado), p.Estado));
     if (grupo === 'firmada' && !prealtaFirmada(p)) t.appendChild(etiqueta('sin firma', 'vencida'));   // S-01
     const sm = grupo === 'firmada' ? sinMovimientoDe(p) : null;
     if (sm) { t.appendChild(etiqueta('¿se cierra?', 'aviso')); r.firstChild.appendChild(el('p', 'pista', `${sm.motivo}. Sigue saliendo en la puerta hasta que alguien cierre el programa.`)); }
-    const c2 = el('div', 'c2', etiquetaCorriente(p.Corriente) || 'sin corriente');
-    c2.appendChild(el('small', '', grupo === 'borrador' ? `${nombreDe(estado.carriers, p.CarrierId)} · 1er envío ${fechaCorta(p.FechaEstimada)}` : nombreDe(estado.carriers, p.CarrierId)));
-    r.insertBefore(c2, r.children[1]);
-    r.insertBefore(barraAvance(gondolasDe(p)), r.children[2]);
+    const cc = el('div', 'cc');
+    cc.appendChild(el('span', 'cor', etiquetaCorriente(p.Corriente) || 'sin corriente'));
+    cc.appendChild(el('span', 'car', nombreDe(estado.carriers, p.CarrierId)));
+    const ver = r.lastChild;
+    for (const c of [el('span', 'fol', p.Campana || '—'), cc, el('span', 'fe', fechaPestanaCorta(p, grupo)), barraAvance(gondolasDe(p))]) r.insertBefore(c, ver);
     return r;
+}
+function encabezadoProgramas(grupo) {
+    const h = el('div', 'pa-cab'); h.setAttribute('aria-hidden', 'true');
+    for (const s of ['Programa', 'Folio', 'Corriente', 'Carrier', FECHA_PESTANA[grupo], 'Góndolas', '']) h.appendChild(el('span', '', s));
+    return h;
+}
+function barraMes({ mes, ps }) {
+    const b = el('div', 'pa-mes');
+    b.appendChild(el('b', '', mes));
+    b.appendChild(el('span', 'n', plural(ps.length, 'programa')));
+    b.appendChild(el('span', 'g', `${cuentaGondolas(sumaGondolas(ps))} góndolas`));
+    return b;
 }
 function pintarPrealtas() {
     cerrarForma('paDetalle');
@@ -1763,8 +1786,20 @@ function pintarPrealtas() {
     const vacio = { borrador: 'Ninguna por firmar.', firmada: 'Ninguna firmada: la puerta no puede recibir.', cerrada: 'Ninguna cerrada.' };
     for (const [grupo, cont] of [['borrador', 'paBorradores'], ['firmada', 'paFirmadas'], ['cerrada', 'paCerradas']]) {
         const c = $(cont); c.textContent = '';
-        for (const p of grupos[grupo]) c.appendChild(renglonPrograma(p, grupo));
-        if (!grupos[grupo].length) c.appendChild(el('p', 'vacio', estado.prealtas.length || grupo !== 'borrador' ? vacio[grupo] : 'No hay pre-altas. La primera góndola no puede entrar sin una firmada.'));
+        const ps = grupos[grupo];
+        if (ps.length) {
+            // Tanda 2 (v0.61.0): Por firmar sigue el orden de captura, sin meses; Firmadas y Cerradas van por mes de su fecha.
+            c.appendChild(encabezadoProgramas(grupo));
+            let k = 0;
+            for (const b of grupo === 'borrador' ? [{ mes: null, ps }] : mesesPrealtas(ps, grupo)) {
+                if (b.mes) c.appendChild(barraMes(b));
+                for (const p of b.ps) c.appendChild(renglonPrograma(p, grupo, k++ % 2 === 1));
+            }
+            const tot = el('div', 'pa-total'); tot.appendChild(el('b', '', 'Total'));
+            tot.appendChild(el('span', 'g', `${cuentaGondolas(sumaGondolas(ps))} góndolas`));
+            c.appendChild(tot);
+        }
+        if (!ps.length) c.appendChild(el('p', 'vacio', estado.prealtas.length || grupo !== 'borrador' ? vacio[grupo] : 'No hay pre-altas. La primera góndola no puede entrar sin una firmada.'));
     }
     $('paNBorradores').textContent = String(grupos.borrador.length);
     $('paNFirmadas').textContent = String(grupos.firmada.length);
@@ -1774,14 +1809,14 @@ function pintarPrealtas() {
     $('paNBorradores').classList.toggle('alerta', grupos.borrador.length > 0);
     $('paNFirmadas').classList.toggle('alerta', grupos.firmada.some(p => sinMovimientoDe(p) || !prealtaFirmada(p)));
 
-    const suma = ps => ps.reduce((a, p) => { const g = gondolasDe(p); a.rec += g.rec; a.esp += g.esp; return a; }, { rec: 0, esp: 0 });
-    const sb = suma(grupos.borrador), sf = suma(grupos.firmada), sc = suma(grupos.cerrada);
+    const sb = sumaGondolas(grupos.borrador);
     $('paResBorradores').textContent = grupos.borrador.length
         ? `${plural(sb.esp, 'góndola comprometida', 'góndolas comprometidas')}; ninguna puede entrar hasta que se firme.`
         : '';
-    // U-102 (v0.57.0): sin firmadas el pie queda vacío; el mensaje de la tabla ya dice que la puerta no puede recibir (U-23).
-    $('paResFirmadas').textContent = grupos.firmada.length ? `${sf.rec} de ${sf.esp} góndolas recibidas.` : '';
-    $('paResCerradas').textContent = grupos.cerrada.length ? `${plural(sc.rec, 'góndola')} en total.` : '';
+    // Tanda 2 (v0.61.0): el pie de Firmadas y Cerradas repetía la cuenta que ya da el renglón Total; queda vacío. Sin firmadas
+    // el mensaje de la tabla sigue diciendo que la puerta no puede recibir (U-23, U-102).
+    $('paResFirmadas').textContent = '';
+    $('paResCerradas').textContent = '';
     elegirVistaPrealtas(estado.vistaPrealtas);
 }
 
