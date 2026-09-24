@@ -459,27 +459,6 @@ button:not(:disabled):active { transform: scale(.98); }
 .pa-kpis > button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 .pa-acciones { display: flex; gap: var(--sp-2); }
 .pa-acciones button { width: auto; margin: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
-/* v0.64.0 (artifact SzbcRCLZ6Mji65sHKzjqPy, ronda 3; OK de Carlos 2026-09-24: «M2 para el claro, el color de M3 para el
-   oscuro»): la banda es una lámina de aluminio cepillado — plata en claro, gris espacial en oscuro —, esquinas redondas abajo,
-   un brillo diagonal y vetas de 1 px. Los conteos pasan de filetes a cuadros sobre el metal. Los tokens --pa-metal-* se
-   redefinen en las DOS listas oscuras de abajo (media query y data-tema), como el resto. */
-:root { --pa-metal: linear-gradient(100deg, #e9eaee, #f7f7f9 40%, #dcdde2 70%, #eeeff2); --pa-brillo: rgba(255, 255, 255, .35);
-        --pa-veta-a: rgba(255, 255, 255, .07); --pa-veta-b: rgba(0, 0, 0, .035); --pa-filo: inset 0 1px #fff, inset 0 -1px rgba(0, 0, 0, .12);
-        --pa-cuadro: rgba(255, 255, 255, .55); --pa-cuadro-borde: rgba(0, 0, 0, .08); --pa-cuadro-luz: inset 0 1px rgba(255, 255, 255, .9), 0 1px 2px rgba(0, 0, 0, .06); }
-@media (prefers-color-scheme: dark) {
-    :root:not([data-tema="claro"]) { --pa-metal: linear-gradient(180deg, #5c5e64 0%, #43454a 60%, #36383c 100%); --pa-brillo: rgba(255, 255, 255, .07);
-        --pa-filo: inset 0 1px rgba(255, 255, 255, .14); --pa-cuadro: rgba(255, 255, 255, .06); --pa-cuadro-borde: rgba(255, 255, 255, .12); --pa-cuadro-luz: inset 0 1px rgba(255, 255, 255, .1); }
-}
-:root[data-tema="oscuro"] { --pa-metal: linear-gradient(180deg, #5c5e64 0%, #43454a 60%, #36383c 100%); --pa-brillo: rgba(255, 255, 255, .07);
-        --pa-filo: inset 0 1px rgba(255, 255, 255, .14); --pa-cuadro: rgba(255, 255, 255, .06); --pa-cuadro-borde: rgba(255, 255, 255, .12); --pa-cuadro-luz: inset 0 1px rgba(255, 255, 255, .1); }
-.pa-banda { position: relative; overflow: hidden; background: var(--pa-metal); border-bottom: 0; border-radius: 0 0 18px 18px; box-shadow: var(--pa-filo); }
-.pa-banda::before, .pa-banda::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
-.pa-banda::before { background: linear-gradient(115deg, transparent 30%, var(--pa-brillo) 45%, transparent 60%); }
-.pa-banda::after { background: repeating-linear-gradient(0deg, var(--pa-veta-a) 0 1px, var(--pa-veta-b) 1px 2px, transparent 2px 3px); }
-.pa-banda > * { position: relative; z-index: 1; }
-.pa-kpis { gap: var(--sp-2); }
-.pa-kpis > button { padding: 10px 14px; border: 1px solid var(--pa-cuadro-borde); border-radius: 10px; background: var(--pa-cuadro); box-shadow: var(--pa-cuadro-luz); }
-.pa-kpis > button:focus-visible { border-radius: 10px; }
 .pa-acciones svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .pa-bases { margin-top: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
 .pa-bases .pa-base:first-child { border-top: 0; }
@@ -561,8 +540,8 @@ button:not(:disabled):active { transform: scale(.98); }
     .pa-banda { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); margin: calc(-1 * var(--sp-3)) calc(-1 * var(--sp-3)) var(--sp-4); padding: var(--sp-5) var(--sp-3) var(--sp-4); }
     .pa-banda p { display: none; }
     .pa-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .pa-kpis { gap: var(--sp-2); }
-    .pa-kpis > button { padding: 8px 10px; }
+    .pa-kpis > button { padding: 0 var(--sp-3); }
+    .pa-kpis > button:first-child { padding-left: 0; border-left: 0; }
     .pa-acciones { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
     .pa-acciones button { width: 100%; padding-inline: var(--sp-2); }
     .pa-fases { flex-direction: column; align-items: flex-start; }
