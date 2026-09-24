@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.72.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.73.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -719,7 +719,7 @@ function irSubpaso(s, enfocar = false) {
     $('puPasoK').textContent = `Paso 1 de 5 · ${SUBPASOS[s]}`;
     $('btnPuAtras').hidden = s === 1;
     if (s > 1) $('btnPuAtras').textContent = `‹ ${SUBPASOS[s - 1]}`;
-    $('btnPuSiguiente').hidden = s === 3;
+    $('btnPuSiguiente').hidden = s === 3 || (s === 1 && !estado.prealtas.some(prealtaFirmada));   // U-118
     if (s < 3) $('btnPuSiguiente').textContent = SIGUIENTE_SUBPASO[s];
     $('btnCompuerta').hidden = s !== 3;
     if (cambio && estado.pestana === 'puerta') window.scrollTo({ top: 0 });
@@ -751,7 +751,15 @@ function elegirEnSelect(id, v) { $(id).value = String(v); $(id).dispatchEvent(ne
 
 function pintarProgramasPuerta(firmadas) {
     const cont = $('puProgramas'); cont.textContent = '';
-    if (!firmadas.length) { cont.appendChild(el('p', 'pista', 'No hay programas firmados todavía.')); return; }
+    // U-118 (v0.73.0): sin firmadas no hay a dónde avanzar: la salida a Pre-altas es un botón y «Siguiente» se esconde (irSubpaso).
+    $('puPistaPrograma').hidden = !firmadas.length;
+    if (!firmadas.length) {
+        cont.appendChild(el('p', 'pista', 'No hay programas firmados todavía. Se captura y se firma primero en Pre-altas.'));
+        const ir = el('button', 'secundario', 'Ir a Pre-altas ›'); ir.type = 'button'; ir.id = 'btnPuIrPrealtas';
+        ir.addEventListener('click', () => irA('prealtas'));
+        cont.appendChild(ir);
+        return;
+    }
     for (const p of firmadas) {
         const { rec, esp } = gondolasDe(p);
         const b = renglonOpcion({ valor: p.id, sel: String(p.id) === $('puPrealta').value, titulo: p.Title,
@@ -792,7 +800,8 @@ function pintarResumenPuerta() {
     sec('Vehículo y chofer'); fila('Placa tractor', placaNormal($('puPlaca').value)); fila('Placa plana', placaNormal($('puPlacaPlana').value)); fila('Chofer', chofer);
     sec('Carga'); fila('Manifiesto', $('puManifiesto').value.trim()); fila('Corriente', $('puCorriente').value ? etiquetaCorriente($('puCorriente').value) : ''); fila('Art. 79', $('pu79').checked ? 'identificado y etiquetado' : '');
     r.appendChild(dl);
-    r.appendChild(el('p', 'pista', 'Obligatorio: programa, placa del tractor, chofer, manifiesto y corriente. Después se revisan los documentos.'));
+    // U-120 (v0.73.0): la pista sale de CAMPOS_PUERTA, la misma lista que cuenta el botón; el chofer no detiene, manda a Espera.
+    r.appendChild(el('p', 'pista', `Obligatorio: ${CAMPOS_PUERTA.map(([, t]) => t.replace(/^(el|la) /, '')).join(', ').replace(/, ([^,]*)$/, ' y $1')}. Sin chofer la góndola sale en Espera. Después se revisan los documentos.`));
 }
 /** Dónde vive cada campo que la compuerta necesita, y qué recibe el foco cuando falta (el select oculto no puede). */
 const PANTALLA_DE = { puPrealta: 1, puPlaca: 2, puPlacaPlana: 2, puChofer: 2, puChoferNombre: 2, puManifiesto: 3, puCorriente: 3 };
@@ -1054,7 +1063,8 @@ function pintarResultadoCompuerta() {
     v.scrollTop = 0;
     // Dialogo modal: el foco entra al veredicto y sale con Esc (F3). El boton principal recibe el foco.
     estado.focoAntesVeredicto = document.activeElement;
-    $('btnRegistrarPuerta').focus();
+    // U-119 (v0.73.0): en un rechazo legal el foco va a «Corregir lo capturado»: un Enter de más ya no emite el folio R-.
+    (r.resultado === 'rechazo-legal' ? $('btnVolverVeredicto') : $('btnRegistrarPuerta')).focus();
 }
 document.addEventListener('keydown', ev => {
     const v = $('veredicto');
@@ -1737,7 +1747,8 @@ function pintarTicket(e, t = $('ticket')) {
         ['Tara', e.TaraKg ? `${kgG(e.TaraKg)} · ${horaCorta(e.TaraHora)}` : 'pendiente'],
         ['NETO', e.NetoKg ? kgG(e.NetoKg) : 'pendiente'],
         ['Ticket de báscula', e.TicketBascula || '—'],
-        ['Capturó', quien(e.CapturadoPor)], ['Emitido', `${horaCorta(new Date().toISOString())} · CALYTEK Planta ${VERSION}`]
+        ['Capturó', quien(e.CapturadoPor) || '—'],   // U-122 (v0.73.0): vacío lleva raya, como los demás renglones
+        ['Emitido', `${horaCorta(new Date().toISOString())} · CALYTEK Planta ${VERSION}`]
     ];
     if (e.Etapa === 'anulado') filas.unshift(['ANULADO', `${horaCorta(e.AnuladoEl)} · ${quien(e.AnuladoPor)} · ${e.AnuladoMotivo || ''}`]);
     const tabla = el('table');
@@ -2258,7 +2269,7 @@ function pintarResumenPrealta(carrier) {
     if (carrier) { fila('Unidades', cuentaMarcadosPrealta('paUnidades')); fila('Choferes', cuentaMarcadosPrealta('paChoferes')); }
     sec('Envío'); fila('Primer envío', valorPa('paFecha')); fila('Góndolas', valorPa('paGondolas'));
     r.appendChild(dl);
-    r.appendChild(el('p', 'pista', 'Obligatorio: cliente, pozo, año, corriente y carrier. Lo demás se puede completar después.'));
+    r.appendChild(el('p', 'pista', 'Obligatorio: cliente, pozo, año, corriente, carrier y al menos una unidad y un chofer. Lo demás se puede completar después.'   /* U-131 (v0.73.0) */));
 }
 function enfocarPasoPrealta() { const a = estado.paAsis; if (a) $('paPaso' + a.paso).querySelector('.pregunta').focus({ preventScroll: true }); }
 function irPasoPrealta(n) {
@@ -2383,13 +2394,15 @@ function verPrealta(p) {
     const carrier = porId(estado.carriers, p.CarrierId);
     const filas = [
         ['Generador', `${p.Generador || '—'} · ${p.GeneradorRegistro || 'sin registro'}`], ['Pozo', p.Pozo || '—'], ['Corriente', etiquetaCorriente(p.Corriente) || '—'],
-        ['Campaña', p.Campana || '—'], ['Carrier', carrier ? `${carrier.Title} · ${carrier.AutorizacionASEA || 'sin autorización'}` : '—'],
-        ['Unidades', lista(p.UnidadesIds).map(id => { const u = porId(estado.unidades, id); return u ? `${u.Title}/${u.PlacaPlana || ''}` : `#${id}`; }).join(', ') || '—'],
+        ['Folio', p.Campana || '—'],   // U-129 (v0.73.0): el mismo L-AA-NNN que la lista llama Folio
+        ['Góndolas', (({ rec, esp }) => esp ? `${rec} recibidas de ${esp} esperadas` : plural(rec, 'recibida'))(gondolasDe(p))],   // U-127 (v0.73.0): lo que se mira antes de «Cerrar el programa»
+        ['Carrier', carrier ? `${carrier.Title} · ${carrier.AutorizacionASEA || 'sin autorización'}` : '—'],
+        ['Unidades', lista(p.UnidadesIds).map(id => { const u = porId(estado.unidades, id); return u ? [u.Title, u.PlacaPlana].filter(Boolean).join('/') : `#${id}`;   /* U-128 */ }).join(', ') || '—'],
         ['Choferes', lista(p.ChoferesIds).map(id => nombreDe(estado.choferes, id)).join(', ') || '—'],
-        ['Primer envío', fechaCorta(p.FechaEstimada)], ['Correo', `${fechaCorta(p.CorreoFecha)} · ${p.CorreoRemitente || ''}`],
+        ['Primer envío', fechaCorta(p.FechaEstimada)], ['Correo', [p.CorreoFecha ? fechaCorta(p.CorreoFecha) : '', p.CorreoRemitente].filter(Boolean).join(' · ') || '—'],   // U-128 (v0.73.0): sin separador colgando
         ['Capturó', quien(p.CapturadaPor) || '—'], ['Firmó', p.FirmadaPor ? `${quien(p.FirmadaPor)} · ${horaCorta(p.FirmadaEl)}${prealtaCambioTrasFirma(p) ? ' · cambió después de firmarse: la puerta no la ve hasta volver a firmar' : p.Estado === 'firmada' && !prealtaFirmada(p) ? ' · sello sin firma: la puerta no la ve' : ''}` : '—'], ['Cerró', p.CerradaPor ? `${quien(p.CerradaPor)} · ${horaCorta(p.CerradaEl)}` : '—'], ['Notas', p.Notas || '—']   // U-28 / U-31 (v0.26.0)
     ];
-    for (const [k, v] of filas) { const li = el('li', '', k); li.appendChild(el('span', 'd', v)); ul.appendChild(li); }
+    for (const [k, v] of filas) { const li = el('li', '', k); li.appendChild(el('span', 'd', v)); if (k === 'Góndolas') li.lastChild.appendChild(barraAvance(gondolasDe(p))); ul.appendChild(li); }   // U-127: con la barra de la lista
     // Cotejo automatico de vigencias (lo que el validador firma que reviso).
     const vg = $('paDetalleVigencias'); vg.textContent = '';
     const hallazgos = [];
@@ -2469,7 +2482,7 @@ async function firmarPrealta() {
 async function cerrarPrealta() {
     const p = estado.prealtaAbierta; if (!p) return;
     await escribiendo('btnCerrarPrealta', async () => {   // C-24 / C-23
-    const { ok } = await confirmar({ titulo: 'Cerrar el programa', ok: 'Cerrar',
+    const { ok } = await confirmar({ titulo: 'Cerrar el programa', ok: 'Cerrar el programa', peligro: true,   // U-130 (v0.73.0)
         texto: `«${p.Title}». La puerta dejará de aceptar góndolas contra él. No se borra: queda como historial.` });
     if (!ok) return;
     try {
@@ -2624,15 +2637,22 @@ function pintarCertificadoDeEmbarque() {
     $('ctImprimir').classList.toggle('oculto', !cert);
     $('ctImprimir').disabled = !imprimible;
     $('ctImprimir').title = !cert ? 'Todavía no hay certificado.' : imprimible ? '' : (cert.Estado !== 'vigente' ? `Este certificado está ${cert.Estado}: no se imprime como vigente.` : 'Sin firma registrada de gerencia: no se imprime.');
-    $('ctEstado').textContent = (cert
+    // U-123 (v0.73.0): la identificación en un renglón y los avisos que piden actuar, cada uno en el suyo (antes, un solo párrafo
+    // de hasta siete cláusulas). Todo sigue dentro de #ctEstado.
+    const ident = (cert
         ? `${cert.Title} · ${imprimible ? 'vigente y firmado' : cert.Estado + (cert.Estado === 'vigente' ? ' · SIN FIRMA' : '')}`
         : `Góndola ${e.Title || '(sin folio)'} · sin certificado${borrador ? ' · abajo, el BORRADOR: así saldría el papel' : ''}`)
         + ` · góndola ${e.Title || '—'}${e.Manifiesto ? ' · manifiesto ' + e.Manifiesto : ''}`
-        + (certs.length > 1 ? ` · ${certs.length} emitidos para esta góndola` : '')
-        + (vig && e.Etapa === 'anulado' ? ' · ⚠ LA GÓNDOLA ESTÁ ANULADA: cancela este certificado' : '')   // U-70 (v0.40.0)
-        + (certs.filter(c => c.Estado === 'vigente').length > 1 ? ' · ⚠ HAY MÁS DE UNO VIGENTE: vale el más nuevo; cancela los otros' : '')   // C-39 (v0.40.0)
-        + (vacios.length ? ` · ⚠ saldrían vacíos: ${vacios.join(', ')}` : '')   // U-72 (v0.45.0)
-        + (puede && bloqueo ? ` · ${bloqueo}` : '');   // U-73 (v0.42.0): en el celular no hay title; el motivo se lee aquí
+        + (certs.length > 1 ? ` · ${certs.length} emitidos para esta góndola` : '');
+    const avisosCert = [
+        vig && e.Etapa === 'anulado' ? '⚠ La góndola está anulada: cancela este certificado.' : '',   // U-70 (v0.40.0)
+        certs.filter(c => c.Estado === 'vigente').length > 1 ? '⚠ Hay más de uno vigente: vale el más nuevo; cancela los otros.' : '',   // C-39 (v0.40.0)
+        vacios.length ? `⚠ Si se emite, saldrían vacíos: ${vacios.join(', ')}.` : '',   // U-72 (v0.45.0)
+        puede && bloqueo ? bloqueo : ''   // U-73 (v0.42.0): en el celular no hay title; el motivo se lee aquí
+    ].filter(Boolean);
+    const ce = $('ctEstado'); ce.textContent = '';
+    ce.appendChild(el('span', 'ct-id', ident));
+    if (avisosCert.length) { const ul = el('ul', 'ct-avisos'); for (const a of avisosCert) ul.appendChild(el('li', '', a)); ce.appendChild(ul); }
 }
 /** U-69 (v0.40.0): el panel de correccion de Sustituir, precargado con lo que la gondola y su programa dicen HOY. */
 function mostrarCorreccion(si) {
@@ -3093,17 +3113,20 @@ function pintarExpedientePd(c) {
         [c.FolioOficio && `Oficio ${c.FolioOficio}`, c.AutorizacionASEA && `Autorización ${c.AutorizacionASEA}`].filter(Boolean).join(' · ') || 'Sin datos del oficio capturados.');
     const sub = s => () => { p.sub = s; pintarPadron(); };
     const subPend = pend.some(([k]) => k === 'unidades') || !pend.some(([k]) => k === 'choferes') ? 'unidades' : 'choferes';
-    kpisPd([[us.filter(activo).length, 'Unidades', p.sub === 'unidades', false, sub('unidades')], [hs.filter(activo).length, 'Choferes', p.sub === 'choferes', false, sub('choferes')],
-        [pend.length, 'Por atender', false, pend.length > 0, sub(subPend)]]);
+    // U-137 (v0.73.0): «Por atender» filtra las dos tablas a lo pendiente y queda marcado; Unidades o Choferes lo sueltan.
+    const soloPend = !!p.soloPend && pend.length > 0, conPend = new Set(pend.map(([, x]) => x));
+    const ver = xs => soloPend ? xs.filter(x => conPend.has(x)) : xs;
+    kpisPd([[us.filter(activo).length, 'Unidades', !soloPend && p.sub === 'unidades', false, () => { p.soloPend = false; sub('unidades')(); }], [hs.filter(activo).length, 'Choferes', !soloPend && p.sub === 'choferes', false, () => { p.soloPend = false; sub('choferes')(); }],
+        [pend.length, 'Por atender', soloPend, pend.length > 0, () => { p.soloPend = !soloPend; if (p.soloPend) p.sub = subPend; pintarPadron(); }]]);
     $('pdnUnidades').textContent = us.length || ''; $('pdnChoferes').textContent = hs.length || '';
     for (const b of $('pdSubTabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.sub === p.sub));
     $('pdpUnidades').hidden = p.sub !== 'unidades'; $('pdpChoferes').hidden = p.sub !== 'choferes';
     const ficha = (clave, x) => () => irPadron('ficha', { ficha: { clave, id: x.id }, desde: 'carrier' });
     tablaPd($('pdUnidades'), 'minmax(0,1.4fr) 7rem minmax(0,1fr) minmax(10rem,auto)', [['Placas'], ['Tipo', 'x'], ['Serie', 'x'], ['Estado', 'e']],
-        us.map(u => filaPd([celdaPd('a t', nombrePd('unidades', u)), celdaPd('x m', tipoUnidadTexto(u.TipoUnidad)), celdaPd('x m', u.NumeroSerie ? '…' + String(u.NumeroSerie).slice(-6) : ''), celdaPd('e', estadoPadron('unidades', u))], ficha('unidades', u), !activo(u))),
+        ver(us).map(u => filaPd([celdaPd('a t', nombrePd('unidades', u)), celdaPd('x m', tipoUnidadTexto(u.TipoUnidad)), celdaPd('x m', u.NumeroSerie ? '…' + String(u.NumeroSerie).slice(-6) : ''), celdaPd('e', estadoPadron('unidades', u))], ficha('unidades', u), !activo(u))),
         'Sin unidades. Se transcriben del oficio del carrier con «+ Alta de unidad».');
     tablaPd($('pdChoferes'), 'minmax(0,1.6fr) minmax(0,1fr) minmax(10rem,auto)', [['Nombre'], ['Licencia', 'x'], ['Estado', 'e']],
-        hs.map(h => filaPd([celdaPd('a n', h.Title), celdaPd('x m', h.Licencia), celdaPd('e', estadoPadron('choferes', h))], ficha('choferes', h), !activo(h))),
+        ver(hs).map(h => filaPd([celdaPd('a n', h.Title), celdaPd('x m', h.Licencia), celdaPd('e', estadoPadron('choferes', h))], ficha('choferes', h), !activo(h))),
         'Sin choferes. Se dan de alta con su licencia con «+ Alta de chofer».');
     const o = $('pdOficio'); o.textContent = ''; o.appendChild(el('h2', '', 'Oficio ASEA'));
     const { dl, sec, fila } = dlPd();
@@ -3134,11 +3157,14 @@ function pintarFichaPd(c) {
     const dl = el('dl', 'pd-pares');
     for (const [rotulo, col, fmt] of CAMPOS_PADRON[clave]) {
         if (fmt === 'fecha' || col === 'Activo' || col === 'Notas' || (fmt === 'carrier')) continue;
+        if (clave === 'unidades' && col === 'PlacaPlana') continue;   // U-140 (v0.73.0): ya va en el título («tractor / plana»)
         const v = x[col];
         const txt = fmt === 'lista' ? lista(v).map(etiquetaCorriente).join(', ') : fmt === 'kg' ? (v ? `${Number(v).toLocaleString('es-MX')} kg` : '') : col === 'TipoUnidad' ? tipoUnidadTexto(v) : v;
-        const par = el('div'); par.appendChild(el('dt', '', rotulo)); par.appendChild(el('dd', txt ? 'mono' : 'f', txt ? String(txt) : '—')); dl.appendChild(par);
+        const par = el('div', txt ? '' : 'vacio'); par.appendChild(el('dt', '', rotulo)); par.appendChild(el('dd', txt ? 'mono' : 'f', txt ? String(txt) : '—')); dl.appendChild(par);   // U-140: en celular los vacíos no se pintan
     }
     d.appendChild(dl);
+    const vacios = [...dl.querySelectorAll('div.vacio dt')].map(x => x.textContent);   // U-140 (v0.73.0): en celular, los vacíos juntos en un renglón
+    if (vacios.length) d.appendChild(el('p', 'pista pd-falta', `Sin capturar: ${vacios.join(', ')}.`));
     d.appendChild(el('h3', '', 'Vigencias'));
     const ul = el('ul', 'pd-vigs');
     for (const [n, col, cl] of VIGENCIAS_PADRON[clave]) {
@@ -3156,7 +3182,7 @@ function pintarFichaPd(c) {
     const { dl: dlu, sec, fila } = dlPd();
     sec('Historial'); fila(`Pre-altas que ${clave === 'unidades' ? 'la' : 'lo'} citan`, String(u.prealtas)); fila(`Góndolas (últimos ${CONFIG.ventanaDias} días)`, String(u.gondolas));
     if (clave !== 'carriers') fila('Última entrada', u.ultima ? fechaCorta(u.ultima) : '');
-    if (x.Notas) { sec('Notas'); const nt = el('p', 'pd-notas', String(x.Notas)); dlu.appendChild(nt); }
+    if (x.Notas) { sec('Notas'); const nt = el('p', 'pd-notas', String(x.Notas).replace(/[\w.+-]+@[\w.-]+\.\w+/g, m => quien(m) || m)); dlu.appendChild(nt); }   // U-141 (v0.73.0): se guarda el correo, se lee el nombre
     a.appendChild(dlu);
     a.appendChild(el('p', 'pista', referenciasPadron(clave, x) ? 'Ya lo cita el historial: no se elimina, se da de baja.' : 'Nada lo cita todavía: se puede eliminar si se transcribió mal.'));
 }
@@ -3236,6 +3262,7 @@ async function activarPadron(clave, x, activo) {
         // C-06 (v0.22.0): el motivo queda en Notas para las TRES claves, como promete el dialogo (unidades y choferes tienen
         // Notas desde la tarea 9). Si la lista aun no trae la columna, se da de baja igual, sin motivo, y se dice.
         if (!activo && motivo) campos.Notas = `${x.Notas ? x.Notas + '\n' : ''}BAJA ${fechaMexico()} por ${estado.cuenta.username}: ${motivo}`;
+        if (activo) campos.Notas = `${x.Notas ? x.Notas + '\n' : ''}REACTIVADA ${fechaMexico()} por ${estado.cuenta.username}`;   // U-133 (v0.73.0): la reactivación también deja rastro
         let sinNotas = false;
         try { await estado.cliente.actualizarRenglon(estado.siteId, L[clave], x.id, campos); }
         catch (e) {
@@ -3363,6 +3390,7 @@ function valorCampoPadron(id) {
     if (id === '@corr') return [...document.querySelectorAll('input[name="pcCorr"]:checked')].map(c => etiquetaCorriente(c.value)).join(', ');
     const c = $(id);
     if (c.tagName === 'SELECT') return c.value && c.selectedOptions[0] ? c.selectedOptions[0].textContent : '';
+    if (id === 'puuCap' && c.value.trim() && isFinite(Number(c.value))) return `${Number(c.value).toLocaleString('es-MX')} kg`;   // U-139 (v0.73.0): como la ficha
     return c.value.trim();
 }
 function cuerpoAlDialog(clave) {
@@ -3785,7 +3813,7 @@ const reglasDe = (e, ...clases) => hallazgosDe(e, ...clases).map(h => h.regla).j
 function renglonRechazo(e) {
     const causa = reglasDe(e, 'legal', 'comercial');
     const r = renglon(`${e.Title || '(excepción)'} · ${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + quien(e.ExcepcionAutorizo) : ''}`);
-    r.firstChild.firstChild.appendChild(etiquetaCompuertaDe(e));
+    r.firstChild.firstChild.prepend(etiquetaCompuertaDe(e));   // U-143 (v0.73.0): la etiqueta va primero; al final caía sola en otro renglón
     return r;
 }
 function pintarRechazosHoy() {
@@ -3877,10 +3905,11 @@ function exportarCsv() {
         e.CapturadoPor, e.ExcepcionAutorizo, e.AnuladoMotivo]);
     const csv = '\ufeff' + [cab, ...filas].map(f => f.map(celda).join(',')).join('\r\n');
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    // C-78 (v0.73.0): el blob anterior se suelta al exportar otra vez, no por reloj (5 s no alcanzaban en un celular lento).
+    if (exportarCsv.url) URL.revokeObjectURL(exportarCsv.url);
+    a.href = exportarCsv.url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     a.download = `CALYTEK_Embarques_${fechaCorta(estado.ventanaDesde).replace(/\//g, '-')}_a_${fechaMexico()}.csv`;
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     avisar(`CSV con ${plural(filas.length, 'embarque')} descargado.`, 'bien');
 }
 $('btnExportar').addEventListener('click', exportarCsv);

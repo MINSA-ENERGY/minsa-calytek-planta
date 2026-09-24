@@ -140,7 +140,7 @@
           <p class="sub">Solo salen las pre-altas firmadas.</p>
           <div class="opciones" id="puProgramas" role="group" aria-labelledby="puPreg1"></div>
           <select id="puPrealta" class="oculto" aria-hidden="true" tabindex="-1"></select>
-          <p class="pista">¿No está el programa? Se captura y se firma primero en Pre-altas.</p>
+          <p class="pista" id="puPistaPrograma">¿No está el programa? Se captura y se firma primero en Pre-altas.</p>
         </div>
         <div class="asis-pantalla" id="puBloque2" data-s="2" hidden>
           <p class="pregunta" id="puPreg2">¿Qué unidad es?</p>
@@ -209,7 +209,7 @@
       <!-- Historial = el buscador de Cerrados (2026-09-08): todo folio que ya no está en planta dentro de la ventana cargada
            (CONFIG.ventanaDias), para reimprimir el ticket o llegar al certificado. El archivo completo vive en SharePoint. -->
       <div class="gpanel" id="gpHistorial" hidden>
-        <div class="busca"><input type="search" id="baBusca" placeholder="Buscar folio, placa o manifiesto" autocomplete="off" aria-label="Buscar en el historial"><span class="cuenta" id="baBuscaCuenta"></span><button id="btnExportar" class="alta mn-btn is-sm oculto" type="button" title="Descarga en CSV todo lo cargado (la ventana de días más lo abierto)">Exportar CSV</button></div>
+        <div class="busca"><input type="search" id="baBusca" placeholder="Folio, placa, ticket…" title="Busca por folio, placa, manifiesto, carrier, ticket de báscula o folio CT" autocomplete="off" aria-label="Buscar en el historial por folio, placa, manifiesto, carrier, ticket o certificado"><span class="cuenta" id="baBuscaCuenta"></span><button id="btnExportar" class="alta mn-btn is-sm oculto" type="button" title="Descarga en CSV todo lo cargado (la ventana de días más lo abierto)">Exportar CSV</button></div>
         <div id="baCerrados"></div>
         <p class="pista" id="gPieHistorial"></p>
         <!-- U-14: hasta dónde alcanza lo cargado. -->
@@ -701,7 +701,7 @@
      v0.39.0: este dialogo es el de UNA GONDOLA (un embarque cerrado) — se abre desde Bascula > Cerrados y es la unica
      puerta de emision, sustitucion y cancelacion. Antes colgaba del detalle del programa. -->
 <dialog id="dlgCertificado" class="dlg dlg-cert con-avisos" aria-label="Certificado de tratamiento">
-  <div class="ct-nav"><span id="ctEstado" class="tk-pos"></span></div>
+  <div class="ct-nav"><div id="ctEstado" class="tk-pos"></div></div>
   <div class="dlg-avisos" aria-live="polite"></div><!-- U-71 (v0.40.0): «emitido» / «No se pudo emitir» se pintan aqui, no detras del modal -->
   <!-- U-75 (v0.45.0): en el celular, los datos del papel como texto (en escritorio se esconde por CSS) y el papel como vista previa que se amplia al tocarlo -->
   <dl id="ctResumen" class="ct-resumen oculto"></dl>

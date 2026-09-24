@@ -141,7 +141,7 @@ h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-tra
 .rail .marca img.logo { width: 92px; height: auto; display: block; flex: none; }
 .rail .marca span { font-family: "Bai Jamjuree", var(--titulo); font-weight: 700; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; line-height: 1; margin-top: -2px; display: inline-flex; align-items: center; white-space: nowrap; min-width: 0; }
 .rail .marca span::before { content: ""; flex: none; width: 1px; height: 24px; margin: 0 10px 0 2px; background: linear-gradient(180deg, transparent, var(--ok) 30%, var(--ok) 70%, transparent); }
-.rail .plegar { display: none; margin-left: auto; width: 28px; height: 28px; min-height: 0; padding: 0; justify-content: center; align-items: center; border: 0; border-radius: var(--r-sm); background: none; color: var(--mute); flex: none; }
+.rail .plegar { display: none; margin-left: auto; width: 36px; height: 36px; min-height: 0;   /* U-117 (v0.73.0): 28 -> 36 px */ padding: 0; justify-content: center; align-items: center; border: 0; border-radius: var(--r-sm); background: none; color: var(--mute); flex: none; }
 .rail .plegar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transform: rotate(180deg); }
 
 #pestanas, .rail .extra { display: contents; }
@@ -402,6 +402,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .etiqueta.comercial, .etiqueta.excepcion-comercial, .etiqueta.aviso, .etiqueta.borrador { color: var(--warn-fg); }
 .etiqueta.ok, .etiqueta.firmada, .etiqueta.pasa { color: var(--ok-fg); }
 .etiqueta.cerrada, .etiqueta.anulado, .etiqueta.baja { color: var(--mute); }
+.renglon .t > .etiqueta:first-child { margin: 0 .4rem 0 0; }   /* U-143 */
 .hallazgos { list-style: none; margin: 0 0 var(--sp-3); padding: 0; }
 .hallazgos li { display: flex; flex-wrap: wrap; gap: .2rem .4rem; padding: var(--sp-2) 0; border-top: 1px solid var(--line-soft); font-size: .86rem; font-weight: 600; color: var(--ink); }
 .hallazgos li:first-child { border-top: 0; }
@@ -666,6 +667,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .ticket table { width: 100%; border-collapse: collapse; font-size: .85rem; }
 .ticket td { padding: .3rem 0; border-bottom: 1px dashed var(--line); vertical-align: top; }
 .ticket td:first-child { color: var(--mute); width: 36%; }
+@media (max-width: 480px) { .ticket td:first-child { width: 28%; } .ticket table { font-size: .8rem; } }   /* U-125 (v0.73.0): a 390 fecha y hora caben en un renglon */
 .ticket td.mono { font-family: var(--mono); text-align: right; font-weight: 600; }
 .ticket td.grande { font-family: var(--mono); font-size: 1.5rem; font-weight: 700; text-align: right; }
 /* I2 (7-sep): pesaje con neto en vivo, foto compacta y Guardar pegado abajo */
@@ -795,6 +797,8 @@ button:not(:disabled):active { transform: scale(.98); }
 .barras .b { height: 10px; border-radius: 3px; background: var(--surf2); overflow: hidden; }
 .barras .b i { display: block; height: 100%; background: var(--ok); }
 .barras .b i.warn { background: var(--warn); }
+.barras .vacio { grid-column: 1 / -1; margin: 0; }   /* U-142 (v0.73.0): el vacío ocupa la tarjeta, no la columna del nombre */
+@media (max-width: 720px) { .barras { grid-template-columns: minmax(0, 1fr) auto; } .barras .nom { grid-column: 1 / -1; white-space: normal; overflow: visible; margin-top: 4px; } }   /* U-136 (v0.73.0): a 390 el nombre del carrier va entero arriba de su barra */
 .semanas { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; height: 136px; padding-top: var(--sp-2); }
 .semanas div { display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; height: 100%; text-align: center; font-family: var(--mono); font-size: .66rem; color: var(--mute); }
 .semanas i { display: block; flex: none; background: var(--ok); border-radius: 3px 3px 0 0; opacity: .85; min-height: 1px; }
@@ -880,7 +884,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .pasos5 .ahora[data-tercio="2"] { --lleno: 66%; }
 .pasos5 .ahora[data-tercio="3"] { --lleno: 100%; }
 .pasos5 .ahora i { background: linear-gradient(90deg, var(--acc) var(--lleno), var(--line) var(--lleno)); }
-.asis-quien { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); }
+.asis-quien { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px var(--sp-3); }   /* U-121 (v0.73.0): a 390 el Paso baja de renglon en vez de pegarse a la placa */
 .asis-quien > div { min-width: 0; }
 .asis-quien b { display: block; font-weight: 600; color: var(--ink); }
 .asis-quien b.mono { font-family: var(--mono); font-weight: 500; }
@@ -983,6 +987,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .pasos5 .hecho { color: var(--body); }
 .pasos5 .hecho i { background: var(--ok); }
 .asis-der { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+@media (max-width: 720px) { .asis-der { align-items: flex-start; } }   /* U-121: al bajar de renglon, el Paso y «Ver lo capturado» van a la izquierda */
 .ver-capturado { all: unset; cursor: pointer; display: inline-flex; align-items: center; min-height: 36px; font-size: .82rem; font-weight: 600; color: var(--acc); }   /* U-86 */
 .ver-capturado:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 .gasis-cuerpo { display: grid; gap: var(--sp-4); align-items: start; }
@@ -1023,7 +1028,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .capturado h3 { margin: 0; font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; }
 .capturado .sec { grid-column: 1 / -1; display: flex; justify-content: space-between; margin-top: var(--sp-2); font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; }
 .capturado .sec em { font-style: normal; text-transform: none; letter-spacing: 0; font-family: var(--mono); color: var(--ok-fg); font-size: .76rem; }
-.cerrar-hoja { all: unset; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; color: var(--mute); border-radius: var(--r-sm); }
+.cerrar-hoja { all: unset; cursor: pointer; width: 44px; height: 44px;   /* U-116 (v0.73.0): 32 -> 44 px, el piso con guante */ display: flex; align-items: center; justify-content: center; font-size: 1.4rem; color: var(--mute); border-radius: var(--r-sm); }
 .cerrar-hoja:focus-visible { outline: 2px solid var(--acc); }
 .capturado.abierta { display: grid; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-height: 80vh; overflow-y: auto; border-radius: 10px 10px 0 0; padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom)); }
 /* U-81 (v0.51.0): el velo es un elemento que recibe el toque y cierra la hoja (antes, una box-shadow que dejaba pasar el toque). */
@@ -1107,6 +1112,7 @@ select, .archivos-filtros select, .con-boton select {
 .dlg-cert { width: min(96vw, 1120px); padding: var(--sp-3); display: none; flex-direction: column; gap: var(--sp-2); }
 .dlg-cert[open] { display: flex; }
 .dlg-cert .ct-nav { font-family: var(--mono); font-size: .78rem; color: var(--mute); }
+.dlg-cert .ct-avisos { margin: var(--sp-2) 0 0; padding: 0; list-style: none; display: grid; gap: 2px; color: var(--warn-fg); font-family: var(--cuerpo, inherit); font-size: .82rem; }   /* U-123 (v0.73.0) */
 .dlg-cert .ct-vista { overflow: auto; max-height: 70dvh; background: var(--bg); padding: var(--sp-2); }
 .dlg-cert .dlg-botones button { flex: 1; }
 .dlg-cert .dlg-avisos .mensaje { margin: 0; }   /* U-71 (v0.40.0) */
@@ -1183,6 +1189,7 @@ select, .archivos-filtros select, .con-boton select {
 .rotulo { display: none; }
 @media (min-width: 721px) {
     .app { isolation: isolate; }
+    .contenido { padding-bottom: 120px; }   /* U-144 (v0.73.0): la última tarjeta termina arriba del rótulo de plano */
     .app::before {
         content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
         background-image: radial-gradient(circle farthest-corner at 0 0, transparent 21%, var(--bg) 85%),
@@ -1263,6 +1270,9 @@ select, .archivos-filtros select, .con-boton select {
 .pd-datos .pd-cabeza button { width: auto; margin: 0; }
 .pd-pares { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 12px 18px; margin: 0; }
 .pd-pares > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+@media (max-width: 720px) { .pd-pares > div.vacio { display: none; } .pd-pares { grid-template-columns: 1fr; gap: 6px; } .pd-pares > div { flex-direction: row; justify-content: space-between; gap: var(--sp-3); } }
+.pd-falta { display: none; }
+@media (max-width: 720px) { .pd-falta { display: block; } }   /* U-140 (v0.73.0): en celular la ficha no pinta los campos vacíos */
 .pd-pares dt { font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; }
 .pd-pares dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
 .pd-pares dd.mono { font-family: var(--mono); font-weight: 500; }
@@ -1291,6 +1301,7 @@ select, .archivos-filtros select, .con-boton select {
    Atrás / Siguiente abajo y «Así va» a la derecha (.pd-resumen). El cuerpo de la forma es el del dialog, mudado aquí. */
 #pdAsis { display: flex; flex-direction: column; gap: var(--sp-4); }
 #pdPasos { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); max-width: 40rem; }
+#pdPasos button { min-height: 36px; }   /* U-138 (v0.73.0): los pasos del alta median 24 px */
 #pdAsis .pregunta { margin: 0; font-family: var(--titulo); font-weight: 600; font-size: 1.3rem; text-transform: none; letter-spacing: 0; color: var(--ink); }
 #pdAsis .pregunta:focus { outline: none; }
 #pdAsis .sub { margin: calc(-1 * var(--sp-2)) 0 0; font-size: .88rem; color: var(--mute); }
