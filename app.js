@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.66.2';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.66.3';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -3681,6 +3681,7 @@ $('btnNuevaGondola').addEventListener('click', () => {
     irDesdePestana('puerta');
 });
 $('migaGondolasPuerta').addEventListener('click', () => irDesdePestana('bascula'));
+$('btnCancelarPuerta').addEventListener('click', () => irDesdePestana('bascula'));   // v0.66.3: Cancelar hace lo mismo que la miga
 $('puPrealta').addEventListener('change', () => { marcarOpcion($('puProgramas'), $('puPrealta').value); pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta(); });
 $('puChofer').addEventListener('change', () => marcarOpcion($('puChoferes'), $('puChofer').value));
 // C-55 (v0.52.0): los tres controles de corriente salen del mismo catálogo (CORRIENTES, reglas.js).

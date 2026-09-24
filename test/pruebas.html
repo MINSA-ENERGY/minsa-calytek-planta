@@ -455,6 +455,8 @@ try {
             R.ok('tanda 2: «+ Nueva góndola» abre la llegada con migas y Góndolas sigue marcado', visible('p-puerta') && $('p-puerta').querySelector('.migas').textContent.includes('Góndolas') && document.querySelector('#pestanas button[data-p="gondolas"]').getAttribute('aria-current') === 'page' && document.querySelectorAll('#pestanas [aria-current="page"]').length === 1);
             clic('migaGondolasPuerta');
             R.ok('tanda 2: la miga «Góndolas» regresa a la lista', visible('p-bascula') && !visible('p-puerta'));
+            clic('btnNuevaGondola'); clic('btnCancelarPuerta');
+            R.ok('v0.66.3: «Cancelar» de Nueva góndola regresa a la lista', visible('p-bascula') && !visible('p-puerta'));
         }
         document.querySelector('#pestanas button[data-p="hoy"]').click();
     }
