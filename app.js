@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.62.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.63.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -43,7 +43,8 @@ const estado = {
     subpasoPuerta: 1,        // tanda 4 (v0.49.0): la pantalla del paso 1 del asistente (1 programa · 2 vehículo y chofer · 3 carga)
     archivos: null,          // v0.33.0: { biblioteca, ramas: Map ruta -> hijos } de la seccion Archivos; null = se relee al pintar
     cargadoEl: 0,
-    ventanaDesde: ''      // ISO: inicio de la ventana de carga (cubeta 3)
+    ventanaDesde: '',     // ISO: inicio de la ventana de carga (cubeta 3)
+    fueraDeVentana: new Map()   // C-68 (v0.63.0): PreAltaId -> embarques de los programas que empezaron antes de la ventana
 };
 
 // NO llamar `msal` a esta variable: taparia el global del bundle UMD.
@@ -422,7 +423,7 @@ function firmaDe(tipo, id, sello) {
  */
 const firmasPrealta = p => estado.firmas.filter(f => f.Tipo === 'prealta' && Number(f.ObjetoId) === Number(p.id)
     && ROL_FIRMA.prealta.includes(rolDe(f.Firmante, estado.roles)) && mismaCuenta(f.Firmante, p.FirmadaPor));
-function prealtaFirmada(p) { return p.Estado === 'firmada' && firmasPrealta(p).some(f => firmaAmparaPrealta(f.Motivo, p)); }
+function prealtaFirmada(p) { return p.Estado === 'firmada' && firmasPrealta(p).some(f => firmaAmparaPrealta(f.Motivo, p, f.Created)); }   // S-29: Created lo pone SharePoint
 /** Firmada con sello y firma, pero el renglón cambió después: se dice así, no «sin firma». */
 const prealtaCambioTrasFirma = p => p.Estado === 'firmada' && !prealtaFirmada(p) && firmasPrealta(p).length > 0;
 function excepcionAutorizada(e) { return !!e.ExcepcionAutorizo && !!firmaDe('excepcion', e.id, e.ExcepcionAutorizo); }
@@ -491,6 +492,35 @@ async function embarquesDelAno(avisar) {
         `fields/Arribo ge '${iso(new Date(new Date().getFullYear(), 0, 1))}'`, avisar);
 }
 
+/**
+ * C-68 (v0.63.0): las góndolas de un programa que empezó ANTES de la ventana no están todas en estado.embarques (90 días):
+ * una cerrada vieja pintaba 0/20 y una firmada larga «sin un solo arribo». Sus embarques se leen aparte por PreAltaId
+ * (columna indexada), de 15 en 15, y NO entran a estado.embarques: Báscula, Historial y Reportes siguen mirando la ventana.
+ * «Empezó» = Created de la pre-alta (lo pone SharePoint; ningún embarque es anterior), o su firma si no viene. Las cerradas
+ * ya no reciben góndolas y se leen una vez por sesión; las firmadas, en cada carga.
+ */
+async function cargarProgramasViejos(c, s, avisar) {
+    const desde = Date.parse(estado.ventanaDesde);
+    const viejo = p => (p.Estado === 'firmada' || p.Estado === 'cerrada') && !(Date.parse(p.Created || p.FirmadaEl || '') >= desde);
+    const antes = estado.fueraDeVentana, ahora = new Map(), faltan = [];
+    for (const p of estado.prealtas.filter(viejo)) {
+        if (p.Estado === 'cerrada' && antes.has(p.id)) ahora.set(p.id, antes.get(p.id));
+        else { ahora.set(p.id, []); faltan.push(p.id); }
+    }
+    for (let i = 0; i < faltan.length; i += 15) {
+        const ids = faltan.slice(i, i + 15);
+        for (const e of await c.renglones(s, L.embarques, ids.map(id => `fields/PreAltaId eq ${id}`).join(' or '), avisar)) ahora.get(Number(e.PreAltaId))?.push(e);
+    }
+    estado.fueraDeVentana = ahora;
+}
+/** Los embarques que cuentan para los programas: la ventana más los de programas viejos (C-68), sin repetir. */
+function embarquesDeProgramas() {
+    if (!estado.fueraDeVentana.size) return estado.embarques;
+    const porId = new Map(estado.embarques.map(e => [e.id, e]));
+    for (const filas of estado.fueraDeVentana.values()) for (const e of filas) if (!porId.has(e.id)) porId.set(e.id, e);
+    return [...porId.values()];
+}
+
 /** Mete en la lista de la ventana los renglones frescos que le correspondan (por id). */
 function fundirEnVentana(frescos) {
     const porId = new Map(estado.embarques.map(e => [e.id, e]));
@@ -514,6 +544,7 @@ async function cargarTodo() {
             c.renglones(s, L.prealtas, null, av), embarquesYCertificados, c.renglones(s, L.vigencias, null, av),
             c.renglones(s, L.roles, null, av), cargarFirmas(c, s, av)
         ]);
+    await cargarProgramasViejos(c, s, av);
     estado.cargadoEl = Date.now();
     reanclar();
 }
@@ -551,7 +582,7 @@ function capturaAMedias() {
     // Tanda 5 (decisión 11): el asistente de la báscula abierto —pesaje, pausa «A descargar» o ticket— cuenta entero.
     if (abierto('baAsis') || abierto('veredicto')) return true;
     if (estado.pestana === 'prealtas' && asistentePrealtaAbierto()) return true;   // v0.54.0: el asistente de pre-alta a la vista
-    if (['paDetalle', 'pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer'].some(id => $(id).open)) return true;
+    if (['paDetalle', 'paRecientes', 'pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer'].some(id => $(id).open)) return true;
     if (estado.pestana === 'puerta' && ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo', 'puPrealta'].some(id => $(id).value.trim())) return true;   // U-40: el programa elegido también es captura
     return false;
 }
@@ -1692,11 +1723,16 @@ function pintarTicket(e, t = $('ticket')) {
  * Gondolas de una pre-alta: recibidas contra esperadas. Recibida = embarque que existe y llego;
  * el anulado (folio quemado) y el rechazado (no entro) no cuentan.
  */
-function gondolasDe(p) {
-    const rec = estado.embarques.filter(e => Number(e.PreAltaId) === p.id && e.Etapa !== 'anulado' && e.Etapa !== 'rechazado').length;
-    return { rec, esp: Number(p.GondolasEsperadas) || 0 };
+function gondolasDe(p, conteo = conteoRecibidas()) {
+    return { rec: conteo.get(Number(p.id)) || 0, esp: Number(p.GondolasEsperadas) || 0 };
 }
-function sinMovimientoDe(p) { return prealtaSinMovimiento(p, estado.embarques, CONFIG.sinMovimientoDias); }
+/** C-68 (v0.63.0): PreAltaId -> recibidas, en UNA pasada; pintarPrealtas la calcula una vez por repintado (antes, 3-5 por programa). */
+function conteoRecibidas(emb = embarquesDeProgramas()) {
+    const m = new Map();
+    for (const e of emb) if (e.Etapa !== 'anulado' && e.Etapa !== 'rechazado') { const k = Number(e.PreAltaId); m.set(k, (m.get(k) || 0) + 1); }
+    return m;
+}
+function sinMovimientoDe(p, emb = embarquesDeProgramas()) { return prealtaSinMovimiento(p, emb, CONFIG.sinMovimientoDias); }
 function barraAvance({ rec, esp }) {
     const d = el('div', 'avance');
     if (esp) {
@@ -1714,7 +1750,7 @@ const ESTADO_PREALTA = { borrador: 'por firmar', firmada: 'firmada', cerrada: 'c
 const estadoPrealta = e => ESTADO_PREALTA[e] || e || 'sin estado';
 function elegirVistaPrealtas(v) {
     estado.vistaPrealtas = VISTAS_PREALTAS[v] ? v : 'borrador';
-    for (const b of $('paTabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.pa === estado.vistaPrealtas));
+    for (const b of document.querySelectorAll('#paTabs button, .pa-kpis button')) b.setAttribute('aria-pressed', String(b.dataset.pa === estado.vistaPrealtas));
     for (const [k, id] of Object.entries(VISTAS_PREALTAS)) $(id).hidden = k !== estado.vistaPrealtas;
 }
 /**
@@ -1729,34 +1765,53 @@ const fechaPestanaCorta = (p, grupo) => {
     const f = fechaDePestana(p, grupo);
     return !f ? '—' : grupo === 'borrador' ? fechaCorta(f) : fechaCorta(fechaMexico(new Date(f)));
 };
-const cuentaGondolas = ({ rec, esp }) => esp ? `${rec}/${esp}` : `${rec} recibidas`;
-function sumaGondolas(ps) { return ps.reduce((a, p) => { const g = gondolasDe(p); a.rec += g.rec; a.esp += g.esp; return a; }, { rec: 0, esp: 0 }); }
-function renglonPrograma(p, grupo, non = false) {
-    const r = renglon(p.Title, '', 'Ver', () => verPrealta(vivo('prealtas', p)));
-    r.classList.add('prog');
-    if (non) r.classList.add('non');
-    const t = r.firstChild.firstChild;
+/** C-69 (v0.63.0): las recibidas de programas SIN estimado van aparte (`sin`): sumadas a las otras inflaban «15/20». */
+function sumaGondolas(ps, conteo) {
+    return ps.reduce((a, p) => { const g = gondolasDe(p, conteo); if (g.esp) { a.rec += g.rec; a.esp += g.esp; } else a.sin += g.rec; return a; }, { rec: 0, esp: 0, sin: 0 });
+}
+/** El texto del subtotal de mes y del Total, uno solo (C-69): «3/12 góndolas», «3/12 góndolas + 2 sin estimado», o solo las recibidas. */
+function textoGondolas({ rec, esp, sin }) {
+    if (!esp) return `${plural(sin, 'góndola recibida', 'góndolas recibidas')} · sin estimado`;
+    return `${rec}/${esp} góndolas` + (sin ? ` + ${sin} sin estimado` : '');
+}
+/** U-114 (v0.63.0): la rejilla es tabla para el lector de pantalla — role table/row/columnheader/cell, sin cambiar el CSS. */
+const celda = (tag, clase, texto, rol = 'cell') => { const c = el(tag, clase, texto); c.setAttribute('role', rol); return c; };
+/**
+ * C-74 (v0.63.0): el renglón de programa arma sus celdas explícitas —ya no parchea el DOM de renglon() con firstChild/lastChild—
+ * y el CSS las ubica por NOMBRE de área de rejilla (--pa-areas), no por índice de columna. U-109: tocar el renglón abre la
+ * ficha igual que Ver (el botón sigue siendo el control de teclado; no se anidan interactivos).
+ */
+function renglonPrograma(p, grupo, ctx, non = false) {
+    const abrir = () => verPrealta(vivo('prealtas', p));
+    const r = el('div', 'renglon prog' + (non ? ' non' : '')); r.setAttribute('role', 'row');
+    const pr = celda('div', 'pr'), t = el('div', 't', p.Title);
+    pr.appendChild(t);
     if (p.Estado !== grupo) t.appendChild(etiqueta(estadoPrealta(p.Estado), p.Estado));
     if (grupo === 'firmada' && !prealtaFirmada(p)) t.appendChild(etiqueta('sin firma', 'vencida'));   // S-01
-    const sm = grupo === 'firmada' ? sinMovimientoDe(p) : null;
-    if (sm) { t.appendChild(etiqueta('¿se cierra?', 'aviso')); r.firstChild.appendChild(el('p', 'pista', `${sm.motivo}. Sigue saliendo en la puerta hasta que alguien cierre el programa.`)); }
+    const sm = grupo === 'firmada' ? sinMovimientoDe(p, ctx.emb) : null;
+    if (sm) { t.appendChild(etiqueta('¿se cierra?', 'aviso')); pr.appendChild(el('p', 'pista', `${sm.motivo}. Sigue saliendo en la puerta hasta que alguien cierre el programa.`)); }
     const cc = el('div', 'cc');
-    cc.appendChild(el('span', 'cor', etiquetaCorriente(p.Corriente) || 'sin corriente'));
-    cc.appendChild(el('span', 'car', nombreDe(estado.carriers, p.CarrierId)));
-    const ver = r.lastChild;
-    for (const c of [el('span', 'fol', p.Campana || '—'), cc, el('span', 'fe', fechaPestanaCorta(p, grupo)), barraAvance(gondolasDe(p))]) r.insertBefore(c, ver);
+    const cor = etiquetaCorriente(p.Corriente) || 'sin corriente', car = nombreDe(estado.carriers, p.CarrierId);
+    cc.appendChild(celda('span', 'cor', cor)).title = cor;   // U-112: en una línea con elipsis; el nombre completo al pasar el ratón
+    cc.appendChild(celda('span', 'car', car)).title = car;
+    const av = celda('div', 'gon'); av.appendChild(barraAvance(gondolasDe(p, ctx.conteo)));
+    const ver = celda('div', 'ver'); ver.appendChild(botonAccion({ texto: 'Ver', alClic: abrir }));
+    for (const c of [pr, celda('span', 'fol', p.Campana || '—'), cc, celda('span', 'fe', fechaPestanaCorta(p, grupo)), av, ver]) r.appendChild(c);
+    r.addEventListener('click', e => { if (!e.target.closest('button')) abrir(); });
     return r;
 }
 function encabezadoProgramas(grupo) {
-    const h = el('div', 'pa-cab'); h.setAttribute('aria-hidden', 'true');
-    for (const s of ['Programa', 'Folio', 'Corriente', 'Carrier', FECHA_PESTANA[grupo], 'Góndolas', '']) h.appendChild(el('span', '', s));
+    const h = el('div', 'pa-cab'); h.setAttribute('role', 'row');
+    for (const s of ['Programa', 'Folio', 'Corriente', 'Carrier', FECHA_PESTANA[grupo], 'Góndolas']) h.appendChild(celda('span', '', s, 'columnheader'));
+    h.appendChild(celda('span', '', '', 'columnheader')).setAttribute('aria-label', 'Abrir');
     return h;
 }
-function barraMes({ mes, ps }) {
-    const b = el('div', 'pa-mes');
-    b.appendChild(el('b', '', mes));
-    b.appendChild(el('span', 'n', plural(ps.length, 'programa')));
-    b.appendChild(el('span', 'g', `${cuentaGondolas(sumaGondolas(ps))} góndolas`));
+/** U-111 (v0.63.0): la barra de mes va en la misma rejilla que los renglones y su subtotal cae en la columna Góndolas. */
+function barraMes({ mes, ps }, ctx) {
+    const b = el('div', 'pa-mes'); b.setAttribute('role', 'row');
+    const m = celda('div', 'mt'); m.appendChild(el('b', '', mes)); m.appendChild(el('span', 'n', plural(ps.length, 'programa')));
+    b.appendChild(m);
+    b.appendChild(celda('span', 'g', textoGondolas(sumaGondolas(ps, ctx.conteo))));
     return b;
 }
 function pintarPrealtas() {
@@ -1783,22 +1838,26 @@ function pintarPrealtas() {
         cb.appendChild(b);
     }
 
+    const emb = embarquesDeProgramas(), ctx = { emb, conteo: conteoRecibidas(emb) };   // C-68: una pasada por repintado
     const vacio = { borrador: 'Ninguna por firmar.', firmada: 'Ninguna firmada: la puerta no puede recibir.', cerrada: 'Ninguna cerrada.' };
+    const TITULO_TABLA = { borrador: 'Programas por firmar', firmada: 'Programas firmados', cerrada: 'Programas cerrados' };
     for (const [grupo, cont] of [['borrador', 'paBorradores'], ['firmada', 'paFirmadas'], ['cerrada', 'paCerradas']]) {
         const c = $(cont); c.textContent = '';
         const ps = grupos[grupo];
         if (ps.length) {
+            c.setAttribute('role', 'table'); c.setAttribute('aria-label', TITULO_TABLA[grupo]);   // U-114
             // Tanda 2 (v0.61.0): Por firmar sigue el orden de captura, sin meses; Firmadas y Cerradas van por mes de su fecha.
             c.appendChild(encabezadoProgramas(grupo));
             let k = 0;
             for (const b of grupo === 'borrador' ? [{ mes: null, ps }] : mesesPrealtas(ps, grupo)) {
-                if (b.mes) c.appendChild(barraMes(b));
-                for (const p of b.ps) c.appendChild(renglonPrograma(p, grupo, k++ % 2 === 1));
+                if (b.mes) c.appendChild(barraMes(b, ctx));
+                for (const p of b.ps) c.appendChild(renglonPrograma(p, grupo, ctx, k++ % 2 === 1));
             }
-            const tot = el('div', 'pa-total'); tot.appendChild(el('b', '', 'Total'));
-            tot.appendChild(el('span', 'g', `${cuentaGondolas(sumaGondolas(ps))} góndolas`));
+            const tot = el('div', 'pa-total'); tot.setAttribute('role', 'row');
+            tot.appendChild(celda('b', 'tt', 'Total'));
+            tot.appendChild(celda('span', 'g', textoGondolas(sumaGondolas(ps, ctx.conteo))));
             c.appendChild(tot);
-        }
+        } else { c.removeAttribute('role'); c.removeAttribute('aria-label'); }
         if (!ps.length) c.appendChild(el('p', 'vacio', estado.prealtas.length || grupo !== 'borrador' ? vacio[grupo] : 'No hay pre-altas. La primera góndola no puede entrar sin una firmada.'));
     }
     $('paNBorradores').textContent = String(grupos.borrador.length);
@@ -1806,10 +1865,13 @@ function pintarPrealtas() {
     $('paNCerradas').textContent = String(grupos.cerrada.length);
     for (const [id, g] of [['paKBorradores', 'borrador'], ['paKFirmadas', 'firmada'], ['paKCerradas', 'cerrada']]) $(id).textContent = String(grupos[g].length);   // la banda
     // Las pestañas con algo que atender se marcan: borradores por firmar y firmadas sin firma o que ya no se mueven.
-    $('paNBorradores').classList.toggle('alerta', grupos.borrador.length > 0);
-    $('paNFirmadas').classList.toggle('alerta', grupos.firmada.some(p => sinMovimientoDe(p) || !prealtaFirmada(p)));
+    // U-110 (v0.63.0): los conteos de la banda siguen la MISMA regla (antes, «Por firmar» siempre ámbar y «Firmadas» siempre verde).
+    const alerta = { borrador: grupos.borrador.length > 0, firmada: grupos.firmada.some(p => sinMovimientoDe(p, emb) || !prealtaFirmada(p)), cerrada: false };
+    $('paNBorradores').classList.toggle('alerta', alerta.borrador);
+    $('paNFirmadas').classList.toggle('alerta', alerta.firmada);
+    for (const b of document.querySelectorAll('.pa-kpis button')) b.classList.toggle('alerta', alerta[b.dataset.pa]);
 
-    const sb = sumaGondolas(grupos.borrador);
+    const sb = sumaGondolas(grupos.borrador, ctx.conteo);
     $('paResBorradores').textContent = grupos.borrador.length
         ? `${plural(sb.esp, 'góndola comprometida', 'góndolas comprometidas')}; ninguna puede entrar hasta que se firme.`
         : '';
@@ -3691,6 +3753,7 @@ $('btnNuevaPrealta').addEventListener('click', nuevaPrealta);
 $('btnPaBases').addEventListener('click', () => abrirForma('paRecientes'));
 $('btnPaBasesCerrar').addEventListener('click', () => cerrarForma('paRecientes'));
 for (const b of $('paTabs').querySelectorAll('button')) b.addEventListener('click', () => elegirVistaPrealtas(b.dataset.pa));
+for (const b of document.querySelectorAll('.pa-kpis button')) b.addEventListener('click', () => elegirVistaPrealtas(b.dataset.pa));   // U-110: el conteo lleva a su pestaña
 $('paCarrier').addEventListener('change', pintarUnidadesChoferesPrealta);
 // U-10 (v0.23.0): «+ Alta de carrier» desde la pre-alta abre la forma del padron ENCIMA (dialog anidado: la pre-alta
 // capturada se queda atras, intacta) y al guardar el carrier nuevo queda elegido aqui, con sus unidades/choferes (vacios).

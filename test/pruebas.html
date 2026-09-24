@@ -158,7 +158,7 @@
             const l = lista(m[1]); if (!l) return error(404, 'lista');
             const campos = JSON.parse(opts.body).fields;
             const mal = validarChoices(l, campos); if (mal) return error(400, mal);
-            const it = { id: DB.siguienteId++, fields: { ...campos } };
+            const it = { id: DB.siguienteId++, fields: { Created: new Date().toISOString(), ...campos } };   // S-29 (v0.63.0): SharePoint pone Created
             l.items.push(it);
             return json(201, item(it));
         }
@@ -735,7 +735,7 @@ try {
         // pre-alta sin firma y Hoy dice que cambió; al volver a lo firmado, vale otra vez. Sin tocar el tenant: va en Motivo.
         {
             const p0 = filas('prealtas')[0], f0 = filas('firmas').find(x => x.fields.Tipo === 'prealta' && Number(x.fields.ObjetoId) === p0.id);
-            R.ok('S-27: la firma de la pre-alta lleva la huella de lo firmado en Motivo', !!f0 && /^huella v1 [0-9a-f]{64}$/.test(f0.fields.Motivo || ''), f0 && f0.fields.Motivo);
+            R.ok('S-27 / S-30: la firma de la pre-alta lleva la huella v2 de lo firmado en Motivo', !!f0 && /^huella v2 [0-9a-f]{64}$/.test(f0.fields.Motivo || ''), f0 && f0.fields.Motivo);
             const u0 = p0.fields.UnidadesIds; p0.fields.UnidadesIds = `${u0};99999`;
             document.querySelector('#pestanas button[data-p="hoy"]').click();
             clic('btnActualizar');
@@ -745,6 +745,13 @@ try {
             p0.fields.UnidadesIds = u0;
             clic('btnActualizar'); await esperar(() => !cambiada(), 'S-27: vuelta a lo firmado');
             R.ok('S-27: vuelta a lo firmado, la firma vale otra vez', !cambiada());
+            // S-29 (v0.63.0): una firma NUEVA sin huella (pestaña vieja, o escrita por Graph) ya no ampara: el transitorio es solo
+            // para las creadas antes del push de la v0.56.0 (Created, que pone SharePoint).
+            const m0 = f0.fields.Motivo; f0.fields.Motivo = null;
+            clic('btnActualizar'); await esperar(cambiada, 'S-29: firma nueva sin huella');
+            R.ok('S-29: una firma creada hoy sin huella no ampara la pre-alta', cambiada());
+            f0.fields.Motivo = m0;
+            clic('btnActualizar'); await esperar(() => !cambiada(), 'S-29: vuelta a la firma con huella');
             document.querySelector('#pestanas button[data-p="prealtas"]').click();
         }
         // C-60 (v0.56.0): el detalle abierto no se repinta con el refresco; Firmar relee y no firma lo que no se vio.
@@ -791,7 +798,9 @@ try {
     } else {
         Object.assign(filas('prealtas')[0].fields, { Estado: 'firmada', FirmadaPor: 'validador@example.invalid', FirmadaEl: new Date().toISOString() });
         // S-01: con la compuerta de firmas activa, el sello solo vale con su renglon en PLANTA_Firmas.
-        filas('firmas').push({ id: DB.siguienteId++, fields: { Title: 'prealta · CLIENTE DEMO-POZO 1-2026', Tipo: 'prealta', ObjetoId: filas('prealtas')[0].id, Firmante: 'validador@example.invalid', FirmadoEl: new Date().toISOString() } });
+        // S-29 (v0.63.0): una firma de hoy solo vale con huella; la del Graph falso la calcula con la misma función que la app.
+        const { huellaPrealta } = await import('./reglas.js');
+        filas('firmas').push({ id: DB.siguienteId++, fields: { Title: 'prealta · CLIENTE DEMO-POZO 1-2026', Tipo: 'prealta', ObjetoId: filas('prealtas')[0].id, Firmante: 'validador@example.invalid', FirmadoEl: new Date().toISOString(), Created: new Date().toISOString(), Motivo: huellaPrealta(filas('prealtas')[0].fields) } });
         R.log('nota', 'rol sin firma: pre-alta firmada directo en la lista, con su renglón en PLANTA_Firmas');
     }
 
@@ -813,6 +822,37 @@ try {
             R.ok('v0.61.0: los renglones de programa van en cebra', rs.length > 0 && cebra($('paBorradores')) && cebra($('paFirmadas')), String(rs.length));
             const r0 = tf.querySelector('.renglon.prog');
             R.ok('v0.61.0: el renglón trae folio, corriente, carrier y fecha en su columna', !!r0.querySelector('.fol') && !!r0.querySelector('.cc .cor') && !!r0.querySelector('.cc .car') && /\d{2}\/\d{2}\/\d{4}/.test(r0.querySelector('.fe').textContent), r0.querySelector('.fe').textContent);
+            // C-70 (v0.63.0): la cebra con VARIOS renglones y cruzando una barra de mes — con uno solo la aserción no podía fallar.
+            // Dos firmadas más de hace 40 días (otro mes), una con estimado y otra sin él (C-69: no se mezclan en la fracción).
+            const hace40 = new Date(Date.now() - 40 * 86400000).toISOString();
+            const extra = [1, 2].map(i => ({ id: DB.siguienteId++, fields: { Title: `CEBRA ${i}-POZO 1-2026`, Estado: 'firmada', FirmadaPor: 'validador@example.invalid', FirmadaEl: hace40, Created: hace40, Corriente: 'base-aceite', CarrierId: carrierId, Campana: `L-99-07${i}`, ...(i === 1 ? { GondolasEsperadas: 4 } : {}) } }));
+            const embC = { id: DB.siguienteId++, fields: { Title: '', Etapa: 'compuerta', Compuerta: 'pasa', Arribo: new Date().toISOString(), PlacaTractor: 'CEBRA02', PreAltaId: extra[1].id, CarrierId: carrierId } };
+            filas('prealtas').push(...extra); filas('embarques').push(embC);
+            clic('btnActualizar'); await esperar(() => tf.querySelectorAll('.renglon.prog').length === 3, 'C-70: tres firmadas en dos meses');
+            if (params.get('corte') === 'cebra') {   // solo para capturas: la tabla con varios renglones, dos meses y una razón social larga
+                filas('carriers')[0].fields.Title = 'TRANSPORTES Y SERVICIOS AMBIENTALES DEL GOLFO SA DE CV';
+                clic('btnActualizar'); await esperar(() => tf.textContent.includes('GOLFO'), 'corte cebra');
+                throw new Error('CORTE');
+            }
+            const orden = [...tf.children].map(x => x.classList.contains('pa-mes') ? 'M' : x.classList.contains('renglon') ? (x.classList.contains('non') ? 'n' : 'p') : '');
+            R.ok('C-70: la cebra sigue alternando a través de la barra de mes (p · M · n p)', orden.filter(Boolean).join('') === 'MpMnp', orden.join(''));
+            const mesViejo = tf.querySelectorAll('.pa-mes')[1];
+            R.ok('C-69: el subtotal no mezcla programas con y sin estimado', mesViejo.querySelector('.g').textContent === '0/4 góndolas + 1 sin estimado', mesViejo.querySelector('.g').textContent);
+            R.ok('U-111: el subtotal de mes y el Total caen en la columna Góndolas', getComputedStyle(mesViejo.querySelector('.g')).gridColumnStart === 'gon-start' && getComputedStyle(tf.querySelector('.pa-total .g')).gridColumnStart === 'gon-start', getComputedStyle(mesViejo.querySelector('.g')).gridColumnStart);
+            // U-114: la rejilla se anuncia como tabla.
+            R.ok('U-114: la tabla es tabla para el lector de pantalla (table · 7 columnheader · row/cell)', tf.getAttribute('role') === 'table' && tf.querySelectorAll('[role="columnheader"]').length === 7 && !tf.querySelector('.pa-cab[aria-hidden]') && [...tf.querySelectorAll('.renglon.prog')].every(r => r.getAttribute('role') === 'row' && r.querySelectorAll('[role="cell"]').length === 7));
+            // U-109: tocar el renglón fuera de Ver abre la ficha.
+            tf.querySelector('.renglon.prog .fol').click(); await esperar(() => visible('paDetalle'), 'U-109: el renglón abre la ficha');
+            R.ok('U-109: tocar el folio del renglón abre la ficha como Ver', visible('paDetalle'));
+            clic('btnVolverPrealtas');
+            // U-110: los conteos de la banda eligen su pestaña; el color sale de la regla de .alerta (las dos extra van sin firma).
+            document.querySelector('.pa-kpis button[data-pa="cerrada"]').click();
+            R.ok('U-110: tocar «Cerradas» en la banda abre su pestaña', !$('ppCerradas').hidden && $('ppFirmadas').hidden && document.querySelector('#paTabs [data-pa="cerrada"]').getAttribute('aria-pressed') === 'true');
+            R.ok('U-110: «Firmadas» se pinta ámbar solo con algo que atender, igual que su pestaña', document.querySelector('.pa-kpis [data-pa="firmada"]').classList.contains('alerta') === $('paNFirmadas').classList.contains('alerta') && $('paNFirmadas').classList.contains('alerta') && document.querySelector('.pa-kpis [data-pa="borrador"]').classList.contains('alerta') === $('paNBorradores').classList.contains('alerta'));
+            document.querySelector('.pa-kpis button[data-pa="firmada"]').click();
+            for (const x of extra) filas('prealtas').splice(filas('prealtas').indexOf(x), 1);
+            filas('embarques').splice(filas('embarques').indexOf(embC), 1);
+            clic('btnActualizar'); await esperar(() => tf.querySelectorAll('.renglon.prog').length === 1, 'C-70: retiro de las firmadas extra');
         }
         // Rediseño de Pre-altas, tanda 1 (P2): ya firmada, sale como base; usarla llena cliente, generador, corriente y carrier y
         // deja el pozo vacío con el foco. La pestaña Firmadas la cuenta.
@@ -822,6 +862,14 @@ try {
             clic('btnPaBases');
             const b = [...document.querySelectorAll('#paBases .pa-base')].find(x => x.textContent.includes('CLIENTE DEMO-POZO 1-2026'));
             R.ok('tanda 1: la firmada sale en «Partir de uno reciente» y Firmadas la cuenta', visible('paRecientes') && !!b && $('paNFirmadas').textContent === '1' && $('paKFirmadas').textContent === '1', $('paNFirmadas').textContent);
+            // C-72 (v0.63.0): con el pop-up abierto el refresco no repinta sus botones bajo el dedo. Con el modal abierto el botón
+            // Actualizar es inerte, así que se dispara el refresco silencioso de volver a la app (visibilitychange tras un rato).
+            {
+                const n72 = DB.llamadas.length, dn = Date.now;
+                Date.now = () => dn() + 10 * 60000; document.dispatchEvent(new Event('visibilitychange')); Date.now = dn;
+                await esperar(() => DB.llamadas.length > n72 && !$('btnActualizar').disabled, 'C-72: refresco silencioso con el pop-up abierto');
+                R.ok('C-72: el refresco no reemplaza los botones del pop-up de recientes abierto', b.isConnected && visible('paRecientes'), `${DB.llamadas.length - n72} llamadas`);
+            }
             b.click(); await esperar(() => visible('paAsis'), 'pre-alta desde la base');
             R.ok('v0.60.0: elegir la base cierra el pop-up de recientes', !visible('paRecientes'));
             R.ok('tanda 2: la base abre el asistente en el paso 2 con su aviso y los pasos 1 y 3 ya vistos', !$('paPaso2').hidden && visible('paBaseAviso') && !$('paPasos').querySelector('[data-p="3"]').disabled && $('paPasos').querySelector('[data-p="4"]').disabled);
@@ -1554,6 +1602,29 @@ try {
         irGondolas();
         R.ok('el cerrado de hace 120 días NO se carga (fuera de la ventana)', !$('gHoy').textContent.includes('VIEJA01') && !$('baLista').textContent.includes('VIEJA01'));
         R.ok('el ABIERTO de hace 120 días SÍ se carga (la fosa sigue ocupada)', $('baLista').textContent.includes('MINSA/RME/099'));
+        // C-68 (v0.63.0): un programa que empezó antes de la ventana cuenta TODAS sus góndolas (se leen aparte por PreAltaId) y
+        // una firmada larga no se declara «sin un solo arribo»; esos embarques NO entran a Báscula ni al Historial.
+        {
+            const h150 = hace(150);
+            const paC = { id: DB.siguienteId++, fields: { Title: 'VIEJA CERRADA-POZO 1-2025', Estado: 'cerrada', FirmadaPor: 'validador@example.invalid', FirmadaEl: h150, CerradaEl: hace(100), Created: h150, Corriente: 'base-aceite', CarrierId: carrierId, Campana: 'L-99-068', GondolasEsperadas: 3 } };
+            const paF = { id: DB.siguienteId++, fields: { Title: 'VIEJA FIRMADA-POZO 2-2025', Estado: 'firmada', FirmadaPor: 'validador@example.invalid', FirmadaEl: h150, Created: h150, Corriente: 'base-aceite', CarrierId: carrierId, Campana: 'L-99-069', GondolasEsperadas: 9 } };
+            const viejos = [paC.id, paC.id, paF.id].map((pid, i) => ({ id: DB.siguienteId++, fields: { Title: `E-${aa}-0098${i}`, Etapa: 'cerrado', Arribo: hace(140 - i), PlacaTractor: 'VIEJA68', NetoKg: 1000, CarrierId: carrierId, PreAltaId: pid } }));
+            filas('prealtas').push(paC, paF); filas('embarques').push(...viejos);
+            clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'C-68: recarga con programas viejos');
+            document.querySelector('#pestanas button[data-p="prealtas"]').click();
+            const fila = (tabla, t) => [...$(tabla).querySelectorAll('.renglon.prog')].find(r => r.textContent.includes(t));
+            const rC = fila('paCerradas', 'VIEJA CERRADA'), rF = fila('paFirmadas', 'VIEJA FIRMADA');
+            R.ok('C-68: la cerrada de hace 150 días cuenta sus 2 góndolas fuera de la ventana (antes 0/3)', !!rC && rC.querySelector('.gon').textContent.includes('2/3'), rC && rC.querySelector('.gon').textContent);
+            R.ok('C-68: la firmada vieja con arribos fuera de la ventana no sale «sin un solo arribo»', !!rF && rF.querySelector('.gon').textContent.includes('1/9') && !rF.textContent.includes('sin un solo arribo') && rF.textContent.includes('sin arribos desde'), rF && rF.textContent.slice(0, 160));
+            R.ok('C-68: los embarques se piden por PreAltaId, no por la lista entera', DB.filtros.some(f => f.includes(`fields/PreAltaId eq ${paC.id}`)));
+            irGondolas();
+            R.ok('C-68: esos embarques NO entran a Báscula ni a su Historial (la ventana sigue igual)', !$('baCerrados').textContent.includes('VIEJA68') && !$('baLista').textContent.includes('VIEJA68'));
+            for (const p of [paC, paF]) filas('prealtas').splice(filas('prealtas').indexOf(p), 1);
+            for (const e of viejos) filas('embarques').splice(filas('embarques').indexOf(e), 1);
+            $('avisos').textContent = '';
+            clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'C-68: retiro de los programas viejos');
+            irGondolas();
+        }
         // Cerrados (v0.19.0): el folio cerrado hoy se vuelve a ver desde Báscula y su ticket se reimprime.
         R.ok('Cerrados lista el folio cerrado', $('baCerrados').textContent.includes(emb1.fields.Title), $('baCerrados').textContent.slice(0, 160));
         R.ok('Cerrados NO trae el de hace 120 días (misma ventana)', !$('baCerrados').textContent.includes('VIEJA01'));

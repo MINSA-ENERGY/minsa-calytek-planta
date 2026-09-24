@@ -277,11 +277,15 @@ export function fechaDePestana(p, grupo) {
     return p.FirmadaEl || null;
 }
 const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-/** «2026-09» de una fecha: la de calendario tal cual (aaaa-mm-dd), la de reloj en hora de México. '' si no hay o no se lee. */
+/**
+ * «2026-09» de una fecha: la de calendario (aaaa-mm-dd, sin hora) tal cual; la de reloj en hora de México. '' si no hay o no
+ * se lee. C-73 (v0.63.0): un sello a las 00:00:00Z es de reloj como cualquier otro —FirmadaEl y CerradaEl los pone
+ * new Date().toISOString()—, así que va a México igual que la columna de fecha (antes caía en el mes siguiente).
+ */
 export function claveMes(iso) {
     if (!iso) return '';
     const s = String(iso);
-    if (/^\d{4}-\d{2}-\d{2}(T00:00:00(\.0+)?Z)?$/.test(s)) return s.slice(0, 7);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(0, 7);
     const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(horaMexico(s, 'fecha'));   // «30/09/2026, 21:00»
     return m ? `${m[3]}-${m[2]}` : '';
 }
@@ -309,17 +313,33 @@ export function mesesPrealtas(ps, grupo) {
  * SHA-256 sincrono en JS puro porque prealtaFirmada() es sincrona y se llama al pintar; reglas.test.js lo coteja con node:crypto.
  */
 export const CAMPOS_HUELLA_PREALTA = ['Title', 'Cliente', 'Generador', 'GeneradorRegistro', 'GeneradorDireccion', 'Pozo', 'Corriente', 'CarrierId', 'UnidadesIds', 'ChoferesIds'];
-export function textoHuellaPrealta(p) {
-    return CAMPOS_HUELLA_PREALTA.map(k => {
-        const v = p?.[k] ?? '';
-        if (k === 'UnidadesIds' || k === 'ChoferesIds') return `${k}=${lista(v).map(Number).sort((a, b) => a - b).join(';')}`;
-        if (k === 'CarrierId') return `${k}=${v === '' ? '' : Number(v)}`;
-        return `${k}=${String(v).trim()}`;
-    }).join('\n');
+function valorHuella(k, v) {
+    if (k === 'UnidadesIds' || k === 'ChoferesIds') return lista(v).map(Number).sort((a, b) => a - b).join(';');
+    if (k === 'CarrierId') return v === '' ? '' : String(Number(v));
+    return String(v).trim();
 }
-export const huellaPrealta = p => 'huella v1 ' + sha256Hex(textoHuellaPrealta(p));
-/** Una firma sin huella es de antes de la v0.56.0 y vale mientras tanto (transitorio, a proposito: no dejar la puerta sin programas). */
-export function firmaAmparaPrealta(motivo, p) { const m = String(motivo || '').trim(); return !m || m === huellaPrealta(p); }
+/** La v1: «Campo=valor» unidos por salto de línea. Solo se coteja para las firmas de antes de CORTE_HUELLA_V1 (S-30). */
+export function textoHuellaPrealta(p) { return CAMPOS_HUELLA_PREALTA.map(k => `${k}=${valorHuella(k, p?.[k] ?? '')}`).join('\n'); }
+/**
+ * S-30 (v0.63.0): la v2 hashea el ARREGLO de valores en JSON. En la v1 un salto de línea dentro de un campo libre (Pozo,
+ * Generador…) seguido de «Campo=» podía mover texto al campo vecino sin cambiar el hash; en JSON cada valor va entrecomillado.
+ */
+export const huellaPrealta = p => 'huella v2 ' + sha256Hex(JSON.stringify(CAMPOS_HUELLA_PREALTA.map(k => valorHuella(k, p?.[k] ?? ''))));
+const huellaPrealtaV1 = p => 'huella v1 ' + sha256Hex(textoHuellaPrealta(p));
+/**
+ * S-29 (v0.63.0): el transitorio de la firma SIN huella vale solo para las firmas creadas antes del push de la v0.56.0 —la
+ * fecha la pone SharePoint (Created), no la app—; una firma nueva sin Motivo (pestaña vieja, o escrita por Graph) ya no
+ * ampara nada. La v1 vale solo para las firmas de antes de la v0.63.0. Sin Created no hay transitorio: falla cerrado.
+ */
+export const CORTE_SIN_HUELLA = '2026-09-24T07:31:21Z';   // push de la v0.56.0 (3093549)
+export const CORTE_HUELLA_V1 = '2026-09-25T06:00:00Z';    // fin del 24-sep en México: el día de la v0.63.0
+export function firmaAmparaPrealta(motivo, p, creada) {
+    const m = String(motivo || '').trim();
+    const antesDe = corte => { const t = Date.parse(creada || ''); return Number.isFinite(t) && t < Date.parse(corte); };
+    if (!m) return antesDe(CORTE_SIN_HUELLA);
+    if (m.startsWith('huella v1 ')) return antesDe(CORTE_HUELLA_V1) && m === huellaPrealtaV1(p);
+    return m === huellaPrealta(p);
+}
 
 const PRIMOS64 = (() => { const p = []; for (let x = 2; p.length < 64; x++) if (p.every(q => x % q)) p.push(x); return p; })();
 const fraccion32 = v => Math.floor((v - Math.floor(v)) * 2 ** 32) >>> 0;

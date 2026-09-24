@@ -314,11 +314,12 @@
           <h1>Pre-altas</h1>
           <p>Los programas que el cliente manda por correo, firmados antes de que llegue la primera góndola.</p>
         </div>
-        <dl class="pa-kpis">
-          <div class="bo"><dt>Por firmar</dt><dd id="paKBorradores">0</dd></div>
-          <div class="fi"><dt>Firmadas</dt><dd id="paKFirmadas">0</dd></div>
-          <div class="ce"><dt>Cerradas</dt><dd id="paKCerradas">0</dd></div>
-        </dl>
+        <!-- U-110 (v0.63.0): cada conteo es un botón que elige su pestaña, y su color sale de la regla de .alerta de las pestañas. -->
+        <div class="pa-kpis" role="group" aria-label="Conteos por estado">
+          <button type="button" data-pa="borrador"><b id="paKBorradores">0</b><span>Por firmar</span></button>
+          <button type="button" data-pa="firmada"><b id="paKFirmadas">0</b><span>Firmadas</span></button>
+          <button type="button" data-pa="cerrada"><b id="paKCerradas">0</b><span>Cerradas</span></button>
+        </div>
         <div class="pa-acciones" id="paInicio">
           <button id="btnPaBases" class="secundario" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>Partir de uno reciente</button>
           <button id="btnNuevaPrealta" class="principal mn-btn" type="button">+ Nueva pre-alta</button>

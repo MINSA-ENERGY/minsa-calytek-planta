@@ -1,7 +1,7 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, claveMes, mesesPrealtas } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, textoHuellaPrealta, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, claveMes, mesesPrealtas } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -343,20 +343,34 @@ assert.equal(clienteDe(null), '');
 for (const t of ['', 'abc', 'a'.repeat(55), 'a'.repeat(56), 'a'.repeat(64), 'Pozo=IXACHI ñ — ✓', 'x'.repeat(1000)])
     assert.equal(sha256Hex(t), createHash('sha256').update(t, 'utf8').digest('hex'), `sha256 de ${t.length} caracteres`);
 const pf = { Title: 'GSM-IXACHI 15-2026', Cliente: 'GSM', CarrierId: 5, UnidadesIds: '12;3', ChoferesIds: '7', Corriente: 'base-aceite', Generador: 'GEN DEMO' };
-const hf = huellaPrealta(pf);
-assert.ok(hf.startsWith('huella v1 ') && hf.length < 255, 'cabe en la columna de texto Motivo');
-assert.ok(firmaAmparaPrealta(hf, { ...pf, UnidadesIds: '3; 12', CarrierId: '5', Notas: 'otra', GondolasEsperadas: 9 }), 'orden de ids, tipo del id y notas no cuentan');
-assert.ok(!firmaAmparaPrealta(hf, { ...pf, UnidadesIds: '3;12;99' }), 'una unidad agregada tras firmar');
-assert.ok(!firmaAmparaPrealta(hf, { ...pf, CarrierId: 6 }), 'otro carrier tras firmar');
-assert.ok(!firmaAmparaPrealta(hf, { ...pf, Corriente: 'base-agua' }), 'otra corriente tras firmar');
-assert.ok(firmaAmparaPrealta('', { ...pf, CarrierId: 6 }), 'firma sin huella: transitorio');
+const hf = huellaPrealta(pf), hoyF = '2026-09-30T18:00:00Z';
+assert.ok(hf.startsWith('huella v2 ') && hf.length < 255, 'cabe en la columna de texto Motivo');
+assert.ok(firmaAmparaPrealta(hf, { ...pf, UnidadesIds: '3; 12', CarrierId: '5', Notas: 'otra', GondolasEsperadas: 9 }, hoyF), 'orden de ids, tipo del id y notas no cuentan');
+assert.ok(firmaAmparaPrealta(hf, pf), 'la v2 vale sin importar cuándo se creó la firma');
+assert.ok(!firmaAmparaPrealta(hf, { ...pf, UnidadesIds: '3;12;99' }, hoyF), 'una unidad agregada tras firmar');
+assert.ok(!firmaAmparaPrealta(hf, { ...pf, CarrierId: 6 }, hoyF), 'otro carrier tras firmar');
+assert.ok(!firmaAmparaPrealta(hf, { ...pf, Corriente: 'base-agua' }, hoyF), 'otra corriente tras firmar');
+// S-29 (v0.63.0): sin huella vale solo si SharePoint la creó antes del push de la v0.56.0; sin Created, falla cerrado.
+assert.ok(firmaAmparaPrealta('', { ...pf, CarrierId: 6 }, '2026-09-20T12:00:00Z'), 'firma sin huella de antes de v0.56.0: transitorio');
+assert.ok(!firmaAmparaPrealta('', pf, '2026-09-24T12:00:00Z'), 'firma sin huella creada después del corte: no ampara');
+assert.ok(!firmaAmparaPrealta('', pf), 'firma sin huella y sin Created: no ampara');
+// S-30 (v0.63.0): la v1 se podía engañar moviendo texto entre campos contiguos; la v2 no. La v1 vale solo antes de su corte.
+{
+    const a = { ...pf, Pozo: 'P1\nCorriente=base-aceite', Corriente: '' }, b = { ...pf, Pozo: 'P1', Corriente: 'base-aceite\nCorriente=' };
+    assert.equal(textoHuellaPrealta(a).split('\n').length, textoHuellaPrealta(b).split('\n').length);
+    assert.notEqual(huellaPrealta(a), huellaPrealta(b), 'v2: mover texto entre campos cambia la huella');
+    const v1 = 'huella v1 ' + sha256Hex(textoHuellaPrealta(pf));
+    assert.ok(firmaAmparaPrealta(v1, pf, '2026-09-24T12:00:00Z'), 'v1 de una firma de antes del corte: vale');
+    assert.ok(!firmaAmparaPrealta(v1, pf, '2026-09-26T12:00:00Z'), 'v1 escrita después del corte: no ampara');
+    assert.ok(!firmaAmparaPrealta(v1, { ...pf, CarrierId: 6 }, '2026-09-24T12:00:00Z'), 'v1 vieja pero con el renglón cambiado: no ampara');
+}
 
 // Pantalla principal de Pre-altas, tanda 2 (v0.61.0): los programas de una pestaña en bloques por mes.
 {
     assert.equal(fechaDePestana({ FechaEstimada: '2026-09-30', FirmadaEl: '2026-09-01T18:00:00Z' }, 'borrador'), '2026-09-30');
     assert.equal(fechaDePestana({ FirmadaEl: '2026-09-01T18:00:00Z', CerradaEl: null }, 'cerrada'), '2026-09-01T18:00:00Z', 'cerrada sin sello cae en su firma');
     assert.equal(claveMes('2026-10-01'), '2026-10', 'fecha de calendario tal cual');
-    assert.equal(claveMes('2026-10-01T00:00:00Z'), '2026-10', 'medianoche UTC de una fecha de calendario no se corre al 30-sep');
+    assert.equal(claveMes('2026-10-01T00:00:00Z'), '2026-09', 'C-73: un sello a medianoche UTC es de reloj: las 18:00 del 30-sep en México');
     assert.equal(claveMes('2026-10-01T03:00:00Z'), '2026-09', 'la de reloj va en hora de Mexico: las 21:00 del 30-sep');
     assert.equal(claveMes(null), '');
     const ps = [
