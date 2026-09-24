@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.71.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.72.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -34,7 +34,7 @@ const estado = {
     paAsis: null,            // v0.54.0: el recorrido del asistente de pre-alta (paso, max, revisar...); null = cerrado
     padronEdit: null,        // {clave, x} del renglon del padron en edicion, o null
     focoAntesVeredicto: null, // elemento con el foco antes de abrir el veredicto (vuelve ahi al cerrarlo)
-    padronVista: { v: 'lista', tab: 'vigentes', sub: 'unidades', carrier: null, ficha: null, desde: null },   // v0.71.0: vista del padron por carrier
+    padronVista: { v: 'lista', tab: 'vigentes', sub: 'unidades', carrier: null, ficha: null, desde: null },   // v0.72.0: vista del padron por carrier
     padronCarrier: null,     // id del carrier del expediente o la ficha del padron (preselecciona el alta, U-46)
     ultimoCarrierPadron: null,   // U-46: el ultimo carrier dado de alta o usado en un alta de unidad/chofer (solo esta sesion)
     pestana: 'hoy',
@@ -581,7 +581,8 @@ function capturaAMedias() {
     const abierto = id => !$(id).classList.contains('oculto');
     // Tanda 5 (decisión 11): el asistente de la báscula abierto —pesaje, pausa «A descargar» o ticket— cuenta entero.
     if (abierto('baAsis') || abierto('veredicto')) return true;
-    if (estado.pestana === 'prealtas' && asistentePrealtaAbierto()) return true;   // v0.54.0: el asistente de pre-alta a la vista
+    if (estado.pestana === 'prealtas' && asistentePrealtaAbierto()) return true;
+    if (estado.pestana === 'padron' && asistentePadronAbierto()) return true;   // v0.72.0: el alta del padrón en página   // v0.54.0: el asistente de pre-alta a la vista
     if (['paDetalle', 'paRecientes', 'pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer'].some(id => $(id).open)) return true;
     if (estado.pestana === 'puerta' && puertaConCaptura()) return true;
     return false;
@@ -671,7 +672,7 @@ function pintarRotulo(p) {
 function irA(p) {
     if (p !== 'bascula') salirDelAsistente();
     ocultarListoPrealta();   // P10: la confirmación no guarda nada; salir o volver por el rail la suelta
-    if (p === 'padron') estado.padronVista.v = 'lista';   // v0.71.0: el rail lleva a la lista de carriers, no al último expediente o ficha
+    if (p === 'padron' && estado.padronVista.v !== 'asis') estado.padronVista.v = 'lista';   // v0.72.0: el rail lleva a la lista; v0.72.0: un alta a medias se conserva
     estado.pestana = p;
     for (const b of botonesRail()) { if (b.dataset.p === (RAIL_DE[p] || p)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }   // U-57 (v0.29.0): <nav> con aria-current, como .mn-rail de la piel; el role=tablist prometía flechas y tabpanel que no había
     for (const s of SECCIONES) $('p-' + s).classList.toggle('oculto', s !== p);
@@ -2927,7 +2928,7 @@ function ajustarTecladoPeso() { $('baKg').inputMode = ESCRITORIO.matches ? 'nume
 ESCRITORIO.addEventListener('change', ajustarTecladoPeso); ajustarTecladoPeso();
 const normaliza = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 /**
- * v0.71.0 — EL PADRÓN POR CARRIER (artifact G77viANSEuwDFfDvkxVWFS, OK de Carlos 2026-09-24). Tres vistas en la pestaña, con la
+ * v0.72.0 — EL PADRÓN POR CARRIER (artifact G77viANSEuwDFfDvkxVWFS, OK de Carlos 2026-09-24). Tres vistas en la pestaña, con la
  * banda de Pre-altas: 'lista' (carriers por estado, o la búsqueda de placa/chofer), 'carrier' (el expediente: unidades y choferes
  * en pestañas y el oficio a un lado) y 'ficha' (un renglón, con «Dar de baja» / «Eliminar» / «Reactivar» grande abajo). Los
  * estados son etiquetas (texto mono de color, sin píldora). estado.padronCarrier sigue siendo el carrier elegido que preselecciona
@@ -3021,22 +3022,26 @@ function volverPadron() {
 
 function pintarPadron() {
     const puede = PUEDE.capturarPrealta(estado.rol);
-    for (const id of ['pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer']) cerrarForma(id);
-    estado.padronEdit = null;
-    for (const s of [$('puuCarrier'), $('pchCarrier')]) opciones(s, estado.carriers.filter(activo), c => c.id, c => c.Title);
     const p = estado.padronVista;
+    if (p.v === 'asis' && !p.asis) p.v = 'lista';
+    if (p.v !== 'asis') {   // v0.72.0: con el asistente abierto, repintar no suelta la edición ni cambia las opciones del carrier elegido
+        for (const id of ['pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer']) cerrarForma(id);
+        estado.padronEdit = null;
+        for (const s of [$('puuCarrier'), $('pchCarrier')]) opciones(s, estado.carriers.filter(activo), c => c.id, c => c.Title);
+    }
     // Lo que se veía pudo irse (se eliminó, o el refresco ya no lo trae): se cae a la vista de arriba.
     if (p.v === 'ficha' && !(p.ficha && porId(estado[p.ficha.clave], p.ficha.id))) p.v = porId(estado.carriers, p.carrier) && p.desde !== 'buscar' ? 'carrier' : 'lista';
     if (p.v === 'carrier' && !porId(estado.carriers, p.carrier)) p.v = 'lista';
-    const c = p.v === 'lista' ? null : porId(estado.carriers, p.carrier);
+    const c = p.v === 'lista' ? null : porId(estado.carriers, p.carrier);   // en el asistente: el carrier desde el que se abrió, si hay
     estado.padronCarrier = c ? c.id : null;
-    $('pdLista').hidden = p.v !== 'lista'; $('pdExpediente').hidden = p.v !== 'carrier'; $('pdFicha').hidden = p.v !== 'ficha';
-    $('btnPdVolver').classList.toggle('oculto', p.v === 'lista');
+    $('pdLista').hidden = p.v !== 'lista'; $('pdExpediente').hidden = p.v !== 'carrier'; $('pdFicha').hidden = p.v !== 'ficha'; $('pdAsis').hidden = p.v !== 'asis';
+    $('btnPdVolver').classList.toggle('oculto', p.v === 'lista' || p.v === 'asis');
+    $('btnPdCancelar').classList.toggle('oculto', p.v !== 'asis');
     $('btnNuevoCarrier').classList.toggle('oculto', !puede || p.v !== 'lista');
     const altas = puede && p.v === 'carrier' && activo(c);
     $('btnNuevaUnidad').classList.toggle('oculto', !(altas && p.sub === 'unidades'));
     $('btnNuevoChofer').classList.toggle('oculto', !(altas && p.sub === 'choferes'));
-    if (p.v === 'lista') pintarListaPd(); else if (p.v === 'carrier') pintarExpedientePd(c); else pintarFichaPd(c);
+    if (p.v === 'lista') pintarListaPd(); else if (p.v === 'carrier') pintarExpedientePd(c); else if (p.v === 'ficha') pintarFichaPd(c); else pintarAsistentePd(c);
 }
 
 function pintarListaPd() {
@@ -3318,11 +3323,161 @@ function abrirFormaPadron(clave, x = null) {
         if (quiero !== null && quiero !== undefined && [...sel.options].some(o => o.value === String(quiero))) sel.value = String(quiero);
     }
     tituloFormaPadron(clave);
+    if (estado.pestana === 'padron') { abrirAsistentePadron(clave, x); return; }   // v0.72.0
+    // Desde la pre-alta: si el Padrón tenía abierta el alta del mismo tipo, se suelta (el cuerpo es uno solo y se muda al dialog).
+    const pv = estado.padronVista;
+    if (asistentePadronAbierto() && pv.asis.clave === clave) { Object.assign(pv, pv.asis.volver); pv.asis = null; }
+    cuerpoAlDialog(clave);
     abrirForma(FORMA_PADRON[clave].forma);
 }
 function cerrarFormaPadron(clave) {
     estado.padronEdit = null; tituloFormaPadron(clave);
     cerrarForma(FORMA_PADRON[clave].forma);
+    const pv = estado.padronVista;
+    if (asistentePadronAbierto() && pv.asis.clave === clave) { Object.assign(pv, pv.asis.volver); pv.asis = null; cuerpoAlDialog(clave); }   // v0.72.0
+}
+// ---- v0.72.0 (tanda 2 del padrón por carrier): alta y edición EN LA PÁGINA, por pasos, con «Así va» a un lado. El cuerpo de la
+// forma (#pdCuerpo<Clave>) es el mismo nodo que vive en el <dialog>: desde el Padrón se muda a #pdAsisCuerpo y se ve un paso a la
+// vez; desde la pre-alta (U-10, «+ Alta de carrier» encima del asistente) vuelve al dialog y se ve entero. guardarPadron no cambió.
+const CUERPO_PADRON = { carriers: 'pdCuerpoCarriers', unidades: 'pdCuerpoUnidades', choferes: 'pdCuerpoChoferes' };
+const REVISAR_PADRON = ['Revisar', 'Revisa antes de guardar', 'Cotéjalo contra el oficio. Toca un paso de arriba para corregirlo.'];
+const PASOS_PADRON = {
+    carriers: [['Oficio', '¿Qué dice el oficio ASEA?', 'Razón social, autorización, vigencia, folio y corrientes, como vienen en el oficio.'],
+        ['Registro', '¿Y su registro?', 'El registro SCT y la vigencia de la CSF.'], REVISAR_PADRON],
+    unidades: [['Vehículo', '¿Qué placas trae el oficio?', 'Carrier, placas, tipo y capacidad.'],
+        ['Documentos', '¿Y sus documentos?', 'Serie, tarjeta de circulación y póliza, con sus vigencias.'], REVISAR_PADRON],
+    choferes: [['Chofer y licencia', '¿Quién maneja?', 'El nombre como viene en la licencia, su número y su vigencia.'], REVISAR_PADRON],
+};
+const OBLIGATORIOS_PADRON = {
+    carriers: { 1: [['pcTitle', 'Falta la razón social.']] },
+    unidades: { 1: [['puuCarrier', 'Falta el carrier.'], ['puuPlaca', 'Falta la placa del tractor.']] },
+    choferes: { 1: [['pchCarrier', 'Falta el carrier.'], ['pchNombre', 'Falta el nombre.']] },
+};
+const ASIVA_PADRON = {
+    carriers: [['Oficio', [['Razón social', 'pcTitle'], ['Autorización', 'pcAut'], ['Vence', 'pcVig'], ['Folio', 'pcFolio'], ['Corrientes', '@corr']]], ['Registro', [['SCT', 'pcSCT'], ['CSF vence', 'pcCSF']]]],
+    unidades: [['Vehículo', [['Carrier', 'puuCarrier'], ['Placa tractor', 'puuPlaca'], ['Placa plana', 'puuPlana'], ['Tipo', 'puuTipo'], ['Capacidad', 'puuCap']]],
+        ['Documentos', [['Serie', 'puuSerie'], ['Tarjeta vence', 'puuTarjetaVig'], ['Póliza', 'puuPoliza'], ['Póliza vence', 'puuPolizaVig']]]],
+    choferes: [['Chofer', [['Carrier', 'pchCarrier'], ['Nombre', 'pchNombre'], ['Licencia', 'pchLic'], ['Vence', 'pchLicVig']]]],
+};
+function valorCampoPadron(id) {
+    if (id === '@corr') return [...document.querySelectorAll('input[name="pcCorr"]:checked')].map(c => etiquetaCorriente(c.value)).join(', ');
+    const c = $(id);
+    if (c.tagName === 'SELECT') return c.value && c.selectedOptions[0] ? c.selectedOptions[0].textContent : '';
+    return c.value.trim();
+}
+function cuerpoAlDialog(clave) {
+    const c = $(CUERPO_PADRON[clave]), d = $(FORMA_PADRON[clave].forma);
+    if (c.parentElement !== d) d.insertBefore(c, d.querySelector('.dlg-botones'));
+    for (const p of c.querySelectorAll('.pd-paso')) p.hidden = false;
+}
+const asistentePadronAbierto = () => estado.padronVista.v === 'asis' && !!estado.padronVista.asis;
+function abrirAsistentePadron(clave, x) {
+    const p = estado.padronVista;
+    const volver = { v: p.v, carrier: p.carrier, sub: p.sub, ficha: p.ficha, desde: p.desde };
+    $('pdAsisCuerpo').textContent = ''; $('pdAsisCuerpo').appendChild($(CUERPO_PADRON[clave]));
+    limpiarAvisos();
+    p.asis = { clave, paso: 1, max: x ? PASOS_PADRON[clave].length : 1, volver };
+    p.v = 'asis';
+    $('pdAsis').dataset.huella = huellaForma($('pdAsisCuerpo'));
+    pintarPadron(); window.scrollTo({ top: 0 }); enfocarPasoPadron();
+}
+function enfocarPasoPadron() {
+    const a = estado.padronVista.asis; if (!a) return;
+    const campo = $(CUERPO_PADRON[a.clave]).querySelector(`.pd-paso[data-paso="${a.paso}"] :is(input, select)`);
+    (campo || $('pdAsisPregunta')).focus({ preventScroll: true });
+}
+function irPasoPadron(n) {
+    const a = estado.padronVista.asis; if (!a) return;
+    a.paso = n; a.max = Math.max(a.max, n);
+    limpiarAvisos(); pintarPadron(); window.scrollTo({ top: 0 }); enfocarPasoPadron();
+}
+/** Lo que le falta a un paso: los obligatorios y las fechas del paso (vacías o bien escritas). [id, texto] o null. */
+function faltaPasoPadron(clave, paso) {
+    for (const [id, texto] of (OBLIGATORIOS_PADRON[clave][paso] || [])) if (!$(id).value.trim()) return [id, texto];
+    for (const f of $(CUERPO_PADRON[clave]).querySelectorAll(`.pd-paso[data-paso="${paso}"] input.fecha`)) {
+        if (!f.value.trim()) continue;
+        try { aIsoDia(f.value); } catch { return [f.id, `Fecha mal escrita en «${document.querySelector(`label[for="${f.id}"]`).textContent}»: dd/mm/aaaa.`]; }
+    }
+    return null;
+}
+/** La placa tecleada ya existe en el padrón (otra unidad): el aviso de «Así va» lo dice antes de guardar. */
+function placaRepetidaPadron() {
+    const a = estado.padronVista.asis; if (!a || a.clave !== 'unidades' || !$('puuPlaca').value.trim()) return null;
+    const placa = placaNormal($('puuPlaca').value), edit = estado.padronEdit && estado.padronEdit.x;
+    return estado.unidades.find(u => placaNormal(u.Title) === placa && (!edit || u.id !== edit.id)) || null;
+}
+function pintarAsiVaPadron() {
+    const a = estado.padronVista.asis; if (!a) return;
+    const r = $('pdAsiVa'); r.textContent = '';
+    r.appendChild(el('h2', '', `Así va ${ARTICULO_PADRON[a.clave]}`));
+    const { dl, sec, fila } = dlPd();
+    for (const [s, campos] of ASIVA_PADRON[a.clave]) { sec(s); for (const [t, id] of campos) fila(t, valorCampoPadron(id)); }
+    r.appendChild(dl);
+    const rep = placaRepetidaPadron();
+    if (rep) {
+        const m = el('div', 'mensaje ' + (activo(rep) ? 'error' : 'ojo'));
+        m.appendChild(el('span', '', activo(rep) ? `La placa ${rep.Title} ya está en el padrón con ${nombreDe(estado.carriers, rep.CarrierId)}.` : `La placa ${rep.Title} existe dada de baja. En vez de duplicarla, reactívala desde su ficha.`));
+        if (!activo(rep)) { const b = el('button', 'secundario', 'Abrir su ficha'); b.type = 'button'; b.id = 'btnPdAbrirRepetida'; b.addEventListener('click', () => salirAsistentePadron({ v: 'ficha', ficha: { clave: 'unidades', id: rep.id }, carrier: Number(rep.CarrierId), desde: 'carrier' })); m.appendChild(b); }
+        r.appendChild(m);
+    }
+    const ob = Object.values(OBLIGATORIOS_PADRON[a.clave]).flat().map(([id]) => document.querySelector(`label[for="${id}"]`).textContent.toLowerCase());
+    r.appendChild(el('p', 'pista', `Obligatorio: ${ob.join(', ')}. Lo demás se puede completar después con Editar.`));
+}
+function pintarAsistentePd(c) {
+    const a = estado.padronVista.asis, clave = a.clave, pasos = PASOS_PADRON[clave], edit = estado.padronEdit && estado.padronEdit.clave === clave ? estado.padronEdit.x : null;
+    const nombre = NOMBRE_PADRON[clave], final = a.paso === pasos.length;
+    const migas = [['Padrón', () => salirAsistentePadron({ v: 'lista' })]];
+    if (c) migas.push([c.Title, () => salirAsistentePadron({ v: 'carrier', carrier: c.id })]);
+    migas.push([edit ? `Editar ${nombre}` : `Alta de ${nombre}`]);
+    cabeceraPd(migas, edit ? `Editar ${nombre}: ${edit.Title}` : `Alta de ${nombre}`, null,
+        clave === 'carriers' ? 'Se transcribe del oficio ASEA del carrier.' : `${c ? 'Para ' + c.Title + '. ' : ''}Se transcribe del oficio, nunca de memoria.`);
+    kpisPd([]);
+    const nav = $('pdPasos'); nav.textContent = ''; nav.style.setProperty('--n', pasos.length);
+    pasos.forEach(([t], i) => {
+        const n = i + 1, b = el('button', n === a.paso ? 'ahora' : n <= a.max ? 'hecho' : ''); b.type = 'button'; b.dataset.p = String(n);
+        b.disabled = n > a.max; b.setAttribute('aria-label', `Paso ${n} · ${t}`); if (n === a.paso) b.setAttribute('aria-current', 'step');
+        b.appendChild(el('i')); b.appendChild(el('span', '', t)); b.addEventListener('click', () => irPasoPadron(n)); nav.appendChild(b);
+    });
+    const [, pregunta, sub] = pasos[a.paso - 1];
+    $('pdAsisPregunta').textContent = pregunta; $('pdAsisSub').textContent = `Paso ${a.paso} de ${pasos.length} · ${sub}`;
+    for (const p of $(CUERPO_PADRON[clave]).querySelectorAll('.pd-paso')) p.hidden = Number(p.dataset.paso) !== a.paso;
+    $('pdAsisCuerpo').hidden = final;
+    const rv = $('pdAsisRevisar'); rv.hidden = !final; rv.textContent = '';
+    if (final) {
+        const dl = el('dl', 'pd-pares');
+        for (const [s, campos] of ASIVA_PADRON[clave]) for (const [t, id] of campos) {
+            const v = valorCampoPadron(id), par = el('div'); par.appendChild(el('dt', '', t)); par.appendChild(el('dd', v ? 'mono' : 'f', v || '—')); dl.appendChild(par);
+        }
+        rv.appendChild(dl);
+    }
+    $('btnPdAtras').classList.toggle('oculto', a.paso === 1);
+    $('btnPdSiguiente').textContent = final ? (edit ? 'Guardar cambios' : `Dar de alta ${ARTICULO_PADRON[clave]}`) : `Siguiente: ${pasos[a.paso][0].toLowerCase()}`;
+    pintarAsiVaPadron();
+}
+/** Cancelar, las migas o «Abrir su ficha»: con algo cambiado desde que abrió, pregunta (el mismo «Descartar lo capturado»). */
+async function salirAsistentePadron(destino = null) {
+    const p = estado.padronVista; if (!asistentePadronAbierto()) return true;
+    const cuerpo = $('pdAsisCuerpo');
+    if (hayCaptura(cuerpo) && huellaForma(cuerpo) !== $('pdAsis').dataset.huella) {
+        const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: `${estado.padronEdit ? 'Los cambios' : 'Lo que llevas de esta alta'} no se ha guardado. Si sales, se pierde.` });
+        if (!ok) return false;
+    }
+    cerrarFormaPadron(p.asis.clave);
+    if (destino) Object.assign(p, destino);
+    pintarPadron(); window.scrollTo({ top: 0 });
+    return true;
+}
+async function siguientePadron() {
+    const a = estado.padronVista.asis; if (!a) return;
+    const n = PASOS_PADRON[a.clave].length;
+    if (a.paso < n) {
+        const f = faltaPasoPadron(a.clave, a.paso);
+        if (f) { avisar(f[1], 'error'); $(f[0]).focus(); return; }
+        irPasoPadron(a.paso + 1); return;
+    }
+    for (let i = 1; i < n; i++) { const f = faltaPasoPadron(a.clave, i); if (f) { irPasoPadron(i); avisar(f[1], 'error'); $(f[0]).focus(); return; } }
+    const b = $('btnPdSiguiente'); b.disabled = true;   // C-24: un doble toque no da dos altas
+    try { await guardarPadron(a.clave); } finally { b.disabled = false; }
 }
 const AVISO_ALTA = { carriers: 'Carrier dado de alta. Ahora sus unidades, transcritas del oficio.', unidades: 'Unidad transcrita.', choferes: 'Chofer dado de alta.' };
 const BOTON_GUARDAR_PADRON = { carriers: 'btnGuardarCarrier', unidades: 'btnGuardarUnidad', choferes: 'btnGuardarChofer' };
@@ -3370,7 +3525,8 @@ async function guardarPadron(clave) {
             else avisarAlta(AVISO_ALTA[clave], clave, nuevo);
             // U-10 (v0.23.0): si el alta vino desde la pre-alta (que sigue abierta atras), el carrier nuevo queda elegido en ella.
             if (clave === 'carriers' && asistentePrealtaAbierto()) elegirCarrierEnPrealta(nuevo);
-            if (clave === 'carriers' && estado.pestana === 'padron') Object.assign(estado.padronVista, { v: 'carrier', carrier: nuevo.id, sub: 'unidades' });   // v0.71.0
+            if (estado.pestana === 'padron') Object.assign(estado.padronVista, clave === 'carriers' ? { v: 'carrier', carrier: nuevo.id, sub: 'unidades' }
+                : { v: 'ficha', ficha: { clave, id: nuevo.id }, carrier: Number(nuevo.CarrierId), desde: 'carrier' });   // v0.72.0 / v0.72.0
             pintarPadron();
         }
     } catch (e) { avisar('No se pudo guardar: ' + e.message, 'error'); } });
@@ -3732,6 +3888,10 @@ $('pdBusca').addEventListener('input', () => { if (estado.padronVista.tab === 'b
 for (const b of $('pdTabs').querySelectorAll('button')) b.addEventListener('click', () => { estado.padronVista.tab = b.dataset.pd; pintarPadron(); if (b.dataset.pd === 'buscar') $('pdBusca').focus(); });
 for (const b of $('pdSubTabs').querySelectorAll('button')) b.addEventListener('click', () => { estado.padronVista.sub = b.dataset.sub; pintarPadron(); });
 $('btnPdVolver').addEventListener('click', volverPadron);
+$('btnPdCancelar').addEventListener('click', () => salirAsistentePadron());
+$('btnPdSiguiente').addEventListener('click', siguientePadron);
+$('btnPdAtras').addEventListener('click', () => { const a = estado.padronVista.asis; if (a && a.paso > 1) irPasoPadron(a.paso - 1); });
+for (const ev of ['input', 'change']) $('pdAsisCuerpo').addEventListener(ev, pintarAsiVaPadron);
 $('baBusca').addEventListener('input', pintarHistorial);
 for (const b of document.querySelectorAll('#gTabs button, #gKpis button')) b.addEventListener('click', () => elegirVistaGondolas(b.dataset.g));
 // v0.66.0: cada conteo del padrón abre su grupo y lo trae a la vista.
@@ -3807,7 +3967,7 @@ $('migaGondolasPuerta').addEventListener('click', () => irDesdePestana('bascula'
 /** U-40: el programa elegido también es captura. */
 function camposCapturaPuerta() { return ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo', 'puPrealta']; }   // función y no const: capturaAMedias() la llama desde arriba
 function puertaConCaptura() { return camposCapturaPuerta().some(id => $(id).value.trim()); }
-/** v0.71.0 (a pedido de Carlos): Cancelar con algo capturado pregunta, como en Pre-altas; Descartar deja la puerta en cero. */
+/** v0.72.0 (a pedido de Carlos): Cancelar con algo capturado pregunta, como en Pre-altas; Descartar deja la puerta en cero. */
 $('btnCancelarPuerta').addEventListener('click', async () => {
     if (puertaConCaptura()) {
         const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: 'Esta góndola tiene datos sin guardar. Si sales, se pierden.' });
@@ -3821,7 +3981,7 @@ $('btnCancelarPuerta').addEventListener('click', async () => {
     }
     irDesdePestana('bascula');
 });
-// v0.71.0 (bug que reportó Carlos): regresar y cambiar de programa dejaba las placas y el chofer del programa anterior
+// v0.72.0 (bug que reportó Carlos): regresar y cambiar de programa dejaba las placas y el chofer del programa anterior
 // —de otro carrier— capturados y en «Así va la góndola». Al cambiar de programa se limpian los datos que dependen de él.
 let prealtaPuertaPrevia = '';
 $('puPrealta').addEventListener('change', () => {

@@ -502,25 +502,39 @@ try {
         && document.querySelector('#pdTabs [aria-pressed="true"]').dataset.pd === 'vigentes' && $('pdKpis').querySelectorAll('button').length === 3 && $('pdMigas').hidden);
     if (captura) {
     R.ok('v0.71.0: sin carriers, la lista lo dice y ofrece «+ Nuevo carrier»', $('pdCarriers').textContent.includes('Sin carriers') && visible('btnNuevoCarrier') && !visible('btnNuevaUnidad'), $('pdCarriers').textContent.slice(0, 60));
-    // U-09 (v0.22.0): Escape (evento cancel) sobre un formulario con algo tecleado pregunta; vacio cierra directo.
-    clic('btnNuevoCarrier'); await esperar(() => $('pdFormaCarrier').open, 'forma de carrier');
-    $('pdFormaCarrier').dispatchEvent(new Event('cancel', { cancelable: true })); await dormir(30);
-    R.ok('U-09: Escape sobre un formulario VACÍO no pregunta', !$('dlg').open);
-    clic('btnCancelarCarrier');
+    // U-09 / v0.72.0: el alta del padrón es EN LA PÁGINA, por pasos; Cancelar vacío sale directo y con algo tecleado pregunta.
+    clic('btnNuevoCarrier'); await esperar(() => !$('pdAsis').hidden, 'alta de carrier en la página');
+    R.ok('v0.72.0: «+ Nuevo carrier» abre el alta en la página: tres pasos, la pregunta del paso 1, «Así va» y Cancelar', !$('pdFormaCarrier').open && $('pdPasos').querySelectorAll('button').length === 3
+        && $('pdAsisPregunta').textContent.includes('oficio') && $('pdAsiVa').textContent.includes('Así va') && visible('btnPdCancelar') && !visible('btnPdVolver') && !visible('btnNuevoCarrier')
+        && $('pdAsis').contains($('pcTitle')) && !$('pcTitle').closest('.pd-paso').hidden && $('pcSCT').closest('.pd-paso').hidden);
+    clic('btnPdCancelar'); await dormir(30);
+    R.ok('U-09: Cancelar sobre un alta VACÍA no pregunta y regresa a la lista', !$('dlg').open && $('pdAsis').hidden && !$('pdLista').hidden);
     clic('btnNuevoCarrier'); poner('pcTitle', 'A MEDIAS');
-    $('pdFormaCarrier').dispatchEvent(new Event('cancel', { cancelable: true }));
+    R.ok('v0.72.0: «Así va» se llena mientras se escribe', $('pdAsiVa').textContent.includes('A MEDIAS'));
+    clic('btnPdCancelar');
     await esperar(() => $('dlg').open, 'confirmación de descarte');
-    R.ok('U-09: Escape con algo capturado abre «Descartar lo capturado» y el formulario sigue abierto', $('dlgTitulo').textContent.includes('Descartar') && $('pdFormaCarrier').open);
+    R.ok('U-09: Cancelar con algo capturado abre «Descartar lo capturado» y el alta sigue abierta', $('dlgTitulo').textContent.includes('Descartar') && !$('pdAsis').hidden);
     clic('dlgCancelar'); await dormir(30);
-    R.ok('U-09: al no descartar, lo tecleado sigue ahí', $('pdFormaCarrier').open && $('pcTitle').value === 'A MEDIAS');
-    $('pdFormaCarrier').dispatchEvent(new Event('cancel', { cancelable: true })); await esperar(() => $('dlg').open, 'confirmación 2'); clic('dlgOk');
-    await esperar(() => !$('pdFormaCarrier').open, 'formulario descartado');
-    R.ok('U-09: al confirmar, el formulario se cierra', !$('pdFormaCarrier').open);
-    clic('btnNuevoCarrier');
-    poner('pcTitle', 'TRANSPORTES DEMO SA DE CV'); poner('pcAut', '00-ASEA-T-RME-00-00'); poner('pcVig', '2028-12-05'); poner('pcFolio', 'UGI-DEMO-0000-2025'); poner('pcCSF', '2027-01-01');
+    R.ok('U-09: al no descartar, lo tecleado sigue ahí', !$('pdAsis').hidden && $('pcTitle').value === 'A MEDIAS');
+    clic('btnPdCancelar'); await esperar(() => $('dlg').open, 'confirmación 2'); clic('dlgOk');
+    await esperar(() => $('pdAsis').hidden, 'alta descartada');
+    R.ok('U-09: al confirmar, el alta se cierra y regresa a la lista', $('pdAsis').hidden && !$('pdLista').hidden);
+    clic('btnNuevoCarrier'); await esperar(() => !$('pdAsis').hidden, 'alta de carrier');
+    R.ok('v0.72.0: un alta nueva arranca vacía (lo descartado no se queda)', $('pcTitle').value === '');
+    clic('btnPdSiguiente'); await dormir(20);
+    R.ok('v0.72.0: Siguiente sin razón social se queda en el paso 1 y lo dice', !!avisoCon('razón social') && $('pdPasos').querySelector('[aria-current="step"]').dataset.p === '1');
+    poner('pcTitle', 'TRANSPORTES DEMO SA DE CV'); poner('pcAut', '00-ASEA-T-RME-00-00'); poner('pcVig', '31/31/2028');
+    clic('btnPdSiguiente'); await dormir(20);
+    R.ok('v0.72.0: una fecha mal escrita no deja pasar del paso', !!avisoCon('Fecha mal escrita') && $('pdPasos').querySelector('[aria-current="step"]').dataset.p === '1');
+    poner('pcVig', '2028-12-05'); poner('pcFolio', 'UGI-DEMO-0000-2025');
     document.querySelector('input[name="pcCorr"][value="base-aceite"]').checked = true;
     document.querySelector('input[name="pcCorr"][value="base-agua"]').checked = true;
-    clic('btnGuardarCarrier');
+    clic('btnPdSiguiente');
+    R.ok('v0.72.0: el paso 2 muestra el registro y esconde el oficio', !$('pcSCT').closest('.pd-paso').hidden && $('pcTitle').closest('.pd-paso').hidden && visible('btnPdAtras'));
+    poner('pcCSF', '2027-01-01');
+    clic('btnPdSiguiente');
+    R.ok('v0.72.0: el paso 3 revisa todo y el botón dice «Dar de alta el carrier»', !$('pdAsisRevisar').hidden && $('pdAsisRevisar').textContent.includes('TRANSPORTES DEMO SA DE CV') && $('btnPdSiguiente').textContent.includes('Dar de alta'));
+    clic('btnPdSiguiente');
     await esperar(() => avisoCon('Carrier dado de alta'), 'carrier guardado');
     R.ok('carrier guardado en PLANTA_Carriers', filas('carriers').length === 1 && filas('carriers')[0].fields.Corrientes.includes('base-aceite'));
     R.ok('vigencia ASEA del carrier dada de alta en PLANTA_Vigencias', filas('vigencias').length === 1 && filas('vigencias')[0].fields.Fuente === 'legal');
@@ -535,11 +549,16 @@ try {
     // U-46 (v0.29.0): el alta de unidad arranca con el carrier que se acaba de dar de alta (o el del filtro).
     R.ok('U-55: la etiqueta del folio del oficio es corta y la aclaración va en .pista', document.querySelector('label[for="puuFolio"]').textContent.trim() === 'Folio del oficio' && !!$('puuFolio').parentElement.querySelector('.pista'), document.querySelector('label[for="puuFolio"]').textContent);
     R.ok('U-46: «+ Alta» de unidad preselecciona el último carrier guardado en la sesión', $('puuCarrier').value === String(carrierId), `puuCarrier "${$('puuCarrier').value}" vs ${carrierId}`);
-    poner('puuCarrier', String(carrierId)); poner('puuPlaca', '55-xy-9k'); poner('puuPlana', '66ZW3M'); poner('puuFolio', 'UGI-DEMO-0000-2025'); poner('puuCap', '25000'); poner('puuPolizaVig', '2027-03-01'); poner('puuTarjetaVig', '2027-06-01');
-    clic('btnGuardarUnidad');
+    poner('puuCarrier', String(carrierId)); poner('puuPlaca', '55-xy-9k'); poner('puuPlana', '66ZW3M'); poner('puuFolio', 'UGI-DEMO-0000-2025'); poner('puuCap', '25000');
+    clic('btnPdSiguiente');
+    R.ok('v0.72.0: el paso 2 de la unidad son sus documentos', !$('puuPolizaVig').closest('.pd-paso').hidden && $('puuPlaca').closest('.pd-paso').hidden);
+    poner('puuPolizaVig', '2027-03-01'); poner('puuTarjetaVig', '2027-06-01');
+    clic('btnPdSiguiente'); clic('btnPdSiguiente');
     await esperar(() => avisoCon('Unidad transcrita'), 'unidad guardada');
     R.ok('placa normalizada al guardar', filas('unidades')[0].fields.Title === '55XY9K', filas('unidades')[0].fields.Title);
     const unidadId = filas('unidades')[0].id;
+    R.ok('v0.72.0: tras el alta, la unidad abre su ficha', !$('pdFicha').hidden && $('pdTitulo').textContent.includes('55XY9K') && $('pdAsis').hidden);
+    clic('btnPdVolver');
     // U-15 (v0.22.0) / v0.71.0: el renglón es role=button, tabindex=0 y Enter abre la ficha; Volver regresa al expediente.
     {
         const f = await esperar(() => document.querySelector('#pdUnidades .pd-fila:not(.pd-cab)'), 'renglón de la unidad');
@@ -599,6 +618,7 @@ try {
         {
             clic('btnAltaCarrierPrealta'); await esperar(() => $('pdFormaCarrier').open, 'forma de carrier sobre la pre-alta');
             R.ok('U-10: la forma del carrier se abre ENCIMA y la pre-alta sigue abierta', $('pdFormaCarrier').open && visible('paAsis'));
+            R.ok('v0.72.0: desde la pre-alta, la forma vuelve al dialog y se ve entera (sin pasos)', $('pdFormaCarrier').contains($('pcSCT')) && !$('pcSCT').closest('.pd-paso').hidden && !$('pcTitle').closest('.pd-paso').hidden);
             clic('btnGuardarCarrier'); await dormir(30);
             R.ok('U-10: el aviso de validación sale en la forma de encima (la del carrier), no en la pre-alta', $('pdFormaCarrier').querySelector('.dlg-avisos').textContent.includes('razón social') && !$('paAvisos').textContent.trim(), $('pdFormaCarrier').querySelector('.dlg-avisos').textContent);
             poner('pcTitle', 'CARRIER DESDE PREALTA'); clic('btnGuardarCarrier');
@@ -1632,7 +1652,9 @@ try {
             await fichaPd('55XY9K');
             const btnEd = await esperar(() => accionPd('editar'), 'Editar en la ficha de la unidad').catch(() => null);
             if (btnEd) {
-                btnEd.click(); await esperar(() => $('pdFormaUnidad').open, 'edición de unidad');
+                btnEd.click(); await esperar(() => !$('pdAsis').hidden, 'edición de unidad');
+                R.ok('v0.72.0: Editar abre la edición en la página con todos los pasos a la mano', $('pdTitulo').textContent.includes('Editar unidad') && [...$('pdPasos').querySelectorAll('button')].every(b => !b.disabled));
+                $('pdPasos').querySelector('button[data-p="2"]').click();
                 poner('puuPolizaVig', '2027-09-30');
                 const antesGuardar = `carrier "${$('puuCarrier').value}" · placa "${$('puuPlaca').value}" · póliza "${$('puuPolizaVig').value}"`;
                 clic('btnGuardarUnidad');
@@ -1781,7 +1803,7 @@ try {
             const fallaVig = { metodo: 'PATCH', incluye: 'lista-vigencias', status: 403, veces: 1 }; DB.fallas.push(fallaVig);
             await fichaPd('TRANSPORTES DEMO');
             const edDemo = await esperar(() => accionPd('editar'), 'Editar del carrier DEMO');
-            edDemo.click(); await esperar(() => $('pdFormaCarrier').open, 'edición del carrier');
+            edDemo.click(); await esperar(() => !$('pdAsis').hidden, 'edición del carrier');
             poner('pcFolio', 'UGI-DEMO-0001-2025'); clic('btnGuardarCarrier');
             await esperar(() => avisoCon('no se sincronizó'), 'aviso ámbar del segundo paso');
             R.ok('C-19: PATCH fallido sobre la vigencia del tablero → el carrier queda actualizado y el aviso «no se sincronizó» lo dice', filas('carriers')[0].fields.FolioOficio === 'UGI-DEMO-0001-2025' && fallaVig.veces === 0 && !$('pdFormaCarrier').open && !!avisoCon('no se sincronizó'), (avisoCon('no se sincronizó') || {}).textContent);
@@ -1874,13 +1896,14 @@ try {
             }
             // C-24: doble toque en Guardar del padron -> un solo carrier.
             document.querySelector('#pestanas button[data-p="padron"]').click();
-            clic('btnNuevoCarrier'); await esperar(() => $('pdFormaCarrier').open, 'forma de carrier (doble toque)');
+            clic('btnNuevoCarrier'); await esperar(() => !$('pdAsis').hidden, 'alta de carrier (doble toque)');
             poner('pcTitle', 'CARRIER DOBLE TOQUE');
-            clic('btnGuardarCarrier'); clic('btnGuardarCarrier');
-            R.ok('C-24: al primer toque «Guardar» queda deshabilitado', $('btnGuardarCarrier').disabled);
-            await esperar(() => !$('pdFormaCarrier').open, 'carrier del doble toque guardado');
+            clic('btnPdSiguiente'); clic('btnPdSiguiente');
+            clic('btnPdSiguiente'); clic('btnPdSiguiente');
+            R.ok('C-24: al primer toque «Dar de alta» queda deshabilitado', $('btnPdSiguiente').disabled);
+            await esperar(() => $('pdAsis').hidden, 'carrier del doble toque guardado');
             await dormir(50);
-            R.ok('C-24: un doble toque en Guardar crea UN solo carrier y el botón vuelve a habilitarse', filas('carriers').filter(c => c.fields.Title === 'CARRIER DOBLE TOQUE').length === 1 && !$('btnGuardarCarrier').disabled, `${filas('carriers').filter(c => c.fields.Title === 'CARRIER DOBLE TOQUE').length} renglón(es)`);
+            R.ok('C-24: un doble toque en Guardar crea UN solo carrier y el botón vuelve a habilitarse', filas('carriers').filter(c => c.fields.Title === 'CARRIER DOBLE TOQUE').length === 1 && !$('btnPdSiguiente').disabled, `${filas('carriers').filter(c => c.fields.Title === 'CARRIER DOBLE TOQUE').length} renglón(es)`);
         }
 
         // 16. CERTIFICADO DE TRATAMIENTO (v0.39.0): UN certificado por GONDOLA — un embarque cerrado, no el programa.
@@ -2120,6 +2143,8 @@ try {
                         if (f) { f.click(); break; }
                     }
                     if (pd === 'ficha') document.querySelector('#pdUnidades .pd-fila:not(.pd-cab)')?.click();
+                    // v0.72.0: `&pd=alta|alta3` abre el alta de unidad en la página, con la placa tecleada (alta3: en el paso Revisar).
+                    if (pd.startsWith('alta')) { clic('btnNuevaUnidad'); poner('puuPlaca', '71AB2C'); poner('puuPlana', '12UF4R'); poner('puuCap', '30000'); if (pd === 'alta3') { clic('btnPdSiguiente'); poner('puuPolizaVig', '12/03/2027'); clic('btnPdSiguiente'); } }
                 }
             } }
 }

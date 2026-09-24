@@ -1287,3 +1287,16 @@ select, .archivos-filtros select, .con-boton select {
     .pd-fila > .c { grid-column: 1 / -1; }
     #p-padron .pa-kpis:empty { display: none; }
 }
+/* v0.72.0 — alta y edición del padrón en la página (tanda 2): los pasos en barras de Pre-altas, la pregunta del paso, los botones
+   Atrás / Siguiente abajo y «Así va» a la derecha (.pd-resumen). El cuerpo de la forma es el del dialog, mudado aquí. */
+#pdAsis { display: flex; flex-direction: column; gap: var(--sp-4); }
+#pdPasos { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); max-width: 40rem; }
+#pdAsis .pregunta { margin: 0; font-family: var(--titulo); font-weight: 600; font-size: 1.3rem; text-transform: none; letter-spacing: 0; color: var(--ink); }
+#pdAsis .pregunta:focus { outline: none; }
+#pdAsis .sub { margin: calc(-1 * var(--sp-2)) 0 0; font-size: .88rem; color: var(--mute); }
+#pdAsisCuerpo .campo { margin: 0 0 var(--sp-3); }
+.pd-asis-botones { display: flex; justify-content: space-between; gap: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--line-soft); }
+.pd-asis-botones button { width: auto; margin: 0; }
+.pd-asis-botones #btnPdSiguiente { margin-left: auto; }
+.pd-resumen > .mensaje { margin: 0; display: grid; gap: var(--sp-2); justify-items: start; }
+.pd-resumen > .mensaje button { width: auto; margin: 0; }
