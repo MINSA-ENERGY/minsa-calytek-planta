@@ -501,7 +501,9 @@ button:not(:disabled):active { transform: scale(.98); }
 .pasos5.pa-pasos .ahora i { background: var(--acc); }   /* entero: el 33% por tercio es de la llegada de Góndolas */
 .pa-pasos .visto { color: var(--body); }
 .pa-pasos small { font-size: .74rem; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1em; }
-@media (max-width: 720px) { .pa-pasos small { display: none; } }
+@media (max-width: 720px) { .pa-pasos small { display: none; } .pa-pasos button { min-height: 36px; align-content: center; } }   /* U-97 (v0.57.0): 36 px de toque aunque solo se vea el segmento */
+/* U-96 (v0.57.0): los enlaces del asistente («+ Alta de carrier», «Quitar la base», «Cambiar») con alto de toque, no del texto */
+.asis-pantalla .enlace, .aviso-pa .enlace { display: inline-flex; align-items: center; min-height: 36px; }
 .aviso-pa { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: var(--r-sm); background: var(--info-soft); border: 1px solid color-mix(in srgb, var(--info) 30%, transparent); font-size: .9rem; color: var(--ink-body); }
 .aviso-pa > span { flex: 1; min-width: 0; }
 .aviso-pa .enlace { flex: none; }
@@ -723,7 +725,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .gtabs button { all: unset; cursor: pointer; display: inline-flex; align-items: center; box-sizing: border-box; min-height: var(--control-h); padding: 0; margin-bottom: -1px; border-bottom: 2px solid transparent; font-weight: 500; color: var(--mute); white-space: nowrap; }   /* U-82: alto de control, no del texto */
 .gtabs button[aria-pressed="true"] { color: var(--ink); font-weight: 600; border-color: var(--acc); }
 .gtabs button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
-.gtabs i { font-style: normal; font-family: var(--mono); font-size: .78rem; margin-left: .4rem; color: var(--faint); }
+.gtabs i { font-style: normal; font-family: var(--mono); font-size: .78rem; margin-left: .4rem; color: var(--mute); }   /* U-103 (v0.57.0): --faint daba 2.7:1; --faint queda para lo deshabilitado */
 .gtabs i:empty { display: none; }
 .gtabs i.alerta { color: var(--warn-fg); font-weight: 600; }
 /* U-82 (v0.51.0): a 390 px «Historial» salía cortado; las cuatro se reparten el ancho con menos separación. */

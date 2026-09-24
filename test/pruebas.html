@@ -605,9 +605,16 @@ try {
         poner('paGondolas', '10');
         clic('btnPaSaltar');
         R.ok('tanda 3 (P7): «Saltar» lleva a Revisar y ahí ya no se ve', !$('paPaso5').hidden && !visible('btnPaSaltar'));
-        $('paRevisar').querySelectorAll('.enlace')[3].click();
+        [...$('paRevisar').querySelectorAll('section')].find(s => s.querySelector('h3').textContent === 'Envío y correo').querySelector('.enlace').click();   // por su título: U-90 partió «Cliente y generador»
         R.ok('tanda 3 (P7): desde «Cambiar» el paso 4 no ofrece «Saltar» (el botón ya regresa a Revisar)', !$('paPaso4').hidden && !visible('btnPaSaltar') && $('btnPaSiguiente').textContent === 'Volver a revisar ›', $('btnPaSiguiente').textContent);
+        // v0.57.0 (U-91 / U-106): una fecha que no existe o góndolas con decimales detienen el paso 4 y el botón dice qué falta.
+        poner('paFecha', '31/02/2026');
+        R.ok('U-91: una fecha que no existe la dice el botón del paso 4', $('btnPaSiguiente').textContent === 'Primer envío: fecha no válida', $('btnPaSiguiente').textContent);
+        poner('paFecha', '2026-10-15'); poner('paGondolas', '2.5');
+        R.ok('U-106: góndolas con decimales no pasan', $('btnPaSiguiente').textContent === 'Góndolas: un número entero', $('btnPaSiguiente').textContent);
+        poner('paGondolas', '10');
         clic('btnPaSiguiente');
+        R.ok('U-90 / U-104: Revisar separa Cliente de «Generador y origen» y repasa la dirección y el pozo / instalación', ['Cliente', 'Generador y origen'].every(t => [...$('paRevisar').querySelectorAll('h3')].some(h => h.textContent === t)) && $('paRevisar').textContent.includes('Calle Demo 123') && $('paRevisar').textContent.includes('pozo / instalación'), $('paRevisar').textContent);
         R.ok('tanda 2: el recorrido llega a Revisar con el programa, el carrier y Guardar a la vista', !$('paPaso5').hidden && visible('btnGuardarPrealta') && !visible('btnPaSiguiente') && $('paRevisar').textContent.includes('CLIENTE DEMO-POZO 1-2026') && $('paRevisar').textContent.includes('TRANSPORTES DEMO'), $('paPasoK').textContent);
         R.ok('tanda 2: los pasos recorridos quedan hechos con su resumen', $('paPasos').querySelector('[data-p="2"]').classList.contains('hecho') && $('paPasos').querySelector('[data-p="2"] small').textContent.includes('POZO 1'), $('paPasos').querySelector('[data-p="2"] small').textContent);
         $('paRevisar').querySelectorAll('.enlace')[1].click();
@@ -633,7 +640,7 @@ try {
         // U-23 (v0.26.0) con el rediseño de Pre-altas (tanda 1, v0.53.0): sin ninguna firmada, la pestaña Firmadas cuenta 0 y su
         // pie dice que la puerta no puede recibir. La vista abre en «Por firmar», con el borrador.
         R.ok('tanda 1: Pre-altas abre en «Por firmar» con la captura al frente y los conteos en las pestañas', visible('paInicio') && visible('ppBorradores') && !visible('ppFirmadas') && $('paNBorradores').textContent === '1' && $('paNFirmadas').textContent === '0', `${$('paNBorradores').textContent}/${$('paNFirmadas').textContent}`);
-        R.ok('U-23: Firmadas vacía dice que la puerta no puede recibir', $('paResFirmadas').textContent.includes('la puerta no puede recibir') && $('paFirmadas').textContent.includes('la puerta no puede recibir'), $('paResFirmadas').textContent);
+        R.ok('U-23 / U-102: Firmadas vacía dice UNA vez que la puerta no puede recibir (en la tabla; el pie queda vacío)', $('paResFirmadas').textContent === '' &&$('paFirmadas').textContent.includes('la puerta no puede recibir'), $('paResFirmadas').textContent);
         R.ok('tanda 1: sin firmadas ni cerradas no hay programas que usar como base', !visible('paRecientes'));
         // Editar el borrador (v0.19.10): PATCH que conserva la campana y el estado.
         const campanaAntes = filas('prealtas')[0].fields.Campana;
@@ -667,7 +674,7 @@ try {
         R.ok('U-34: con un cambio sí pregunta', $('dlgTitulo').textContent.includes('Descartar')); clic('dlgCancelar'); await dormir(30);
         R.ok('U-34: «no descartar» deja el asistente abierto con lo capturado', visible('paAsis') && $('paPozo').value === 'Pozo-2');
         poner('paPozo', 'Pozo-2'); poner('paGondolas', '12'); clic('btnGuardarPrealta');
-        await esperar(() => avisoCon('Borrador actualizado'), 'borrador actualizado');
+        await esperar(() => avisoCon('Pre-alta actualizada'), 'borrador actualizado');
         const pe = filas('prealtas')[0].fields;
         R.ok('editar el borrador cambia pozo y góndolas, escribe Cliente y conserva campaña, estado y unidades', pe.Pozo === 'Pozo-2' && pe.GondolasEsperadas === 12 && pe.Cliente === 'CLIENTE DEMO' && pe.Campana === campanaAntes && pe.Estado === 'borrador' && pe.UnidadesIds === String(unidadId) && filas('prealtas').length === 1, JSON.stringify([pe.Pozo, pe.GondolasEsperadas, pe.Campana, pe.Estado]));
         clic('btnVolverPrealtas');
@@ -688,7 +695,7 @@ try {
         Object.assign(filas('prealtas')[0].fields, { Estado: 'firmada', FirmadaPor: 'otro@example.invalid' });
         const n59 = filas('prealtas').length;
         $('paPasos').querySelector('[data-p="5"]').click(); clic('btnGuardarPrealta');
-        await esperar(() => avisoCon('ya no es borrador'), 'C-59: la relectura frena el guardado');
+        await esperar(() => avisoCon('ya no está por firmar'), 'C-59: la relectura frena el guardado');
         R.ok('C-59: «Guardar cambios» sobre un borrador que otra sesión firmó no crea otro programa ni parcha la firmada', filas('prealtas').length === n59 && filas('prealtas')[0].fields.FirmadaPor === 'otro@example.invalid' && filas('prealtas')[0].fields.Pozo === 'Pozo-2', `${filas('prealtas').length} renglones`);
         filas('prealtas')[0].fields.Estado = 'borrador'; delete filas('prealtas')[0].fields.FirmadaPor;
         clic('btnCancelarPrealta'); await dormir(30); if ($('dlg').open) clic('dlgOk'); await dormir(30);
@@ -802,7 +809,12 @@ try {
             b.click(); await esperar(() => visible('paAsis'), 'pre-alta desde la base');
             R.ok('tanda 2: la base abre el asistente en el paso 2 con su aviso y los pasos 1 y 3 ya vistos', !$('paPaso2').hidden && visible('paBaseAviso') && !$('paPasos').querySelector('[data-p="3"]').disabled && $('paPasos').querySelector('[data-p="4"]').disabled);
             R.ok('tanda 1: «Usar como base» copia cliente, generador, corriente y carrier; el pozo queda vacío y con el foco', $('paCliente').value === 'CLIENTE DEMO' && $('paGenerador').value === 'GENERADOR DEMO' && $('paCorriente').value === 'base-aceite' && $('paCarrier').value === String(carrierId) && $('paPozoTitulo').value === '' && document.activeElement === $('paPozoTitulo') && $('paTitulo').value === '', `${$('paCliente').value} · ${$('paCarrier').value} · ${$('paPozoTitulo').value}`);
-            clic('btnCancelarPrealta');
+            // v0.57.0 (U-93): «Quitar la base» suelta lo copiado y vuelve al paso 1; (U-105) elegir un cliente conocido avanza al 2.
+            poner('paPozoTitulo', 'pozo 9'); clic('btnPaQuitarBase');
+            R.ok('U-93: «Quitar la base» limpia cliente, generador, corriente y carrier y vuelve al paso 1; el pozo tecleado se queda', !$('paPaso1').hidden && !visible('paBaseAviso') && $('paCliente').value === '' && $('paGenerador').value === '' && $('paCorriente').value === '' && $('paCarrier').value === '' && $('paPozoTitulo').value === 'pozo 9');
+            [...$('paClientes').querySelectorAll('.o')].find(o => o.textContent.includes('CLIENTE DEMO')).click();
+            R.ok('U-105: elegir un cliente conocido avanza al paso 2 con el generador de su último programa', !$('paPaso2').hidden && $('paGenerador').value === 'GENERADOR DEMO', $('paPasoK').textContent);
+            clic('btnCancelarPrealta'); await confirmar(); await esperar(() => !visible('paAsis'), 'base soltada');
         }
         document.querySelector('#paTabs button[data-pa="firmada"]').click();
         R.ok('tanda 1: la pestaña Firmadas muestra su panel', visible('ppFirmadas') && !visible('ppBorradores'));

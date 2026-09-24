@@ -343,11 +343,11 @@
         <nav class="migas" aria-label="Ruta"><button type="button" class="miga" id="btnPaMiga">Pre-altas</button><span aria-hidden="true">/</span><b id="paFormaTitulo">Nueva</b><button id="btnCancelarPrealta" class="secundario pa-cancelar" type="button">Cancelar</button></nav>
         <div class="asis-cab">
           <nav class="pasos5 pa-pasos" id="paPasos" aria-label="Pasos de la pre-alta">
-            <button type="button" data-p="1"><i></i><span>Cliente</span><small></small></button>
-            <button type="button" data-p="2"><i></i><span>Pozo y corriente</span><small></small></button>
-            <button type="button" data-p="3"><i></i><span>Transporte</span><small></small></button>
-            <button type="button" data-p="4"><i></i><span>Envío</span><small></small></button>
-            <button type="button" data-p="5"><i></i><span>Revisar</span><small></small></button>
+            <button type="button" data-p="1" aria-label="Paso 1 · Cliente"><i></i><span>Cliente</span><small></small></button>
+            <button type="button" data-p="2" aria-label="Paso 2 · Pozo y corriente"><i></i><span>Pozo y corriente</span><small></small></button>
+            <button type="button" data-p="3" aria-label="Paso 3 · Transporte"><i></i><span>Transporte</span><small></small></button>
+            <button type="button" data-p="4" aria-label="Paso 4 · Envío"><i></i><span>Envío</span><small></small></button>
+            <button type="button" data-p="5" aria-label="Paso 5 · Revisar"><i></i><span>Revisar</span><small></small></button>
           </nav>
           <div class="asis-quien"><div><b id="paTituloVista" class="mono">—</b><small>Nombre del programa · CLIENTE-POZO-AÑO</small></div><span class="asis-k" id="paPasoK">Paso 1 de 5</span></div>
         </div>
@@ -403,7 +403,7 @@
                 <p class="sub">Si todavía no lo sabes, sáltalo; se puede completar después.</p>
                 <div class="dos">
                   <div class="campo"><label for="paFecha">Primer envío (estimado)</label><input type="text" id="paFecha" class="fecha mono" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off"></div>
-                  <div class="campo"><label for="paGondolas">Góndolas esperadas</label><div class="pa-cont"><button type="button" id="btnPaGonMenos" aria-label="Una góndola menos">−</button><input type="number" id="paGondolas" min="0" inputmode="numeric" placeholder="0"><button type="button" id="btnPaGonMas" aria-label="Una góndola más">+</button></div></div>
+                  <div class="campo"><label for="paGondolas">Góndolas esperadas</label><div class="pa-cont"><button type="button" id="btnPaGonMenos" aria-label="Una góndola menos">−</button><input type="number" id="paGondolas" min="0" step="1" inputmode="numeric" placeholder="0"><button type="button" id="btnPaGonMas" aria-label="Una góndola más">+</button></div></div>
                 </div>
                 <div class="dos">
                   <div class="campo"><label for="paCorreoFecha">Fecha del correo del cliente</label><input type="text" id="paCorreoFecha" class="fecha mono" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off"></div>
@@ -619,9 +619,9 @@
         <ul class="hallazgos" id="paDetalleCertificado"></ul>   <!-- v0.35.0: certificado de tratamiento del programa cerrado -->
         <div class="dlg-botones envuelve">
         <button id="btnFirmar" class="principal enviar oculto" type="button">Firmar la pre-alta</button>
-        <button id="btnEditarPrealta" class="secundario oculto" type="button">Editar el borrador</button>
+        <button id="btnEditarPrealta" class="secundario oculto" type="button">Editar la pre-alta</button>
         <button id="btnCerrarPrealta" class="secundario peligro oculto" type="button">Cerrar el programa</button>
-        <button id="btnEliminarPrealta" class="secundario peligro oculto" type="button" data-accion="eliminar">Eliminar este borrador</button>
+        <button id="btnEliminarPrealta" class="secundario peligro oculto" type="button" data-accion="eliminar">Eliminar esta pre-alta</button>
         <button id="btnVolverPrealtas" class="secundario" type="button">Volver</button>   <!-- U-45: antes «Cerrar», junto a «Cerrar el programa» -->
         </div>
 </dialog>
