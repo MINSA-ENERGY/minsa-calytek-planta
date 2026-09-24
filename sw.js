@@ -7,8 +7,8 @@
 // Cada peticion del armazon lleva `cache: 'reload'`: GitHub Pages sirve con max-age=600 y sin
 // eso el service worker nuevo se llena con los archivos VIEJOS (medido en captura, 2026-08-17).
 
-// La cache lleva la MISMA cadena que VERSION (app.js) y package.json: test/version.test.js falla si difieren (C-09, v0.21.0).
-const CACHE = 'calytek-planta-v0.74.0';
+// La cache lleva la MISMA cadena que VERSION (nucleo.js) y package.json: test/version.test.js falla si difieren (C-09, v0.21.0).
+const CACHE = 'calytek-planta-v0.75.0';
 
 function traerDeLaRed(recurso) {
     return fetch(new Request(recurso, { cache: 'reload', credentials: 'same-origin' }));
@@ -21,6 +21,16 @@ const ARMAZON = [
     './estilo.css',
     './impresion-certificado.css',
     './app.js',
+    './nucleo.js',
+    './navegacion.js',
+    './puerta.js',
+    './gondolas.js',
+    './prealtas.js',
+    './certificado.js',
+    './padron.js',
+    './hoy.js',
+    './reportes.js',
+    './archivos.js',
     './config.js',
     './graph.js',
     './reglas.js',

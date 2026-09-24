@@ -24,7 +24,7 @@ const m = html.match(/<script src="\.\/vendor\/msal-browser\.min\.js" integrity=
 assert.ok(m, 'index.html carga msal-browser.min.js sin integrity=');
 assert.equal(m[1], sha384, `integrity= de index.html (${m[1]}) ≠ sha384 del archivo (${sha384})`);
 // S-13 (v0.30.0): la E2E sustituye window.msal por un falso, asi que un bundle que cambie la API sale verde alli. Aqui se
-// evalua el UMD REAL con un `exports` propio (el bundle no toca window/document al cargarse) y se exige lo que app.js usa.
+// evalua el UMD REAL con un `exports` propio (el bundle no toca window/document al cargarse) y se exige lo que la app usa.
 const exportsMsal = {};
 new Function('exports', 'module', 'define', bytes.toString('utf8'))(exportsMsal, { exports: exportsMsal }, undefined);
 const PCA = exportsMsal.PublicClientApplication;
@@ -33,7 +33,7 @@ const metodos = new Set();
 for (let p = PCA.prototype; p && p !== Object.prototype; p = Object.getPrototypeOf(p)) Object.getOwnPropertyNames(p).forEach(n => metodos.add(n));
 const usados = ['initialize', 'getAllAccounts', 'acquireTokenSilent', 'acquireTokenRedirect', 'handleRedirectPromise', 'loginRedirect', 'logoutRedirect'];
 const faltan = usados.filter(n => !metodos.has(n));
-assert.deepEqual(faltan, [], `msal.PublicClientApplication ya no expone: ${faltan.join(', ')} (app.js los llama)`);
+assert.deepEqual(faltan, [], `msal.PublicClientApplication ya no expone: ${faltan.join(', ')} (la app los llama)`);
 assert.equal(typeof exportsMsal.InteractionRequiredAuthError, 'function', 'el bundle no exporta InteractionRequiredAuthError (refrescarCliente lo usa)');
 assert.equal(exportsMsal.CacheLookupPolicy && exportsMsal.CacheLookupPolicy.AccessTokenAndRefreshToken, 2, 'CacheLookupPolicy.AccessTokenAndRefreshToken ≠ 2 (token() lo usa para no caer al iframe)');
 const version = (bytes.toString('utf8', 0, 80).match(/@azure\/msal-browser v(\d+\.\d+\.\d+)/) || [])[1];
@@ -48,10 +48,10 @@ for (const f of enCss) {
     const h = createHash('sha256').update(readFileSync(join(raiz, 'vendor', 'fuentes', f))).digest('hex');
     assert.equal(h, filasFuentes.get(f), `vendor/fuentes/${f}: sha256 del archivo ≠ INTEGRIDAD.md (¿se sustituyó la fuente sin anotarlo?)`);
 }
-console.log(`vendor: ok (msal-browser ${version}, sha256 ${sha256.slice(0, 12)}…, integrity cotejado, API de app.js presente; ${enCss.length} fuentes con hash cotejado)`);
+console.log(`vendor: ok (msal-browser ${version}, sha256 ${sha256.slice(0, 12)}…, integrity cotejado, API de la app presente; ${enCss.length} fuentes con hash cotejado)`);
 
 // v0.35.0: qrcode.js (qrcode-generator, MIT) genera el QR del certificado: fila en INTEGRIDAD.md, sha256 del archivo,
-// integrity= en index.html, y la API que app.js usa (qrcode(typeNumber, nivel) -> addData/make/getModuleCount/isDark).
+// integrity= en index.html, y la API que la app usa (qrcode(typeNumber, nivel) -> addData/make/getModuleCount/isDark).
 {
     const qrBytes = readFileSync(join(raiz, 'vendor', 'qrcode.js'));
     const qrSha256 = createHash('sha256').update(qrBytes).digest('hex');
@@ -68,7 +68,7 @@ console.log(`vendor: ok (msal-browser ${version}, sha256 ${sha256.slice(0, 12)}�
     const qrcode = mod.exports;
     assert.equal(typeof qrcode, 'function', 'el UMD de qrcode.js no exporta la función qrcode');
     const q = qrcode(0, 'M'); q.addData('https://planta.minsaenergy.com/certificado/?f=CT-26-0001-abcdefgh'); q.make();
-    assert.ok(q.getModuleCount() >= 21 && typeof q.isDark(0, 0) === 'boolean', 'qrcode.js no expone getModuleCount/isDark como app.js los usa');
+    assert.ok(q.getModuleCount() >= 21 && typeof q.isDark(0, 0) === 'boolean', 'qrcode.js no expone getModuleCount/isDark como la app los usa');
     assert.equal(q.isDark(0, 0), true, 'el patrón de posición arranca en oscuro');
     console.log(`vendor: qrcode.js ok (sha256 ${qrSha256.slice(0, 12)}…, integrity cotejado, ${q.getModuleCount()}×${q.getModuleCount()} módulos)`);
 }

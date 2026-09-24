@@ -9,6 +9,6 @@ npm test                 # node: reglas de la puerta + service worker
 node servidor-local.js   # http://localhost:8080/
 ```
 
-Archivos: `index.html` (pantallas) · `app.js` (flujo) · `reglas.js` (compuerta, folios, tolerancia —
+Archivos: `index.html` (pantallas) · `app.js` (arranque) + un módulo por pantalla desde v0.75.0 — `nucleo.js` (estado y utilerías; no importa ninguna pantalla, a propósito), `navegacion.js`, `puerta.js`, `gondolas.js`, `prealtas.js`, `certificado.js`, `padron.js`, `hoy.js`, `reportes.js`, `archivos.js` · `reglas.js` (compuerta, folios, tolerancia —
 puras) · `graph.js` (listas y biblioteca por Microsoft Graph) · `imagen.js` (foto del indicador) ·
 `esquema.json` (las 7 listas) · `config.js` (ids públicos, sin secretos) · `sw.js`.
