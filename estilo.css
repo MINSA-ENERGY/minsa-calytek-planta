@@ -430,6 +430,66 @@ button:not(:disabled):active { transform: scale(.98); }
 .pie { margin: var(--sp-6) 0 0; font-family: var(--mono); font-size: .72rem; color: var(--faint); }
 .foto-previa { width: 100%; border-radius: 4px; border: 1px solid var(--line); margin-top: .4rem; }
 
+/* ---------------------------------------------------------------- pre-altas (rediseño tanda 1, v0.53.0)
+   Artifact 3PrGGb7ruvmrFhYNrrqdU1 v9: la captura al frente (P1) y «Usar como base» (P2); las tres fases separadas por una
+   línea de 1 px que se desvanece en las puntas (border-image, no ::before, para que caiga en píxel entero); los programas
+   en .gtabs con su tabla. Etiquetas y cuadros de 4 px, cero píldoras. */
+#p-prealtas .ic { width: 28px; height: 28px; border-radius: var(--r-sm); display: grid; place-items: center; flex: none; }
+#p-prealtas .ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#p-prealtas .ic.ac { background: var(--acc-soft); color: var(--acc); }
+#p-prealtas .ic.bo { background: var(--warn-soft); color: var(--warn-fg); }
+#p-prealtas .ic.fi { background: var(--ok-soft); color: var(--ok-fg); }
+#p-prealtas .ic.ce { background: var(--surf2); color: var(--mute); }
+.pa-inicio { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: stretch; margin-bottom: var(--sp-4); }
+.pa-inicio .tarjeta { margin: 0; }
+.pa-inicio h2 { margin: 0; font-family: var(--titulo); text-transform: none; letter-spacing: 0; color: var(--ink); }
+.pa-nueva { display: grid; gap: var(--sp-3); align-content: start; padding: 22px 24px; }
+.pa-nueva-t { display: flex; align-items: center; gap: 10px; }
+.pa-nueva-t .ic { width: 36px; height: 36px; }
+.pa-nueva h2 { font-size: 1.4rem; }
+.pa-nueva p { margin: 0; color: var(--mute); max-width: 52ch; }
+.pa-ruta { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: .86rem; }
+.pa-ruta span { display: flex; gap: 7px; align-items: center; }
+.pa-ruta i { font-style: normal; font-family: var(--mono); font-size: .72rem; width: 20px; height: 20px; border-radius: var(--r-sm); display: grid; place-items: center; background: var(--acc-soft); color: var(--acc); }
+.pa-nueva .principal { width: auto; }
+.pa-recientes { padding: 16px 0 0; display: grid; align-content: start; }
+.pa-rec-h { display: flex; gap: 8px; align-items: center; padding: 0 18px 10px; }
+.pa-rec-h h2 { font-size: 1rem; }
+.pa-rec-h small { color: var(--mute); font-size: .84rem; }
+.pa-base { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; width: 100%; min-height: 0; padding: 11px 18px; border: 0; border-top: 1px solid var(--line-soft); border-radius: 0; background: none; font: inherit; text-align: left; color: var(--ink-body); cursor: pointer; }
+.pa-base:hover { background: var(--rail-hover); }
+.pa-base:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+.pa-base b { font-family: var(--mono); font-weight: 500; color: var(--ink); font-size: .92rem; overflow-wrap: anywhere; }
+.pa-base small { grid-column: 1; color: var(--mute); font-size: .83rem; }
+.pa-base .usar { grid-row: 1 / 3; grid-column: 2; color: var(--acc); font-weight: 600; font-size: .88rem; white-space: nowrap; }
+.pa-fases { list-style: none; margin: 0 0 var(--sp-4); padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pa-fases li { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 10px; row-gap: 2px; align-items: center; padding: 4px 20px; font-size: .84rem; color: var(--mute); }
+.pa-fases li:first-child { padding-left: 0; }
+.pa-fases li + li { border-left: 1px solid; border-image: linear-gradient(180deg, transparent, var(--faint) 30%, var(--faint) 70%, transparent) 1; }
+.pa-fases li .ic { grid-row: 1; }
+.pa-fases li b { color: var(--ink); font-size: .9rem; }
+.pa-fases li small { grid-column: 2; line-height: 1.4; font-size: .84rem; }
+.pa-prog-h { margin: 0 0 var(--sp-2); font-family: var(--titulo); font-size: 1.1rem; text-transform: none; letter-spacing: 0; color: var(--ink); }
+.pa-tabla { background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.pa-tabla > .vacio { padding: 12px 16px; }
+.pa-tabla .renglon.prog { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 170px auto; gap: 4px 16px; align-items: center; padding: 12px 16px; }
+.pa-tabla .renglon.prog:first-child { padding-top: 12px; }
+.pa-tabla .renglon.prog:hover { background: var(--rail-hover); }
+.pa-tabla .renglon.prog .t { font-family: var(--mono); font-weight: 500; overflow-wrap: anywhere; }
+.pa-tabla .renglon.prog .c2 { font-size: .86rem; color: var(--ink-body); min-width: 0; }
+.pa-tabla .renglon.prog .c2 small { display: block; color: var(--mute); font-size: .8rem; }
+.pa-tabla .renglon.prog .avance { margin: 0; }
+@media (max-width: 720px) {
+    .pa-inicio { grid-template-columns: minmax(0, 1fr); }
+    .pa-nueva { padding: 18px; }
+    .pa-fases { grid-template-columns: minmax(0, 1fr); }
+    .pa-fases li, .pa-fases li:first-child { padding: 12px 0; }
+    .pa-fases li + li { border-left: 0; border-top: 1px solid; border-image: linear-gradient(90deg, transparent, var(--faint) 30%, var(--faint) 70%, transparent) 1; }
+    .pa-tabla .renglon.prog { grid-template-columns: minmax(0, 1fr) auto; }
+    .pa-tabla .renglon.prog .c2 { display: none; }
+    .pa-tabla .renglon.prog .avance { grid-column: 1 / -1; grid-row: 2; }
+}
+
 /* ---------------------------------------------------------------- padrón y pre-altas (acordeones) */
 
 .padron details { background: var(--surf); border: 1px solid var(--line-soft); border-radius: var(--r-md); margin-bottom: var(--sp-3); }

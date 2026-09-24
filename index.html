@@ -304,25 +304,37 @@
 
     <!-- PRE-ALTAS -->
     <section id="p-prealtas" class="oculto">
-      <header class="cabecera"><span class="titulo-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><h1>Programas</h1><span class="k">Pre-altas · borrador → firmada → cerrada</span><p class="sub">Un programa es CLIENTE-POZO-AÑO: quién genera, quién transporta y cuántas góndolas se esperan. Firmado, la puerta lo puede recibir.</p></header>
-      <!-- Acordeones por ESTADO, calcados del Padrón (P2, elegida por Carlos 2026-09-05).
-           Cada renglón lleva su avance de góndolas (recibidas / esperadas) y el grupo suma el total. -->
-      <div class="padron">
-      <details class="grupo" id="paGrupoBorradores">
-        <summary><span class="ic bo">BO</span><span class="t"><b>Borradores</b><small id="paResBorradores"></small></span><button id="btnNuevaPrealta" class="alta mn-btn is-sm" type="button">+ Nueva</button><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-        <div class="gcuerpo">
-          <div id="paBorradores"></div>
-        </div>
-      </details>
-      <details class="grupo" id="paGrupoFirmadas">
-        <summary><span class="ic fi">FI</span><span class="t"><b>Firmadas</b><small id="paResFirmadas"></small></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-        <div class="gcuerpo"><div id="paFirmadas"></div></div>
-      </details>
-      <details class="grupo" id="paGrupoCerradas">
-        <summary><span class="ic ce">CE</span><span class="t"><b>Cerradas</b><small id="paResCerradas"></small></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-        <div class="gcuerpo"><div id="paCerradas"></div></div>
-      </details>
+      <header class="cabecera"><span class="titulo-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><h1>Pre-altas</h1></header>
+      <!-- Rediseño de Pre-altas, tanda 1 (v0.53.0; artifact 3PrGGb7ruvmrFhYNrrqdU1 v9, aprobado 2026-09-24): la captura al frente
+           (P1) con «Usar como base» un programa reciente (P2), las tres fases explicadas y los programas en pestañas con conteo
+           (las .gtabs de Góndolas). Sustituye los tres acordeones por estado. Los ids paBorradores/paFirmadas/paCerradas y
+           paRes* se conservan: son los paneles y sus pies. -->
+      <div class="pa-inicio" id="paInicio">
+        <section class="tarjeta pa-nueva">
+          <div class="pa-nueva-t"><span class="ic ac" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><h2>Nueva pre-alta</h2></div>
+          <p>¿Llegó el correo del cliente con su programa? Captúralo aquí; solo cliente, pozo, corriente y carrier son obligatorios.</p>
+          <div class="pa-ruta"><span><i>1</i>Capturas</span><span><i>2</i>Ambiental la firma</span><span><i>3</i>La puerta recibe</span></div>
+          <div><button id="btnNuevaPrealta" class="principal mn-btn" type="button">+ Nueva pre-alta</button></div>
+        </section>
+        <section class="tarjeta pa-recientes" id="paRecientes">
+          <div class="pa-rec-h"><span class="ic ac" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></span><div><h2>O parte de uno reciente</h2><small>Copia cliente, generador, corriente y transporte</small></div></div>
+          <div id="paBases"></div>
+        </section>
       </div>
+      <ul class="pa-fases">
+        <li><span class="ic bo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14.5 4.5l5 5L10 19H5v-5z"/><path d="M12.5 6.5l5 5"/><path d="M4 21h16"/></svg></span><b>Por firmar</b><small>Capturado; espera la firma de la Responsable Ambiental. La puerta aún no recibe sus góndolas.</small></li>
+        <li><span class="ic fi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><b>Firmada</b><small>Autorizado. La puerta recibe sus góndolas y las coteja sola.</small></li>
+        <li><span class="ic ce" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><b>Cerrada</b><small>Ya no entra ninguna góndola. Queda para consulta y certificados.</small></li>
+      </ul>
+      <h2 class="pa-prog-h">Programas</h2>
+      <div class="gtabs" id="paTabs" role="group" aria-label="Programas por estado">
+        <button type="button" data-pa="borrador" aria-pressed="true">Por firmar<i id="paNBorradores"></i></button>
+        <button type="button" data-pa="firmada" aria-pressed="false">Firmadas<i id="paNFirmadas"></i></button>
+        <button type="button" data-pa="cerrada" aria-pressed="false">Cerradas<i id="paNCerradas"></i></button>
+      </div>
+      <div class="gpanel" id="ppBorradores"><div class="pa-tabla" id="paBorradores"></div><p class="pista" id="paResBorradores"></p></div>
+      <div class="gpanel" id="ppFirmadas" hidden><div class="pa-tabla" id="paFirmadas"></div><p class="pista" id="paResFirmadas"></p></div>
+      <div class="gpanel" id="ppCerradas" hidden><div class="pa-tabla" id="paCerradas"></div><p class="pista" id="paResCerradas"></p></div>
     </section>
 
     <!-- PADRON: acordeones en celular (P3), tres columnas en escritorio (P6); elegido por Carlos 2026-09-05.

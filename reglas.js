@@ -226,6 +226,15 @@ export function prealtaSinMovimiento(p, embarques, dias, hoy = new Date()) {
     return { motivo: suyos.length ? `sin arribos desde hace ${d} días` : `firmada y sin un solo arribo en ${d} días`, desde: ultimo.toISOString() };
 }
 
+/**
+ * La clave del cliente de una pre-alta (esquema v8, 2026-09-24): la columna Cliente si ya la tiene; si no —los renglones
+ * anteriores a v8 la traen vacia, a proposito—, el inicio del Title CLIENTE-POZO-AÑO. Mayusculas y sin espacios sobrantes.
+ */
+export function clienteDe(p) {
+    const c = String(p?.Cliente || '').trim() || String(p?.Title || '').split('-')[0].trim();
+    return c.toUpperCase().replace(/\s+/g, ' ');
+}
+
 /** Fecha YYYY-MM-DD en hora de Mexico (contrato de nombres: nunca UTC). */
 export function fechaMexico(ahora = new Date()) {
     const partes = new Intl.DateTimeFormat('en-CA', {

@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe } from './reglas.js';
 
-const VERSION = '0.52.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.53.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -36,6 +36,7 @@ const estado = {
     padronCarrier: null,     // id del carrier que filtra unidades y choferes en el padron
     ultimoCarrierPadron: null,   // U-46: el ultimo carrier dado de alta o usado en un alta de unidad/chofer (solo esta sesion)
     pestana: 'hoy',
+    vistaPrealtas: 'borrador', // rediseño de Pre-altas tanda 1 (v0.53.0): la pestaña elegida (borrador · firmada · cerrada)
     vistaGondolas: 'planta', // tanda 3 (v0.48.0): la pestaña elegida dentro de Góndolas (planta · hoy · rechazos · historial)
     subpasoPuerta: 1,        // tanda 4 (v0.49.0): la pantalla del paso 1 del asistente (1 programa · 2 vehículo y chofer · 3 carga)
     archivos: null,          // v0.33.0: { biblioteca, ramas: Map ruta -> hijos } de la seccion Archivos; null = se relee al pintar
@@ -1692,50 +1693,93 @@ function barraAvance({ rec, esp }) {
     } else d.appendChild(el('span', 'cifra', `${plural(rec, 'recibida')} · sin estimado`));
     return d;
 }
+/** Las tres pestañas de Pre-altas (rediseño tanda 1, v0.53.0): estado de la pre-alta -> panel. */
+const VISTAS_PREALTAS = { borrador: 'ppBorradores', firmada: 'ppFirmadas', cerrada: 'ppCerradas' };
+function elegirVistaPrealtas(v) {
+    estado.vistaPrealtas = VISTAS_PREALTAS[v] ? v : 'borrador';
+    for (const b of $('paTabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.pa === estado.vistaPrealtas));
+    for (const [k, id] of Object.entries(VISTAS_PREALTAS)) $(id).hidden = k !== estado.vistaPrealtas;
+}
+/**
+ * Un programa en la tabla de Pre-altas: nombre y folio · corriente y carrier · avance · Ver. Un solo DOM; en celular la
+ * segunda columna se esconde y el avance baja a lo ancho (estilo.css .pa-tabla). Las etiquetas de excepción (estado que no
+ * es el de su pestaña, «sin firma», «¿se cierra?») van junto al nombre, como antes.
+ */
+function renglonPrograma(p, grupo) {
+    const r = renglon(p.Title, p.Campana || '', 'Ver', () => verPrealta(vivo('prealtas', p)));
+    r.classList.add('prog');
+    const t = r.firstChild.firstChild;
+    if (p.Estado !== grupo) t.appendChild(etiqueta(p.Estado || 'sin estado', p.Estado));
+    if (grupo === 'firmada' && !prealtaFirmada(p)) t.appendChild(etiqueta('sin firma', 'vencida'));   // S-01
+    const sm = grupo === 'firmada' ? sinMovimientoDe(p) : null;
+    if (sm) { t.appendChild(etiqueta('¿se cierra?', 'aviso')); r.firstChild.appendChild(el('p', 'pista', `${sm.motivo}. Sigue saliendo en la puerta hasta que alguien cierre el programa.`)); }
+    const c2 = el('div', 'c2', etiquetaCorriente(p.Corriente) || 'sin corriente');
+    c2.appendChild(el('small', '', grupo === 'borrador' ? `${nombreDe(estado.carriers, p.CarrierId)} · 1er envío ${fechaCorta(p.FechaEstimada)}` : nombreDe(estado.carriers, p.CarrierId)));
+    r.insertBefore(c2, r.children[1]);
+    r.insertBefore(barraAvance(gondolasDe(p)), r.children[2]);
+    return r;
+}
+/**
+ * P2: los programas recientes que sirven de base (ya firmados o cerrados: un borrador todavía no es un precedente), uno por
+ * cliente y corriente para que los tres no sean el mismo programa repetido.
+ */
+function basesRecientes(n = 3) {
+    const vistos = new Set(), out = [];
+    for (const p of [...estado.prealtas].sort((a, b) => b.id - a.id)) {
+        if (p.Estado !== 'firmada' && p.Estado !== 'cerrada') continue;
+        const k = clienteDe(p) + '|' + p.Corriente;
+        if (vistos.has(k)) continue;
+        vistos.add(k); out.push(p);
+        if (out.length === n) break;
+    }
+    return out;
+}
 function pintarPrealtas() {
     cerrarForma('paForma'); cerrarForma('paDetalle');
-    $('btnNuevaPrealta').classList.toggle('oculto', !PUEDE.capturarPrealta(estado.rol));
+    const captura = PUEDE.capturarPrealta(estado.rol);
+    $('paInicio').classList.toggle('oculto', !captura);
+    $('btnNuevaPrealta').classList.toggle('oculto', !captura);   // además del contenedor: visible() de la E2E mira el botón
     // Un Estado que no sea uno de los tres cae en cerradas para que no desaparezca de la vista;
-    // ahi su etiqueta lo delata (abajo se pinta cuando no coincide con el grupo).
+    // ahi su etiqueta lo delata (renglonPrograma la pinta cuando no coincide con la pestaña).
     const grupos = { borrador: [], firmada: [], cerrada: [] };
     for (const p of [...estado.prealtas].sort((a, b) => b.id - a.id)) (grupos[p.Estado] || grupos.cerrada).push(p);
 
-    const pintar = (cont, ps, grupo) => {
-        cont.textContent = '';
-        for (const p of ps) {
-            const g = gondolasDe(p);
-            const r = renglon(p.Title, `${p.Generador || '?'} · ${p.Pozo || '?'} · ${etiquetaCorriente(p.Corriente) || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}${grupo === 'borrador' ? ` · 1er envío ${fechaCorta(p.FechaEstimada)}` : ''}`, 'Ver', () => verPrealta(vivo('prealtas', p)));
-            r.classList.add('conavance');
-            if (p.Campana) r.firstChild.firstChild.appendChild(el('span', 'folio', p.Campana));
-            if (p.Estado !== grupo) r.firstChild.firstChild.appendChild(etiqueta(p.Estado || 'sin estado', p.Estado));
-            if (grupo === 'firmada' && !prealtaFirmada(p)) r.firstChild.firstChild.appendChild(etiqueta('sin firma', 'vencida'));   // S-01
-            const sm = grupo === 'firmada' ? sinMovimientoDe(p) : null;
-            if (sm) { r.firstChild.firstChild.appendChild(etiqueta('¿se cierra?', 'aviso')); r.firstChild.appendChild(el('p', 'pista', `${sm.motivo}. Sigue saliendo en la puerta hasta que alguien cierre el programa.`)); }
-            r.firstChild.appendChild(barraAvance(g));
-            cont.appendChild(r);
-        }
-    };
-    pintar($('paBorradores'), grupos.borrador, 'borrador');
-    pintar($('paFirmadas'), grupos.firmada, 'firmada');
-    pintar($('paCerradas'), grupos.cerrada, 'cerrada');
+    const bases = captura ? basesRecientes() : [];
+    $('paRecientes').classList.toggle('oculto', !bases.length);
+    const cb = $('paBases'); cb.textContent = '';
+    for (const p of bases) {
+        const b = el('button', 'pa-base'); b.type = 'button';
+        b.appendChild(el('b', '', p.Title));
+        b.appendChild(el('small', '', `${etiquetaCorriente(p.Corriente) || 'sin corriente'} · ${nombreDe(estado.carriers, p.CarrierId)}`));
+        b.appendChild(el('span', 'usar', 'Usar como base ›'));
+        b.addEventListener('click', () => usarComoBase(vivo('prealtas', p)));
+        cb.appendChild(b);
+    }
 
-    if (!estado.prealtas.length) $('paBorradores').appendChild(el('p', 'pista', 'No hay pre-altas. La primera góndola no puede entrar sin una firmada.'));
+    const vacio = { borrador: 'Ninguna por firmar.', firmada: 'Ninguna firmada: la puerta no puede recibir.', cerrada: 'Ninguna cerrada.' };
+    for (const [grupo, cont] of [['borrador', 'paBorradores'], ['firmada', 'paFirmadas'], ['cerrada', 'paCerradas']]) {
+        const c = $(cont); c.textContent = '';
+        for (const p of grupos[grupo]) c.appendChild(renglonPrograma(p, grupo));
+        if (!grupos[grupo].length) c.appendChild(el('p', 'vacio', estado.prealtas.length || grupo !== 'borrador' ? vacio[grupo] : 'No hay pre-altas. La primera góndola no puede entrar sin una firmada.'));
+    }
+    $('paNBorradores').textContent = String(grupos.borrador.length);
+    $('paNFirmadas').textContent = String(grupos.firmada.length);
+    $('paNCerradas').textContent = String(grupos.cerrada.length);
+    // Las pestañas con algo que atender se marcan: borradores por firmar y firmadas sin firma o que ya no se mueven.
+    $('paNBorradores').classList.toggle('alerta', grupos.borrador.length > 0);
+    $('paNFirmadas').classList.toggle('alerta', grupos.firmada.some(p => sinMovimientoDe(p) || !prealtaFirmada(p)));
 
     const suma = ps => ps.reduce((a, p) => { const g = gondolasDe(p); a.rec += g.rec; a.esp += g.esp; return a; }, { rec: 0, esp: 0 });
     const sb = suma(grupos.borrador), sf = suma(grupos.firmada), sc = suma(grupos.cerrada);
     $('paResBorradores').textContent = grupos.borrador.length
-        ? `${grupos.borrador.length} · ${plural(sb.esp, 'góndola comprometida', 'góndolas comprometidas')}, ninguna puede entrar`
-        : 'ninguno pendiente de firma';
+        ? `${plural(sb.esp, 'góndola comprometida', 'góndolas comprometidas')}; ninguna puede entrar hasta que se firme.`
+        : '';
+    // U-23 (v0.26.0): sin firmadas el pie lo dice, porque es justo cuando la puerta no puede recibir nada.
     $('paResFirmadas').textContent = grupos.firmada.length
-        ? `${grupos.firmada.length} · ${sf.rec} de ${sf.esp} góndolas recibidas`
-        : 'ninguna · la puerta no puede recibir';
-    $('paResCerradas').textContent = grupos.cerrada.length
-        ? `${grupos.cerrada.length} · ${plural(sc.rec, 'góndola')} en total`
-        : 'ninguna';
-    // U-23 (v0.26.0): Firmadas se queda visible aunque esté vacío — su resumen «la puerta no puede recibir» es el aviso
-    // que importa justo cuando no hay ninguna. Solo Cerradas se oculta vacío.
-    $('paGrupoFirmadas').classList.remove('oculto');
-    $('paGrupoCerradas').classList.toggle('oculto', !grupos.cerrada.length);
+        ? `${sf.rec} de ${sf.esp} góndolas recibidas.`
+        : 'Sin una firmada la puerta no puede recibir.';
+    $('paResCerradas').textContent = grupos.cerrada.length ? `${plural(sc.rec, 'góndola')} en total.` : '';
+    elegirVistaPrealtas(estado.vistaPrealtas);
 }
 
 function nuevaPrealta() {
@@ -1750,6 +1794,23 @@ function nuevaPrealta() {
     armarTituloPrealta();
     pintarEstadoPrealta();
     abrirForma('paForma');
+}
+/**
+ * P2 (rediseño tanda 1, v0.53.0): «Usar como base» abre la pre-alta nueva con cliente, generador, corriente y carrier del
+ * programa elegido; pozo y envío quedan vacíos y el foco va al pozo. Si el carrier ya no está activo se deja sin elegir.
+ * (En la tanda 2 esto pasa al asistente, directo al paso 2.)
+ */
+function usarComoBase(p) {
+    if (!p || !PUEDE.capturarPrealta(estado.rol)) return;
+    nuevaPrealta();
+    const f = textoDe;
+    $('paCliente').value = clienteDe(p); $('paCorriente').value = f(p.Corriente);
+    $('paGenerador').value = f(p.Generador); $('paGeneradorRegistro').value = f(p.GeneradorRegistro); $('paGeneradorDireccion').value = f(p.GeneradorDireccion);
+    if (estado.carriers.some(c => c.Activo !== false && Number(c.id) === Number(p.CarrierId))) $('paCarrier').value = f(p.CarrierId);
+    pintarUnidadesChoferesPrealta();
+    armarTituloPrealta();
+    pintarEstadoPrealta();
+    $('paPozoTitulo').focus();
 }
 /**
  * Editar un BORRADOR (v0.19.10, Carlos 2026-09-08: «ver el borrador no me da la opcion de editarlo»). Mismo
@@ -3276,8 +3337,8 @@ $('baCapturado').addEventListener('keydown', ev => {
     ev.preventDefault();
     focables[ev.shiftKey ? (i <= 0 ? focables.length - 1 : i - 1) : (i < 0 || i === focables.length - 1 ? 0 : i + 1)].focus();
 });
-// El boton vive dentro del <summary>: sin preventDefault el clic pliega el grupo (igual que en el padron).
-$('btnNuevaPrealta').addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); $('paGrupoBorradores').open = true; nuevaPrealta(); });
+$('btnNuevaPrealta').addEventListener('click', nuevaPrealta);
+for (const b of $('paTabs').querySelectorAll('button')) b.addEventListener('click', () => elegirVistaPrealtas(b.dataset.pa));
 $('paCarrier').addEventListener('change', pintarUnidadesChoferesPrealta);
 // U-10 (v0.23.0): «+ Alta de carrier» desde la pre-alta abre la forma del padron ENCIMA (dialog anidado: la pre-alta
 // capturada se queda atras, intacta) y al guardar el carrier nuevo queda elegido aqui, con sus unidades/choferes (vacios).

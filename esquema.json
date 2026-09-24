@@ -1,6 +1,6 @@
 {
   "_que_es": "Esquema de las listas de SharePoint de la app de control de planta CALYTEK. Es la UNICA fuente: la lee herramientas-dev/provisionar.html para crearlas y app/graph.js para leerlas/escribirlas. Los nombres de columna son los INTERNOS (sin espacios ni acentos); el titulo visible va en 'titulo'. Las relaciones van por ID de renglon (numero), no por columna de busqueda: mas simple de leer por Graph y no obliga a crear las listas en orden. Los campos citan los 24 de minsa-energy/ambiental/calytek/registro-prestador-servicios.md seccion 4.1 (c1..c24) y el padron (padron-transportistas-y-vigencias.md).",
-  "version": 7,
+  "version": 8,
   "listas": [
     {
       "nombre": "PLANTA_Carriers",
@@ -62,6 +62,7 @@
       "regla": "decision 3-4 (2026-09-04): una por PROGRAMA de envios, ligada a la campana (pozo + generador + corriente). La firma del rol validador (o su suplente) la vuelve 'firmada'; sin firma, la puerta rechaza (legal).",
       "columnas": [
         { "nombre": "Title", "titulo": "Nombre del programa", "tipo": "text", "obligatorio": true, "nota": "p. ej. 'GSM-Bronco · Pozo X · sep-2026'" },
+        { "nombre": "Cliente", "titulo": "Cliente", "tipo": "text", "nota": "v8 (2026-09-24, OK de Carlos): la clave del cliente (LATINA, GSM…), la misma que abre el Title CLIENTE-POZO-AÑO. Agrupa los programas por cliente y da su ultimo programa (de ahi el generador) en el asistente de pre-alta. Vacia en los renglones anteriores: la app la deduce del inicio del Title" },
         { "nombre": "Estado", "titulo": "Estado", "tipo": "choice", "opciones": ["borrador", "firmada", "cerrada"], "obligatorio": true, "indexada": true },
         { "nombre": "Generador", "titulo": "Generador (razon social)", "tipo": "text", "nota": "c1" },
         { "nombre": "GeneradorRegistro", "titulo": "No. registro ASEA del generador", "tipo": "text", "nota": "c2" },

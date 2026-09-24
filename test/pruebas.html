@@ -591,8 +591,11 @@ try {
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras la campaña ajena');
         R.ok('pre-alta en borrador con campaña L-AA-NNN', /^L-\d\d-\d{3}$/.test(filas('prealtas')[0].fields.Campana), filas('prealtas')[0].fields.Campana);
         R.ok('pre-alta liga unidades y choferes del carrier', filas('prealtas')[0].fields.UnidadesIds === String(unidadId) && filas('prealtas')[0].fields.ChoferesIds === String(choferId));
-        // U-23 (v0.26.0): sin ninguna firmada, el grupo Firmadas sigue visible con su aviso; antes se ocultaba justo cuando importaba.
-        R.ok('U-23: el grupo Firmadas vacío sigue visible y dice que la puerta no puede recibir', visible('paGrupoFirmadas') && $('paResFirmadas').textContent.includes('la puerta no puede recibir') && !visible('paGrupoCerradas'), $('paResFirmadas').textContent);
+        // U-23 (v0.26.0) con el rediseño de Pre-altas (tanda 1, v0.53.0): sin ninguna firmada, la pestaña Firmadas cuenta 0 y su
+        // pie dice que la puerta no puede recibir. La vista abre en «Por firmar», con el borrador.
+        R.ok('tanda 1: Pre-altas abre en «Por firmar» con la captura al frente y los conteos en las pestañas', visible('paInicio') && visible('ppBorradores') && !visible('ppFirmadas') && $('paNBorradores').textContent === '1' && $('paNFirmadas').textContent === '0', `${$('paNBorradores').textContent}/${$('paNFirmadas').textContent}`);
+        R.ok('U-23: Firmadas vacía dice que la puerta no puede recibir', $('paResFirmadas').textContent.includes('la puerta no puede recibir') && $('paFirmadas').textContent.includes('la puerta no puede recibir'), $('paResFirmadas').textContent);
+        R.ok('tanda 1: sin firmadas ni cerradas no hay programas que usar como base', !visible('paRecientes'));
         // Editar el borrador (v0.19.10): PATCH que conserva la campana y el estado.
         const campanaAntes = filas('prealtas')[0].fields.Campana;
         document.querySelector('#paBorradores .renglon button').click();
@@ -693,6 +696,22 @@ try {
         R.ok('firmada la pre-alta, la puerta ya no avisa pendientes de firma', !visible('puPendientes'));
         document.querySelector('#pestanas button[data-p="prealtas"]').click();
         R.ok('una firmada reciente con fecha futura no se señala como dormida', !$('paFirmadas').textContent.includes('¿se cierra?'));
+        // Rediseño de Pre-altas, tanda 1 (P2): ya firmada, sale como base; usarla llena cliente, generador, corriente y carrier y
+        // deja el pozo vacío con el foco. La pestaña Firmadas la cuenta.
+        {
+            const b = [...document.querySelectorAll('#paBases .pa-base')].find(x => x.textContent.includes('CLIENTE DEMO-POZO 1-2026'));
+            R.ok('tanda 1: la firmada sale en «O parte de uno reciente» y Firmadas la cuenta', visible('paRecientes') && !!b && $('paNFirmadas').textContent === '1', $('paNFirmadas').textContent);
+            b.click(); await esperar(() => $('paForma').open, 'pre-alta desde la base');
+            R.ok('tanda 1: «Usar como base» copia cliente, generador, corriente y carrier; el pozo queda vacío y con el foco', $('paCliente').value === 'CLIENTE DEMO' && $('paGenerador').value === 'GENERADOR DEMO' && $('paCorriente').value === 'base-aceite' && $('paCarrier').value === String(carrierId) && $('paPozoTitulo').value === '' && document.activeElement === $('paPozoTitulo') && $('paTitulo').value === '', `${$('paCliente').value} · ${$('paCarrier').value} · ${$('paPozoTitulo').value}`);
+            clic('btnCancelarPrealta');
+        }
+        document.querySelector('#paTabs button[data-pa="firmada"]').click();
+        R.ok('tanda 1: la pestaña Firmadas muestra su panel', visible('ppFirmadas') && !visible('ppBorradores'));
+        // Salir y volver repinta la sección (pintarPrealtas); la pestaña elegida se conserva. Sin «Actualizar» aquí: su aviso
+        // quedaría en pantalla y la espera de la prueba siguiente (U-21) lo tomaría por su propia recarga.
+        document.querySelector('#pestanas button[data-p="hoy"]').click(); document.querySelector('#pestanas button[data-p="prealtas"]').click();
+        R.ok('tanda 1: al volver a Pre-altas sigue en Firmadas', visible('ppFirmadas') && !visible('ppBorradores'));
+        document.querySelector('#paTabs button[data-pa="borrador"]').click();
         // U-21 (v0.26.0): un chofer del carrier que la pre-alta NO autorizó sale al final y marcado «fuera del programa».
         {
             const fuera = { id: DB.siguienteId++, fields: { Title: 'PEDRO FUERA DEMO', CarrierId: carrierId, LicenciaVigencia: '2027-01-15T18:00:00.000Z', Activo: true } };
@@ -1717,7 +1736,7 @@ try {
                 clic('ctCerrar'); await dormir(20);
                 // El detalle del programa lee —sin emitir— los certificados de sus gondolas.
                 document.querySelector('#pestanas button[data-p="prealtas"]').click();
-                $('paGrupoCerradas').open = true;
+                document.querySelector('#paTabs button[data-pa="cerrada"]').click();
                 const rCerr = await esperar(() => [...document.querySelectorAll('#paCerradas .renglon')].find(r => r.textContent.includes('CLIENTE DEMO')), 'renglón en cerradas');
                 rCerr.querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle del programa cerrado');
                 R.ok('v0.39.0: el detalle del programa lista sus certificados sin ofrecer emitir', $('paDetalleCertificado').textContent.includes('CT-') && $('paDetalleCertificado').textContent.includes('vigente') && !visible('btnEmitirCertificado'), $('paDetalleCertificado').textContent.slice(0, 140));

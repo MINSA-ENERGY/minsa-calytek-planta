@@ -1,6 +1,6 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA } from '../reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -304,3 +304,10 @@ assert.equal(residuoDe(''), 'RECORTES DE PERFORACIÓN');
     assert.equal(subpasoDeRegla('Corriente'), 3);
     assert.equal(subpasoDeRegla('Art. 79'), 3);
 }
+
+// Rediseno de Pre-altas, tanda 1 (v0.53.0): el cliente sale de la columna Cliente (esquema v8) o, en los renglones
+// anteriores que la traen vacia, del inicio del Title CLIENTE-POZO-AÑO.
+assert.equal(clienteDe({ Cliente: 'gsm', Title: 'LATINA-IXACHI 1-2026' }), 'GSM', 'la columna manda sobre el titulo');
+assert.equal(clienteDe({ Cliente: '', Title: 'LATINA-IXACHI 1052-2026' }), 'LATINA', 'sin columna: el inicio del titulo');
+assert.equal(clienteDe({ Title: 'CLIENTE DEMO-POZO 1-2026' }), 'CLIENTE DEMO');
+assert.equal(clienteDe(null), '');
