@@ -235,6 +235,52 @@ export function clienteDe(p) {
     return c.toUpperCase().replace(/\s+/g, ' ');
 }
 
+/**
+ * S-27 (v0.56.0): la HUELLA de lo que ampara la firma de una pre-alta. Se guarda en PLANTA_Firmas.Motivo (columna que la
+ * firma de pre-alta dejaba vacia: sin tocar el tenant) y la firma solo vale mientras el renglon siga diciendo lo mismo:
+ * cambiar despues el carrier, la corriente, las unidades, los choferes o el generador de una firmada la deja sin firma.
+ * Van los campos que leen la compuerta y el certificado; fechas, gondolas esperadas y notas no, a proposito (no autorizan nada).
+ * SHA-256 sincrono en JS puro porque prealtaFirmada() es sincrona y se llama al pintar; reglas.test.js lo coteja con node:crypto.
+ */
+export const CAMPOS_HUELLA_PREALTA = ['Title', 'Cliente', 'Generador', 'GeneradorRegistro', 'GeneradorDireccion', 'Pozo', 'Corriente', 'CarrierId', 'UnidadesIds', 'ChoferesIds'];
+export function textoHuellaPrealta(p) {
+    return CAMPOS_HUELLA_PREALTA.map(k => {
+        const v = p?.[k] ?? '';
+        if (k === 'UnidadesIds' || k === 'ChoferesIds') return `${k}=${lista(v).map(Number).sort((a, b) => a - b).join(';')}`;
+        if (k === 'CarrierId') return `${k}=${v === '' ? '' : Number(v)}`;
+        return `${k}=${String(v).trim()}`;
+    }).join('\n');
+}
+export const huellaPrealta = p => 'huella v1 ' + sha256Hex(textoHuellaPrealta(p));
+/** Una firma sin huella es de antes de la v0.56.0 y vale mientras tanto (transitorio, a proposito: no dejar la puerta sin programas). */
+export function firmaAmparaPrealta(motivo, p) { const m = String(motivo || '').trim(); return !m || m === huellaPrealta(p); }
+
+const PRIMOS64 = (() => { const p = []; for (let x = 2; p.length < 64; x++) if (p.every(q => x % q)) p.push(x); return p; })();
+const fraccion32 = v => Math.floor((v - Math.floor(v)) * 2 ** 32) >>> 0;
+const H256 = PRIMOS64.slice(0, 8).map(p => fraccion32(Math.sqrt(p)));
+const K256 = PRIMOS64.map(p => fraccion32(Math.cbrt(p)));
+export function sha256Hex(texto) {
+    const b = new TextEncoder().encode(String(texto)), l = b.length, n = ((l + 9 + 63) >> 6) << 6;
+    const m = new Uint8Array(n); m.set(b); m[l] = 0x80;
+    const dv = new DataView(m.buffer); dv.setUint32(n - 4, (l * 8) >>> 0); dv.setUint32(n - 8, Math.floor(l / 2 ** 29));
+    const h = H256.slice(), w = new Uint32Array(64), r = (x, k) => (x >>> k) | (x << (32 - k));
+    for (let o = 0; o < n; o += 64) {
+        for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i * 4);
+        for (let i = 16; i < 64; i++) {
+            const a = w[i - 15], c = w[i - 2];
+            w[i] = (w[i - 16] + (r(a, 7) ^ r(a, 18) ^ (a >>> 3)) + w[i - 7] + (r(c, 17) ^ r(c, 19) ^ (c >>> 10))) >>> 0;
+        }
+        let [A, B, C, D, E, F, G, HH] = h;
+        for (let i = 0; i < 64; i++) {
+            const t1 = (HH + (r(E, 6) ^ r(E, 11) ^ r(E, 25)) + ((E & F) ^ (~E & G)) + K256[i] + w[i]) >>> 0;
+            const t2 = ((r(A, 2) ^ r(A, 13) ^ r(A, 22)) + ((A & B) ^ (A & C) ^ (B & C))) >>> 0;
+            HH = G; G = F; F = E; E = (D + t1) >>> 0; D = C; C = B; B = A; A = (t1 + t2) >>> 0;
+        }
+        [A, B, C, D, E, F, G, HH].forEach((x, i) => { h[i] = (h[i] + x) >>> 0; });
+    }
+    return h.map(x => x.toString(16).padStart(8, '0')).join('');
+}
+
 /** Fecha YYYY-MM-DD en hora de Mexico (contrato de nombres: nunca UTC). */
 export function fechaMexico(ahora = new Date()) {
     const partes = new Intl.DateTimeFormat('en-CA', {

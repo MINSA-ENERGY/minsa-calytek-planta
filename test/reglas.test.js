@@ -1,6 +1,7 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe } from '../reglas.js';
+import { createHash } from 'node:crypto';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, huellaPrealta, firmaAmparaPrealta } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -311,3 +312,16 @@ assert.equal(clienteDe({ Cliente: 'gsm', Title: 'LATINA-IXACHI 1-2026' }), 'GSM'
 assert.equal(clienteDe({ Cliente: '', Title: 'LATINA-IXACHI 1052-2026' }), 'LATINA', 'sin columna: el inicio del titulo');
 assert.equal(clienteDe({ Title: 'CLIENTE DEMO-POZO 1-2026' }), 'CLIENTE DEMO');
 assert.equal(clienteDe(null), '');
+
+// S-27 (v0.56.0): la huella de la firma de pre-alta. SHA-256 propio contra node:crypto; el orden de los ids no la cambia;
+// cambiar una unidad, el carrier o la corriente la rompe; una firma sin huella (antes de v0.56.0) sigue valiendo.
+for (const t of ['', 'abc', 'a'.repeat(55), 'a'.repeat(56), 'a'.repeat(64), 'Pozo=IXACHI ñ — ✓', 'x'.repeat(1000)])
+    assert.equal(sha256Hex(t), createHash('sha256').update(t, 'utf8').digest('hex'), `sha256 de ${t.length} caracteres`);
+const pf = { Title: 'GSM-IXACHI 15-2026', Cliente: 'GSM', CarrierId: 5, UnidadesIds: '12;3', ChoferesIds: '7', Corriente: 'base-aceite', Generador: 'GEN DEMO' };
+const hf = huellaPrealta(pf);
+assert.ok(hf.startsWith('huella v1 ') && hf.length < 255, 'cabe en la columna de texto Motivo');
+assert.ok(firmaAmparaPrealta(hf, { ...pf, UnidadesIds: '3; 12', CarrierId: '5', Notas: 'otra', GondolasEsperadas: 9 }), 'orden de ids, tipo del id y notas no cuentan');
+assert.ok(!firmaAmparaPrealta(hf, { ...pf, UnidadesIds: '3;12;99' }), 'una unidad agregada tras firmar');
+assert.ok(!firmaAmparaPrealta(hf, { ...pf, CarrierId: 6 }), 'otro carrier tras firmar');
+assert.ok(!firmaAmparaPrealta(hf, { ...pf, Corriente: 'base-agua' }), 'otra corriente tras firmar');
+assert.ok(firmaAmparaPrealta('', { ...pf, CarrierId: 6 }), 'firma sin huella: transitorio');

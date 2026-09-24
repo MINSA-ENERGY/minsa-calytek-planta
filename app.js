@@ -11,9 +11,9 @@
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe } from './reglas.js';
+import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta } from './reglas.js';
 
-const VERSION = '0.55.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.56.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -29,6 +29,7 @@ const estado = {
     fotoBytes: null,
     fotoUrl: null,           // blob URL de la vista previa; se revoca al reemplazar la foto o cancelar (C-21)
     prealtaAbierta: null,
+    prealtaVista: null,      // C-60 (v0.56.0): { estado, huella } de la pre-alta tal como la pinto el detalle
     prealtaEdit: null,       // borrador de pre-alta en edicion (asistente #paAsis)
     paAsis: null,            // v0.54.0: el recorrido del asistente de pre-alta (paso, max, revisar...); null = cerrado
     padronEdit: null,        // {clave, x} del renglon del padron en edicion, o null
@@ -415,13 +416,21 @@ function firmaDe(tipo, id, sello) {
         && (ROL_FIRMA[tipo] || []).includes(rolDe(f.Firmante, estado.roles))
         && (sello === undefined || mismaCuenta(f.Firmante, sello))) || null;
 }
-function prealtaFirmada(p) { return p.Estado === 'firmada' && !!firmaDe('prealta', p.id, p.FirmadaPor); }
+/**
+ * S-27 (v0.56.0): la firma de pre-alta vale solo si su huella (Motivo) sigue cuadrando con el renglón: tras firmada, un
+ * cambio de carrier, corriente, unidades, choferes o generador —por la app o por Graph— la deja sin firma y la puerta no la ve.
+ */
+const firmasPrealta = p => estado.firmas.filter(f => f.Tipo === 'prealta' && Number(f.ObjetoId) === Number(p.id)
+    && ROL_FIRMA.prealta.includes(rolDe(f.Firmante, estado.roles)) && mismaCuenta(f.Firmante, p.FirmadaPor));
+function prealtaFirmada(p) { return p.Estado === 'firmada' && firmasPrealta(p).some(f => firmaAmparaPrealta(f.Motivo, p)); }
+/** Firmada con sello y firma, pero el renglón cambió después: se dice así, no «sin firma». */
+const prealtaCambioTrasFirma = p => p.Estado === 'firmada' && !prealtaFirmada(p) && firmasPrealta(p).length > 0;
 function excepcionAutorizada(e) { return !!e.ExcepcionAutorizo && !!firmaDe('excepcion', e.id, e.ExcepcionAutorizo); }
 /** C-55 (v0.52.0): la compuerta de un embarque en palabras, con la firma y no el sello decidiendo la excepción. */
 const palabraCompuertaDe = e => palabraCompuerta(e.Compuerta, excepcionAutorizada(e));
 /** Sellos sin firma que valga (de antes del corte, por fuera de la app, o firmada por quien no tiene el rol): la compuerta no los acepta. */
 function sellosSinFirma() {
-    return { prealtas: estado.prealtas.filter(p => p.Estado === 'firmada' && !firmaDe('prealta', p.id, p.FirmadaPor)),
+    return { prealtas: estado.prealtas.filter(p => p.Estado === 'firmada' && !prealtaFirmada(p)),
              embarques: estado.embarques.filter(e => e.Etapa === 'compuerta' && !!e.ExcepcionAutorizo && !firmaDe('excepcion', e.id, e.ExcepcionAutorizo)) };
 }
 const selloSinFirma = e => (e.ExcepcionAutorizo ? `sello de ${quien(e.ExcepcionAutorizo)} sin firma registrada · ` : '');   // U-28 / U-31 (v0.26.0)
@@ -1812,7 +1821,7 @@ function usarComoBase(p) {
     $('paCliente').value = clienteDe(p); $('paCorriente').value = f(p.Corriente);
     $('paGenerador').value = f(p.Generador); $('paGeneradorRegistro').value = f(p.GeneradorRegistro); $('paGeneradorDireccion').value = f(p.GeneradorDireccion);
     if (estado.carriers.some(c => c.Activo !== false && Number(c.id) === Number(p.CarrierId))) $('paCarrier').value = f(p.CarrierId);
-    pintarUnidadesChoferesPrealta();
+    pintarUnidadesChoferesPrealta(seleccionDe(p));   // U-94 (v0.56.0): la seleccion de la base, no todas
     armarTituloPrealta();
     Object.assign(estado.paAsis, { paso: 2, max: 3, base: p, genDe: p });
     pintarAsistentePrealta();
@@ -1835,10 +1844,7 @@ function editarPrealta() {
     $('paGeneradorRegistro').value = f(p.GeneradorRegistro); $('paGeneradorDireccion').value = f(p.GeneradorDireccion); $('paPozo').value = f(p.Pozo); $('paCarrier').value = f(p.CarrierId);
     $('paFecha').value = p.FechaEstimada ? fechaCorta(p.FechaEstimada) : ''; $('paGondolas').value = f(p.GondolasEsperadas);
     $('paCorreoFecha').value = p.CorreoFecha ? fechaCorta(p.CorreoFecha) : ''; $('paCorreoRemitente').value = f(p.CorreoRemitente); $('paNotas').value = f(p.Notas);
-    pintarUnidadesChoferesPrealta();
-    // Se marcan las que la pre-alta ya tenia; si no tenia ninguna guardada, quedan todas (es lo que la puerta entiende).
-    for (const [cont, ids] of [['paUnidades', lista(p.UnidadesIds)], ['paChoferes', lista(p.ChoferesIds)]])
-        if (ids.length) for (const c of $(cont).querySelectorAll('input')) c.checked = ids.includes(c.value);
+    pintarUnidadesChoferesPrealta(seleccionDe(p));   // las que la pre-alta ya tenia; si no tenia ninguna guardada, todas
     armarTituloPrealta();
     cerrarForma('paDetalle');
     abrirAsistentePrealta();
@@ -1861,18 +1867,33 @@ function partirTituloPrealta(titulo) {
     const partes = p.length >= 3 ? [p[0], p.slice(1, -1).join(' '), p[p.length - 1]] : [titulo || '', '', ''];
     PARTES_TITULO.forEach((id, i) => { $(id).value = partes[i]; });
 }
-function pintarUnidadesChoferesPrealta() {
+const seleccionDe = p => ({ unidades: lista(p.UnidadesIds), choferes: lista(p.ChoferesIds) });
+/** U-92 (v0.56.0): si la corriente nueva no la ampara el carrier elegido, se suelta y SE DICE (antes se soltaba callado). */
+function cambiarCorrientePrealta(k, texto) {
+    const antes = $('paCarrier').value ? porId(estado.carriers, $('paCarrier').value) : null;
+    $('paCorriente').value = k;
+    if (antes && !carrierAmpara(antes, k)) {
+        $('paCarrier').value = ''; pintarUnidadesChoferesPrealta();
+        avisar(`${antes.Title} no ampara «${texto.toLowerCase()}»: se quitó del programa con sus unidades y choferes. Elige otro carrier en Transporte.`, 'ojo');
+    }
+    pintarAsistentePrealta();
+}
+/**
+ * Las casillas de unidades y choferes del carrier elegido. `sel` ({ unidades, choferes }: ids) marca solo esas; sin `sel`, o con una
+ * lista vacia, quedan todas (es lo que la puerta entiende). C-62/U-94 (v0.56.0): quien llama pasa la seleccion que ya existia.
+ */
+function pintarUnidadesChoferesPrealta(sel) {
     const cid = Number($('paCarrier').value);
-    const cajas = (cont, items, nombre) => {
+    const cajas = (cont, items, nombre, ids) => {
         cont.textContent = '';
         if (!items.length) { cont.appendChild(el('p', 'pista', `(ese carrier no tiene ${nombre} en el padrón)`)); return; }
         for (const it of items) {
-            const l = el('label', 'chk'); const c = el('input'); c.type = 'checkbox'; c.value = String(it.id); c.checked = true;
+            const l = el('label', 'chk'); const c = el('input'); c.type = 'checkbox'; c.value = String(it.id); c.checked = !ids || !ids.length || ids.includes(String(it.id));
             l.appendChild(c); l.appendChild(document.createTextNode(' ' + (it.PlacaPlana ? `${it.Title} / ${it.PlacaPlana}` : it.Title))); cont.appendChild(l);
         }
     };
-    cajas($('paUnidades'), estado.unidades.filter(u => Number(u.CarrierId) === cid && u.Activo !== false), 'unidades');
-    cajas($('paChoferes'), estado.choferes.filter(u => Number(u.CarrierId) === cid && u.Activo !== false), 'choferes');
+    cajas($('paUnidades'), estado.unidades.filter(u => Number(u.CarrierId) === cid && u.Activo !== false), 'unidades', sel && sel.unidades);
+    cajas($('paChoferes'), estado.choferes.filter(u => Number(u.CarrierId) === cid && u.Activo !== false), 'choferes', sel && sel.choferes);
 }
 function marcados(id) { return [...$(id).querySelectorAll('input:checked')].map(c => c.value).join(';'); }
 // ---------------------------------------------------------------- asistente de pre-alta (rediseño tanda 2, v0.54.0)
@@ -1918,6 +1939,8 @@ function faltaPrealta(n) {
     }
     if (n === 3) {
         if (!$('paCarrier').value) return { t: 'Elige el carrier', foco: () => primera('paCarriers') };
+        const ce = porId(estado.carriers, $('paCarrier').value);
+        if (ce && !carrierAmpara(ce, $('paCorriente').value)) return { t: 'Elige un carrier que ampare la corriente', foco: () => primera('paCarriers') };
         for (const [cont, que] of [['paUnidades', 'una unidad'], ['paChoferes', 'un chofer']])
             if ($(cont).querySelector('input') && !$(cont).querySelector('input:checked')) return { t: `Marca al menos ${que}`, foco: () => $(cont).querySelector('input') };
     }
@@ -1989,10 +2012,11 @@ function pintarAsistentePrealta() {
 
     // Paso 2: la base, la corriente y el generador (aviso con «Cambiar», o sus campos si no hay o se pidió cambiarlo).
     $('paBaseAviso').classList.toggle('oculto', !a.base);
-    if (a.base) $('paBaseAviso').firstChild.textContent = `Copiado de ${a.base.Title}: cliente, generador, corriente y transporte. Solo escribe el pozo.`;
+    if (a.base) $('paBaseAviso').firstChild.textContent = $('paCarrier').value ? `Copiado de ${a.base.Title}: cliente, generador, corriente y transporte. Solo escribe el pozo.`
+        : `Copiado de ${a.base.Title}: cliente, generador y corriente. Su carrier ya no está activo: escribe el pozo y elige otro en Transporte.`;   // U-94
     const corr = $('paCorriente').value;
     pintarOpcionesPa($('paCorrientes'), CORRIENTES.map(([k, t]) => ({ valor: k, sel: corr === k, titulo: t, detalle: k.startsWith('fluidos') ? 'fluido de perforación agotado' : 'recorte de perforación',
-        alClic: () => { $('paCorriente').value = k; pintarAsistentePrealta(); } })));
+        alClic: () => { cambiarCorrientePrealta(k, t); } })));
     const gen = valorPa('paGenerador'), verCampos = a.genEdit || !gen;
     $('paGenAviso').classList.toggle('oculto', verCampos);
     $('paGenCampos').classList.toggle('oculto', !verCampos);
@@ -2005,14 +2029,15 @@ function pintarAsistentePrealta() {
     const cid = $('paCarrier').value;
     const carriers = [...$('paCarrier').options].filter(o => o.value).map(o => porId(estado.carriers, o.value)).filter(Boolean);
     const elegido = cid ? porId(estado.carriers, cid) : null;
-    if (elegido && !carrierAmpara(elegido, corr)) { $('paCarrier').value = ''; pintarUnidadesChoferesPrealta(); return pintarAsistentePrealta(); }
+    // C-62 (v0.56.0): el pintor ya no suelta el carrier (lo hace cambiarCorrientePrealta, que avisa); un carrier que no ampara
+    // —p. ej. al editar un borrador viejo— lo marca faltaPrealta(3) y Guardar no pasa.
     const cuenta = (col, c) => col.filter(x => Number(x.CarrierId) === Number(c.id) && x.Activo !== false).length;
     pintarOpcionesPa($('paCarriers'), carriers.map(c => {
         const ok = carrierAmpara(c, corr);
         return { valor: String(c.id), sel: String(c.id) === cid, titulo: c.Title, deshabilitada: !ok,
             dato: ok ? etiquetaVigencia('carriers', c) || undefined : etiqueta('no ampara', 'vencida'),
             detalle: ok ? `${plural(cuenta(estado.unidades, c), 'unidad', 'unidades')} · ${plural(cuenta(estado.choferes, c), 'chofer', 'choferes')}` : `Su oficio no ampara «${etiquetaCorriente(corr).toLowerCase()}»`,
-            alClic: () => { $('paCarrier').value = String(c.id); pintarUnidadesChoferesPrealta(); pintarAsistentePrealta(); } };
+            alClic: () => { if ($('paCarrier').value !== String(c.id)) { $('paCarrier').value = String(c.id); pintarUnidadesChoferesPrealta(); } pintarAsistentePrealta(); } };   // C-62: el mismo carrier no re-marca
     }));
     if (!carriers.length) $('paCarriers').appendChild(el('p', 'pista', 'No hay carriers activos en el padrón: da de alta uno.'));
     const h = elegido ? vigenciasPadron('carriers', elegido).filter(x => !sinFecha(x)) : [];
@@ -2075,7 +2100,7 @@ function siguientePrealta() {
     const a = estado.paAsis; if (!a) return;
     const f = faltaPrealta(a.paso);
     if (f) { const x = f.foco(); if (x) x.focus(); return; }
-    irPasoPrealta(a.revisar ? 5 : a.paso + 1);
+    irPasoPrealta(a.revisar ? ([1, 2, 3].find(i => faltaPrealta(i)) || 5) : a.paso + 1);   // U-92: si «Cambiar» dejo otro paso incompleto, va ahi
 }
 for (const id of PARTES_TITULO) $(id).addEventListener('input', armarTituloPrealta);
 $('paAsis').addEventListener('input', pintarAsistentePrealta);
@@ -2102,10 +2127,21 @@ async function guardarPrealta() {
     // se quedaban en el título que la puerta ve en el select y en el ticket.
     const anio = Number($('paMes').value.trim()), hoyAnio = new Date().getFullYear();
     if (!/^\d{4}$/.test($('paMes').value.trim()) || anio < hoyAnio - 1 || anio > hoyAnio + 1) { avisar(`El año del programa va con cuatro cifras, entre ${hoyAnio - 1} y ${hoyAnio + 1}.`, 'error'); $('paMes').focus(); return; }
-    const edit = estado.prealtaEdit && estado.prealtaEdit.Estado === 'borrador' ? estado.prealtaEdit : null;
+    // C-61 (v0.56.0): los pasos 1-3 se revalidan al guardar. La barra de pasos deja llegar a Revisar sin pasar por Siguiente,
+    // y unidades o choferes todos desmarcados se guardaban vacios, que la compuerta lee como «todas autorizadas».
+    const pend = [1, 2, 3].find(i => faltaPrealta(i));
+    if (pend) { const f = faltaPrealta(pend); irPasoPrealta(pend); avisar(`${f.t} antes de guardar.`, 'error'); const x = f.foco(); if (x) x.focus(); return; }
+    // C-59 (v0.56.0): se edita por el id que se abrio, aunque el refresco ya lo haya traido firmado: la relectura decide.
+    // Antes, un borrador que otra sesion firmo caia al crearRenglon y nacia un programa duplicado.
+    const edit = estado.prealtaEdit;
     await escribiendo('btnGuardarPrealta', async () => { try {   // C-24
         await refrescarCliente();
         if (edit) {
+            const fresco = await estado.cliente.renglon(estado.siteId, L.prealtas, edit.id);
+            if (fresco.Estado !== 'borrador') {
+                aplicar('prealtas', edit, fresco);
+                throw new Error(`ya no es borrador: ${fresco.Estado === 'firmada' ? `la firmó ${quien(fresco.FirmadaPor) || 'otra sesión'}` : `la cerró ${quien(fresco.CerradaPor) || 'otra sesión'}`} mientras la editabas. Tus cambios no se guardaron; si hacen falta, cierra ese programa y captura otro.`);
+            }
             const cambios = paraPatch({
                 Title: $('paTitulo').value.trim(), Cliente: parteTitulo('paCliente'), Generador: $('paGenerador').value.trim(), GeneradorRegistro: $('paGeneradorRegistro').value.trim(), GeneradorDireccion: $('paGeneradorDireccion').value.trim(),
                 Pozo: $('paPozo').value.trim(), Corriente: $('paCorriente').value, CarrierId: Number($('paCarrier').value),
@@ -2163,6 +2199,7 @@ function trasCambioPrealta() {
 }
 function verPrealta(p) {
     estado.prealtaAbierta = p;
+    estado.prealtaVista = { estado: p.Estado, huella: huellaPrealta(p) };   // C-60: lo que el detalle muestra, para cotejar al firmar
     abrirForma('paDetalle');   // antes de los avisos: con el dialog abierto, avisar() los pinta adentro
     $('paDetalleTitulo').textContent = `${p.Title} · ${p.Estado}`;
     const ul = $('paDetalleLista'); ul.textContent = '';
@@ -2173,7 +2210,7 @@ function verPrealta(p) {
         ['Unidades', lista(p.UnidadesIds).map(id => { const u = porId(estado.unidades, id); return u ? `${u.Title}/${u.PlacaPlana || ''}` : `#${id}`; }).join(', ') || '—'],
         ['Choferes', lista(p.ChoferesIds).map(id => nombreDe(estado.choferes, id)).join(', ') || '—'],
         ['Primer envío', fechaCorta(p.FechaEstimada)], ['Correo', `${fechaCorta(p.CorreoFecha)} · ${p.CorreoRemitente || ''}`],
-        ['Capturó', quien(p.CapturadaPor) || '—'], ['Firmó', p.FirmadaPor ? `${quien(p.FirmadaPor)} · ${horaCorta(p.FirmadaEl)}${p.Estado === 'firmada' && !prealtaFirmada(p) ? ' · sello sin firma: la puerta no la ve' : ''}` : '—'], ['Cerró', p.CerradaPor ? `${quien(p.CerradaPor)} · ${horaCorta(p.CerradaEl)}` : '—'], ['Notas', p.Notas || '—']   // U-28 / U-31 (v0.26.0)
+        ['Capturó', quien(p.CapturadaPor) || '—'], ['Firmó', p.FirmadaPor ? `${quien(p.FirmadaPor)} · ${horaCorta(p.FirmadaEl)}${prealtaCambioTrasFirma(p) ? ' · cambió después de firmarse: la puerta no la ve hasta volver a firmar' : p.Estado === 'firmada' && !prealtaFirmada(p) ? ' · sello sin firma: la puerta no la ve' : ''}` : '—'], ['Cerró', p.CerradaPor ? `${quien(p.CerradaPor)} · ${horaCorta(p.CerradaEl)}` : '—'], ['Notas', p.Notas || '—']   // U-28 / U-31 (v0.26.0)
     ];
     for (const [k, v] of filas) { const li = el('li', '', k); li.appendChild(el('span', 'd', v)); ul.appendChild(li); }
     // Cotejo automatico de vigencias (lo que el validador firma que reviso).
@@ -2231,12 +2268,20 @@ async function firmarPrealta() {
     await escribiendo('btnFirmar', async () => {   // C-24 / C-23
     const reFirma = p.Estado === 'firmada';   // S-01: trae el sello pero no su renglon en PLANTA_Firmas; solo falta la firma
     const { ok } = await confirmar({ titulo: 'Firmar la pre-alta', ok: 'Firmar',
-        texto: reFirma ? `«${p.Title}» trae el sello de ${quien(p.FirmadaPor)} pero no su firma registrada, así que la puerta no la ve. Con tu firma queda completa; queda registrado quién y cuándo.`
+        texto: reFirma && prealtaCambioTrasFirma(p) ? `«${p.Title}» cambió después de que ${quien(p.FirmadaPor)} la firmó, así que la puerta ya no la ve. Revisa carrier, unidades, choferes y generador arriba: con tu firma queda amparado lo que dice HOY.`
+            : reFirma ? `«${p.Title}» trae el sello de ${quien(p.FirmadaPor)} pero no su firma registrada, así que la puerta no la ve. Con tu firma queda completa; queda registrado quién y cuándo.`
             : `«${p.Title}». Con tu firma la puerta empieza a aceptar sus góndolas; queda registrado quién y cuándo.` });
     if (!ok) return;
     try {
         await refrescarCliente();
-        await firmar('prealta', p);   // S-01: primero la firma (403 si no eres validador/gerencia), luego el sello
+        // C-60 (v0.56.0): se relee el renglón antes de firmar. Si otra sesión lo cerró, lo firmó o le cambió lo que se firma
+        // mientras el detalle estaba abierto, no se firma lo que no se vio: se ancla lo fresco y se pide volver a mirarlo.
+        const fresco = await estado.cliente.renglon(estado.siteId, L.prealtas, p.id);
+        const vista = estado.prealtaVista || { estado: p.Estado, huella: huellaPrealta(p) };
+        const cambio = fresco.Estado !== vista.estado || huellaPrealta(fresco) !== vista.huella;
+        if (cambio) { aplicar('prealtas', p, fresco); trasCambioPrealta(); verPrealta(vivo('prealtas', p)); throw new Error(fresco.Estado === 'cerrada' ? 'el programa ya está cerrado (lo cerró otra sesión).'
+            : fresco.Estado === 'firmada' && !reFirma ? `ya lo firmó ${quien(fresco.FirmadaPor) || 'otra sesión'}.` : 'cambió desde que lo abriste. Ábrelo otra vez y revísalo antes de firmar.'); }
+        await firmar('prealta', p, huellaPrealta(fresco));   // S-01: primero la firma (403 si no eres validador/gerencia), luego el sello; S-27: con la huella de lo firmado
         const campos = { Estado: 'firmada', FirmadaPor: estado.cuenta.username, FirmadaEl: new Date().toISOString() };
         await estado.cliente.actualizarRenglon(estado.siteId, L.prealtas, p.id, campos);
         aplicar('prealtas', p, campos);   // C-23
@@ -2252,6 +2297,9 @@ async function cerrarPrealta() {
     if (!ok) return;
     try {
         await refrescarCliente();
+        // C-60 (v0.56.0): relectura. Cerrar lo ya cerrado no pisa el sello de quien cerró primero.
+        const fresco = await estado.cliente.renglon(estado.siteId, L.prealtas, p.id);
+        if (fresco.Estado === 'cerrada') { aplicar('prealtas', p, fresco); trasCambioPrealta(); avisar(`Ya estaba cerrado: lo cerró ${quien(fresco.CerradaPor) || 'otra sesión'}.`, 'ojo'); return; }
         const campos = { Estado: 'cerrada', CerradaPor: estado.cuenta.username, CerradaEl: new Date().toISOString() };
         try { await estado.cliente.actualizarRenglon(estado.siteId, L.prealtas, p.id, campos); }
         catch (err) {
@@ -3283,7 +3331,7 @@ function pintarPendientesHoy(borradores, pendientes, botonesExcepcion) {
     $('tbPendientesN').classList.toggle('oculto', !nPend); $('tbPendientesN').textContent = String(nPend);
     if (!nPend) pf.appendChild(el('p', 'vacio', 'Nada pendiente.'));
     if (estado.firmasError) pf.appendChild(renglon('No se pudo leer el registro de firmas', `la app no firma ni autoriza y ningún sello vale sin su firma · Actualiza; si sigue, avisa a gerencia${estado.rol === 'gerencia' ? ` · PLANTA_Firmas: ${estado.firmasError} (permisos de la lista; setup-carlos.md, tarea 11)` : ''}`));   // U-31
-    for (const p of ssf) pf.appendChild(renglon(`Firma · ${p.Title}`, `falta la firma del validador (trae el sello de ${quien(p.FirmadaPor) || '?'}, sin firma registrada) · la puerta no la ve · se firma desde su detalle`, 'Ver', () => verPrealta(vivo('prealtas', p))));   // U-28 / U-31
+    for (const p of ssf) pf.appendChild(renglon(`Firma · ${p.Title}`, prealtaCambioTrasFirma(p) ? `cambió después de que la firmó ${quien(p.FirmadaPor) || '?'} (carrier, unidades, choferes, corriente o generador) · la puerta no la ve · se vuelve a firmar desde su detalle` : `falta la firma del validador (trae el sello de ${quien(p.FirmadaPor) || '?'}, sin firma registrada) · la puerta no la ve · se firma desde su detalle`, 'Ver', () => verPrealta(vivo('prealtas', p))));   // U-28 / U-31
     for (const { p, sm } of dormidas) pf.appendChild(renglon(`Programa · ${p.Title}`, `${sm.motivo} · ¿se cierra? Sigue saliendo en la puerta`, 'Ver', () => verPrealta(vivo('prealtas', p))));
     for (const p of borradores) { const d = diasPara(p.FechaEstimada); pf.appendChild(renglon(`Pre-alta · ${p.Title}`, `firma del validador · 1er envío ${fechaCorta(p.FechaEstimada)}${d !== null ? ` (en ${d} días)` : ''} · capturó ${quien(p.CapturadaPor) || '?'}`, 'Ver', () => verPrealta(vivo('prealtas', p)))); }
     for (const e of pendientes) pf.appendChild(renglon(`Excepción · ${e.PlacaTractor}`, `${selloSinFirma(e)}autorización de gerencia · «${e.ExcepcionMotivo || 'sin motivo'}» · ${horaCorta(e.Arribo)}`, null, null, botonesExcepcion(e).map(b => ({ ...b, clase: b.accion === 'autorizar' ? '' : 'peligro' }))));

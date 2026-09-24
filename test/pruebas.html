@@ -671,6 +671,29 @@ try {
         const pe = filas('prealtas')[0].fields;
         R.ok('editar el borrador cambia pozo y góndolas, escribe Cliente y conserva campaña, estado y unidades', pe.Pozo === 'Pozo-2' && pe.GondolasEsperadas === 12 && pe.Cliente === 'CLIENTE DEMO' && pe.Campana === campanaAntes && pe.Estado === 'borrador' && pe.UnidadesIds === String(unidadId) && filas('prealtas').length === 1, JSON.stringify([pe.Pozo, pe.GondolasEsperadas, pe.Campana, pe.Estado]));
         clic('btnVolverPrealtas');
+        // C-61 / C-62 (v0.56.0): tocar el carrier ya elegido no re-marca las casillas; con las unidades desmarcadas y Revisar
+        // alcanzado por la barra de pasos, Guardar no escribe la lista vacía («todas autorizadas» para la compuerta).
+        document.querySelector('#paBorradores .renglon button').click(); await esperar(() => visible('paDetalle'), 'detalle para C-61');
+        clic('btnEditarPrealta'); await esperar(() => visible('paAsis'), 'edición para C-61');
+        $('paPasos').querySelector('[data-p="3"]').click();
+        for (const c of $('paUnidades').querySelectorAll('input:checked')) c.click();
+        $('paCarriers').querySelector('.o.sel').click();
+        R.ok('C-62: tocar el carrier ya elegido no vuelve a marcar las unidades', !!$('paUnidades').querySelector('input') && !$('paUnidades').querySelector('input:checked'), $('paNUnidades').textContent);
+        $('paPasos').querySelector('[data-p="5"]').click();
+        const nPatch61 = DB.llamadas.filter(x => x.startsWith('PATCH') && x.includes('lista-prealtas')).length;
+        clic('btnGuardarPrealta'); await dormir(30);
+        R.ok('C-61: sin unidades marcadas, Guardar no escribe, regresa al paso 3 y dice qué falta', !$('paPaso3').hidden && !!avisoCon('Marca al menos una unidad') && DB.llamadas.filter(x => x.startsWith('PATCH') && x.includes('lista-prealtas')).length === nPatch61 && filas('prealtas')[0].fields.UnidadesIds === String(unidadId), $('paPasoK').textContent);
+        // C-59 (v0.56.0): otra sesión firma el borrador mientras se edita; «Guardar cambios» relee y no crea un programa nuevo.
+        $('paUnidades').querySelector('input').click();
+        Object.assign(filas('prealtas')[0].fields, { Estado: 'firmada', FirmadaPor: 'otro@example.invalid' });
+        const n59 = filas('prealtas').length;
+        $('paPasos').querySelector('[data-p="5"]').click(); clic('btnGuardarPrealta');
+        await esperar(() => avisoCon('ya no es borrador'), 'C-59: la relectura frena el guardado');
+        R.ok('C-59: «Guardar cambios» sobre un borrador que otra sesión firmó no crea otro programa ni parcha la firmada', filas('prealtas').length === n59 && filas('prealtas')[0].fields.FirmadaPor === 'otro@example.invalid' && filas('prealtas')[0].fields.Pozo === 'Pozo-2', `${filas('prealtas').length} renglones`);
+        filas('prealtas')[0].fields.Estado = 'borrador'; delete filas('prealtas')[0].fields.FirmadaPor;
+        clic('btnCancelarPrealta'); await dormir(30); if ($('dlg').open) clic('dlgOk'); await dormir(30);
+        clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras C-59');
+        $('avisos').textContent = '';   // idem: que ninguna espera posterior lo tome por la suya
     } else {
         R.ok('rol sin captura: no hay botón Nueva pre-alta', !visible('btnNuevaPrealta'));
     }
@@ -698,6 +721,37 @@ try {
             const iF = ll.findIndex(x => x.startsWith('POST') && x.includes('lista-firmas'));
             const iS = ll.findIndex(x => x.startsWith('PATCH') && x.includes(`lista-prealtas/items/${pid}/`));
             R.ok('S-01: la firma deja renglón en PLANTA_Firmas (Tipo prealta, ObjetoId, Firmante) ANTES del sello en PreAltas', !!f && f.fields.Firmante === window.__CUENTA.username && iF >= 0 && iS > iF, `firma #${iF} · sello #${iS}`);
+        }
+        // S-27 (v0.56.0): la firma guarda la huella de lo firmado; una unidad agregada después (por Graph, otra sesión) deja la
+        // pre-alta sin firma y Hoy dice que cambió; al volver a lo firmado, vale otra vez. Sin tocar el tenant: va en Motivo.
+        {
+            const p0 = filas('prealtas')[0], f0 = filas('firmas').find(x => x.fields.Tipo === 'prealta' && Number(x.fields.ObjetoId) === p0.id);
+            R.ok('S-27: la firma de la pre-alta lleva la huella de lo firmado en Motivo', !!f0 && /^huella v1 [0-9a-f]{64}$/.test(f0.fields.Motivo || ''), f0 && f0.fields.Motivo);
+            const u0 = p0.fields.UnidadesIds; p0.fields.UnidadesIds = `${u0};99999`;
+            document.querySelector('#pestanas button[data-p="hoy"]').click();
+            clic('btnActualizar');
+            const cambiada = () => [...document.querySelectorAll('#tbPendientes .renglon')].some(r => r.textContent.includes('cambió después de que la firmó'));
+            await esperar(cambiada, 'S-27: Hoy ve la firmada alterada');
+            R.ok('S-27: una unidad agregada tras firmar deja la pre-alta sin firma y Hoy dice que cambió', cambiada());
+            p0.fields.UnidadesIds = u0;
+            clic('btnActualizar'); await esperar(() => !cambiada(), 'S-27: vuelta a lo firmado');
+            R.ok('S-27: vuelta a lo firmado, la firma vale otra vez', !cambiada());
+            document.querySelector('#pestanas button[data-p="prealtas"]').click();
+        }
+        // C-60 (v0.56.0): el detalle abierto no se repinta con el refresco; Firmar relee y no firma lo que no se vio.
+        {
+            const c60 = { id: DB.siguienteId++, fields: { Title: 'CSESENTA DEMO-POZO 1-2026', Estado: 'borrador', Corriente: 'base-aceite', CarrierId: carrierId, UnidadesIds: String(unidadId), ChoferesIds: String(choferId), Campana: 'L-99-060', FechaEstimada: '2026-12-01T12:00:00Z' } };
+            filas('prealtas').push(c60);
+            const rC60 = () => [...document.querySelectorAll('#paBorradores .renglon')].find(r => r.textContent.includes('CSESENTA'));
+            clic('btnActualizar'); await esperar(() => !!rC60(), 'borrador de C-60 en la lista');
+            rC60().querySelector('button').click(); await esperar(() => visible('paDetalle'), 'detalle de C-60');
+            c60.fields.ChoferesIds = '';   // otra sesión le quita el chofer mientras el detalle está abierto
+            clic('btnFirmar'); await confirmar(); await esperar(() => avisoCon('cambió desde que lo abriste'), 'C-60: la relectura frena la firma');
+            R.ok('C-60: Firmar sobre un renglón que cambió desde que se abrió no firma ni sella', c60.fields.Estado === 'borrador' && !filas('firmas').some(x => x.fields.Tipo === 'prealta' && Number(x.fields.ObjetoId) === c60.id));
+            if (visible('paDetalle')) clic('btnVolverPrealtas');
+            filas('prealtas').splice(filas('prealtas').indexOf(c60), 1);
+            clic('btnActualizar'); await esperar(() => !rC60() && !!avisoCon('Datos actualizados'), 'recarga tras C-60');
+            $('avisos').textContent = '';   // el aviso se queda en pantalla y la espera siguiente lo tomaría por su propia recarga
         }
         // S-01: una pre-alta con SELLO (Estado firmada, FirmadaPor) pero sin renglon en PLANTA_Firmas —escrita por fuera de la app o
         // de antes del corte— no sale en la puerta, Hoy la lista como pendiente, Pre-altas la etiqueta, y el validador la firma
