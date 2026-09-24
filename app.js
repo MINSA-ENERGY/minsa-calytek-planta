@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe } from './reglas.js';
 
-const VERSION = '0.53.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.54.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -29,7 +29,8 @@ const estado = {
     fotoBytes: null,
     fotoUrl: null,           // blob URL de la vista previa; se revoca al reemplazar la foto o cancelar (C-21)
     prealtaAbierta: null,
-    prealtaEdit: null,       // borrador de pre-alta en edicion (paForma)
+    prealtaEdit: null,       // borrador de pre-alta en edicion (asistente #paAsis)
+    paAsis: null,            // v0.54.0: el recorrido del asistente de pre-alta (paso, max, revisar...); null = cerrado
     padronEdit: null,        // {clave, x} del renglon del padron en edicion, o null
     focoAntesVeredicto: null, // elemento con el foco antes de abrir el veredicto (vuelve ahi al cerrarlo)
     padronFicha: null,       // 'tipo:id' de la ficha del padron desplegada
@@ -71,11 +72,13 @@ function avisar(texto, clase = '') {
     $('avisos').setAttribute('aria-live', clase === 'error' ? 'assertive' : 'polite');   // U-32 (v0.26.0): el error interrumpe; lo demás espera su turno
     $('avisos').appendChild(d);
     // U-10 (v0.23.0): con dos formas abiertas (la del carrier encima de la pre-alta) el aviso va a la de ENCIMA, que es la
-    // ultima abierta y, en el DOM, la ultima de las abiertas (las del padron van despues de #paForma).
+    // ultima abierta y, en el DOM, la ultima de las abiertas (las del padron van al final del body).
     // U-71 (v0.40.0): .con-avisos suma los modales que no son forma pero tienen su zona de avisos (el del certificado).
     const abiertas = document.querySelectorAll('dialog.dlg-forma[open], dialog.con-avisos[open]');
     const dlg = abiertas[abiertas.length - 1];
     if (dlg) { const z = dlg.querySelector('.dlg-avisos'); z.textContent = ''; z.appendChild(d.cloneNode(true)); dlg.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    // Tanda 2 de Pre-altas (v0.54.0): el asistente dejó de ser <dialog>; su zona de avisos hace el papel de la del pop-up.
+    if (estado.pestana === 'prealtas' && asistentePrealtaAbierto()) { const z = $('paAvisos'); z.textContent = ''; z.appendChild(d.cloneNode(true)); z.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
     // U-39 (v0.29.0): el veredicto es una <section> fija a pantalla completa (z-index 30) y tapa #avisos: «lleva motivo escrito»
     // y «No se pudo registrar» se pintan dentro de su cuerpo, junto a las acciones, y se hace scroll hasta ahí.
     if (!$('veredicto').classList.contains('oculto')) { const z = $('vkAvisos'); z.textContent = ''; z.appendChild(d.cloneNode(true)); z.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
@@ -538,7 +541,8 @@ function capturaAMedias() {
     const abierto = id => !$(id).classList.contains('oculto');
     // Tanda 5 (decisión 11): el asistente de la báscula abierto —pesaje, pausa «A descargar» o ticket— cuenta entero.
     if (abierto('baAsis') || abierto('veredicto')) return true;
-    if (['paForma', 'paDetalle', 'pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer'].some(id => $(id).open)) return true;
+    if (estado.pestana === 'prealtas' && asistentePrealtaAbierto()) return true;   // v0.54.0: el asistente de pre-alta a la vista
+    if (['paDetalle', 'pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer'].some(id => $(id).open)) return true;
     if (estado.pestana === 'puerta' && ['puManifiesto', 'puPlaca', 'puPlacaPlana', 'puChoferNombre', 'puMotivo', 'puPrealta'].some(id => $(id).value.trim())) return true;   // U-40: el programa elegido también es captura
     return false;
 }
@@ -1735,7 +1739,7 @@ function basesRecientes(n = 3) {
     return out;
 }
 function pintarPrealtas() {
-    cerrarForma('paForma'); cerrarForma('paDetalle');
+    cerrarForma('paDetalle');
     const captura = PUEDE.capturarPrealta(estado.rol);
     $('paInicio').classList.toggle('oculto', !captura);
     $('btnNuevaPrealta').classList.toggle('oculto', !captura);   // además del contenedor: visible() de la E2E mira el botón
@@ -1784,7 +1788,8 @@ function pintarPrealtas() {
 
 function nuevaPrealta() {
     estado.prealtaEdit = null;
-    $('paFormaTitulo').textContent = 'Nueva pre-alta'; $('btnGuardarPrealta').textContent = 'Guardar como borrador';
+    $('paFormaTitulo').textContent = 'Nueva'; $('btnGuardarPrealta').textContent = 'Guardar para firma';
+    estado.paAsis = { paso: 1, max: 1, revisar: false, genEdit: false, genDe: null, otro: false, base: null };
     opciones($('paCarrier'), estado.carriers.filter(c => c.Activo !== false), c => c.id, c => c.Title);
     $('paCarrier').value = '';   // U-40: opciones() ya conserva el value; una pre-alta nueva empieza sin carrier
     pintarUnidadesChoferesPrealta();
@@ -1792,13 +1797,12 @@ function nuevaPrealta() {
     $('paCorriente').value = '';
     $('paMes').value = String(new Date().getFullYear());   // U-54: casi siempre es el año en curso
     armarTituloPrealta();
-    pintarEstadoPrealta();
-    abrirForma('paForma');
+    abrirAsistentePrealta();
 }
 /**
  * P2 (rediseño tanda 1, v0.53.0): «Usar como base» abre la pre-alta nueva con cliente, generador, corriente y carrier del
  * programa elegido; pozo y envío quedan vacíos y el foco va al pozo. Si el carrier ya no está activo se deja sin elegir.
- * (En la tanda 2 esto pasa al asistente, directo al paso 2.)
+ * Tanda 2 (v0.54.0): el asistente abre en el paso 2 con el 1 y el 3 ya hechos.
  */
 function usarComoBase(p) {
     if (!p || !PUEDE.capturarPrealta(estado.rol)) return;
@@ -1809,7 +1813,9 @@ function usarComoBase(p) {
     if (estado.carriers.some(c => c.Activo !== false && Number(c.id) === Number(p.CarrierId))) $('paCarrier').value = f(p.CarrierId);
     pintarUnidadesChoferesPrealta();
     armarTituloPrealta();
-    pintarEstadoPrealta();
+    Object.assign(estado.paAsis, { paso: 2, max: 3, base: p, genDe: p });
+    pintarAsistentePrealta();
+    $('paAsis').dataset.huella = huellaForma($('paAsis'));   // lo copiado de la base no cuenta como captura: Cancelar no pregunta
     $('paPozoTitulo').focus();
 }
 /**
@@ -1820,7 +1826,8 @@ function usarComoBase(p) {
 function editarPrealta() {
     const p = estado.prealtaAbierta; if (!p || p.Estado !== 'borrador' || !PUEDE.capturarPrealta(estado.rol)) return;
     estado.prealtaEdit = p;
-    $('paFormaTitulo').textContent = `Editar pre-alta: ${p.Title}`; $('btnGuardarPrealta').textContent = 'Guardar cambios';
+    $('paFormaTitulo').textContent = `Editar ${p.Title}`; $('btnGuardarPrealta').textContent = 'Guardar cambios';
+    estado.paAsis = { paso: 5, max: 5, revisar: true, genEdit: false, genDe: null, otro: false, base: null };
     opciones($('paCarrier'), estado.carriers.filter(c => c.Activo !== false || Number(c.id) === Number(p.CarrierId)), c => c.id, c => c.Title);
     const f = textoDe;   // C-26
     partirTituloPrealta(f(p.Title)); $('paCorriente').value = f(p.Corriente); $('paGenerador').value = f(p.Generador);
@@ -1832,9 +1839,8 @@ function editarPrealta() {
     for (const [cont, ids] of [['paUnidades', lista(p.UnidadesIds)], ['paChoferes', lista(p.ChoferesIds)]])
         if (ids.length) for (const c of $(cont).querySelectorAll('input')) c.checked = ids.includes(c.value);
     armarTituloPrealta();
-    pintarEstadoPrealta();
     cerrarForma('paDetalle');
-    abrirForma('paForma');
+    abrirAsistentePrealta();
 }
 /**
  * Nombre del programa = CLIENTE-POZO-AÑO, en mayusculas (el 3er campo era «mes» hasta la v0.19.18; id paMes se conserva) (Carlos, 2026-09-08: «GSM-IXACHI 15-2026»). Las tres partes se
@@ -1868,26 +1874,216 @@ function pintarUnidadesChoferesPrealta() {
     cajas($('paChoferes'), estado.choferes.filter(u => Number(u.CarrierId) === cid && u.Activo !== false), 'choferes');
 }
 function marcados(id) { return [...$(id).querySelectorAll('input:checked')].map(c => c.value).join(';'); }
-// I4 (7-sep): cada bloque de la pre-alta dice si esta completo o que le falta, igual que la puerta.
-// Solo el 1 y el 3 tienen obligatorios (los mismos que valida guardarPrealta); el 2 y el 4 son opcionales y lo dicen.
-const BLOQUES_PREALTA = [
-    ['paBloque1', 'paEst1', ['paCliente', 'paPozoTitulo', 'paMes', 'paCorriente'], [], 'faltan cliente, pozo, año o corriente'],
-    ['paBloque2', 'paEst2', [], ['paGenerador', 'paGeneradorRegistro', 'paPozo'], 'opcional'],
-    ['paBloque3', 'paEst3', ['paCarrier'], [], 'falta el carrier'],
-    ['paBloque4', 'paEst4', [], ['paFecha', 'paGondolas', 'paCorreoFecha', 'paCorreoRemitente'], 'opcional'],
-];
-function pintarEstadoPrealta() {
-    const lleno = id => String($(id).value).trim() !== '';
-    for (const [bloque, est, oblig, opc, pendiente] of BLOQUES_PREALTA) {
-        const ok = oblig.every(lleno);
-        const n = opc.filter(lleno).length;
-        $(bloque).classList.toggle('listo', ok && (!opc.length || n > 0));
-        $(est).textContent = !ok ? pendiente : opc.length ? (n ? `${n} de ${opc.length}` : pendiente) : 'completo';
+// ---------------------------------------------------------------- asistente de pre-alta (rediseño tanda 2, v0.54.0)
+// Artifact 3PrGGb7ruvmrFhYNrrqdU1 v9: cinco pasos, una pantalla a la vez, en la pestaña (no en un pop-up). El estado del
+// recorrido vive en estado.paAsis { paso, max (el más lejano visitado), revisar (vino de «Cambiar»: Siguiente regresa a Revisar),
+// genEdit, genDe (el programa del que salió el generador), otro (cliente nuevo), base }. Lo capturado vive en los campos de
+// siempre: guardarPrealta no cambió. P8: el botón dice qué falta y, tocado, lleva el foco ahí.
+const PASOS_PREALTA = ['Cliente', 'Pozo y corriente', 'Transporte', 'Envío', 'Revisar'];
+const asistentePrealtaAbierto = () => !$('paAsis').classList.contains('oculto');
+function abrirAsistentePrealta() {
+    if (estado.pestana !== 'prealtas') irA('prealtas');   // Editar desde el detalle abierto en Hoy
+    limpiarAvisos();
+    $('p-prealtas').classList.add('asistiendo');
+    $('paAsis').classList.remove('oculto');
+    pintarAsistentePrealta();
+    $('paAsis').dataset.huella = huellaForma($('paAsis'));
+    window.scrollTo({ top: 0 });
+    enfocarPasoPrealta();
+}
+function cerrarAsistentePrealta() {
+    $('paAsis').classList.add('oculto'); $('p-prealtas').classList.remove('asistiendo');
+    estado.paAsis = null; estado.prealtaEdit = null;
+}
+/** Cancelar o la miga: con algo cambiado desde que abrió, pregunta (U-09/U-34, lo que hacía Escape sobre el pop-up). */
+async function salirAsistentePrealta() {
+    const d = $('paAsis');
+    if (hayCaptura(d) && huellaForma(d) !== d.dataset.huella) {
+        const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: 'Esta pre-alta tiene datos sin guardar. Si sales, se pierden.' });
+        if (!ok) return;
     }
+    cerrarAsistentePrealta(); pintarPrealtas();
+}
+const valorPa = id => $(id).value.trim();
+/** Lo que le falta a un paso para darse por hecho, con a dónde llevar el foco; null si está completo. Solo 1–3 tienen obligatorios. */
+function faltaPrealta(n) {
+    const primera = cont => $(cont).querySelector('.o:not(:disabled)') || $(cont).querySelector('input');
+    if (n === 1) return valorPa('paCliente') ? null : { t: 'Elige el cliente', foco: () => primera('paClientes') };
+    if (n === 2) {
+        if (!valorPa('paPozoTitulo')) return { t: 'Escribe el pozo', foco: () => $('paPozoTitulo') };
+        if (!/^\d{4}$/.test(valorPa('paMes'))) return { t: 'Escribe el año', foco: () => $('paMes') };
+        if (!$('paCorriente').value) return { t: 'Elige la corriente', foco: () => primera('paCorrientes') };
+        return null;
+    }
+    if (n === 3) {
+        if (!$('paCarrier').value) return { t: 'Elige el carrier', foco: () => primera('paCarriers') };
+        for (const [cont, que] of [['paUnidades', 'una unidad'], ['paChoferes', 'un chofer']])
+            if ($(cont).querySelector('input') && !$(cont).querySelector('input:checked')) return { t: `Marca al menos ${que}`, foco: () => $(cont).querySelector('input') };
+    }
+    return null;
+}
+function carrierAmpara(c, corriente) { const l = lista(c.Corrientes); return !corriente || !l.length || l.includes(corriente); }   // la misma regla que la compuerta
+function clientesPrealta() {
+    const m = new Map();
+    for (const p of [...estado.prealtas].sort((a, b) => b.id - a.id)) {
+        const c = clienteDe(p); if (!c) continue;
+        if (!m.has(c)) m.set(c, { clave: c, n: 0, ultimo: p });
+        m.get(c).n++;
+    }
+    return [...m.values()].sort((a, b) => b.n - a.n || a.clave.localeCompare(b.clave));
+}
+/** P3: elegir un cliente conocido trae el generador de su último programa (con «Cambiar» en el paso 2). */
+function elegirClientePrealta(c) {
+    const a = estado.paAsis;
+    const cambio = parteTitulo('paCliente') !== c.clave;
+    a.otro = false; $('paCliente').value = c.clave;
+    if (cambio || !valorPa('paGenerador')) {
+        const u = c.ultimo, f = textoDe;
+        $('paGenerador').value = f(u.Generador); $('paGeneradorRegistro').value = f(u.GeneradorRegistro); $('paGeneradorDireccion').value = f(u.GeneradorDireccion);
+        a.genDe = u.Generador ? u : null; a.genEdit = false;
+    }
+    armarTituloPrealta(); pintarAsistentePrealta();
+}
+function resumenPasoPrealta(n) {
+    if (n === 1) return parteTitulo('paCliente');
+    if (n === 2) return [parteTitulo('paPozoTitulo'), etiquetaCorriente($('paCorriente').value)].filter(Boolean).join(' · ');
+    if (n === 3) return $('paCarrier').value ? nombreDe(estado.carriers, $('paCarrier').value) : '';
+    if (n === 4) return [valorPa('paFecha'), valorPa('paGondolas') && `${valorPa('paGondolas')} gón.`].filter(Boolean).join(' · ') || 'sin datos';
+    return '';
+}
+/** Repinta los renglones de una lista de opciones sin perder el foco del teclado: el renglón enfocado se re-enfoca por su valor. */
+function pintarOpcionesPa(cont, items) {
+    const f = document.activeElement, v = f && f.parentElement === cont ? f.dataset.v : null;
+    cont.textContent = '';
+    for (const it of items) {
+        const b = renglonOpcion(it);
+        if (it.deshabilitada) b.disabled = true;
+        b.addEventListener('click', it.alClic);
+        cont.appendChild(b);
+    }
+    if (v !== null) { const n = [...cont.children].find(x => x.dataset.v === v); if (n) n.focus(); }
+}
+function pintarAsistentePrealta() {
+    const a = estado.paAsis; if (!a) return;
+    const n = a.paso;
+    for (const b of $('paPasos').querySelectorAll('button')) {
+        const i = Number(b.dataset.p), hecho = i !== n && i <= a.max && !faltaPrealta(i) && (i < n || a.revisar);
+        b.className = i === n ? 'ahora' : hecho ? 'hecho' : i <= a.max ? 'visto' : '';
+        b.disabled = i > a.max; if (i === n) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+        b.querySelector('small').textContent = hecho ? resumenPasoPrealta(i) : '';
+    }
+    for (let i = 1; i <= 5; i++) $('paPaso' + i).hidden = i !== n;
+    $('paPasoK').textContent = `Paso ${n} de 5 · ${PASOS_PREALTA[n - 1]}${n === 4 ? ' · opcional' : ''}`;
+
+    // Paso 1: clientes conocidos (por número de programas) y «Otro cliente».
+    const cli = parteTitulo('paCliente'), conocidos = clientesPrealta();
+    a.otro = a.otro || (!!cli && !conocidos.some(c => c.clave === cli));
+    pintarOpcionesPa($('paClientes'), [...conocidos.map(c => ({
+        valor: c.clave, sel: !a.otro && cli === c.clave, titulo: c.clave, dato: plural(c.n, 'programa'),
+        detalle: `${c.ultimo.Generador || 'sin generador'} · último ${c.ultimo.Campana || c.ultimo.Title}${c.ultimo.Pozo ? ', ' + c.ultimo.Pozo : ''}`,
+        alClic: () => elegirClientePrealta(c)
+    })), { valor: '__otro', sel: a.otro, titulo: 'Otro cliente', detalle: 'se captura una vez y queda para la próxima', clase: 'otro',
+        alClic: () => { if (!a.otro) { a.otro = true; $('paCliente').value = ''; a.genDe = null; armarTituloPrealta(); pintarAsistentePrealta(); } $('paCliente').focus(); } }]);
+    $('paClienteOtro').classList.toggle('oculto', !a.otro);
+
+    // Paso 2: la base, la corriente y el generador (aviso con «Cambiar», o sus campos si no hay o se pidió cambiarlo).
+    $('paBaseAviso').classList.toggle('oculto', !a.base);
+    if (a.base) $('paBaseAviso').firstChild.textContent = `Copiado de ${a.base.Title}: cliente, generador, corriente y transporte. Solo escribe el pozo.`;
+    const corr = $('paCorriente').value;
+    pintarOpcionesPa($('paCorrientes'), CORRIENTES.map(([k, t]) => ({ valor: k, sel: corr === k, titulo: t, detalle: k.startsWith('fluidos') ? 'fluido de perforación agotado' : 'recorte de perforación',
+        alClic: () => { $('paCorriente').value = k; pintarAsistentePrealta(); } })));
+    const gen = valorPa('paGenerador'), verCampos = a.genEdit || !gen;
+    $('paGenAviso').classList.toggle('oculto', verCampos);
+    $('paGenCampos').classList.toggle('oculto', !verCampos);
+    if (!verCampos) {
+        const reg = valorPa('paGeneradorRegistro');
+        $('paGenAviso').firstChild.textContent = `Generador ${gen}${reg ? `, registro ${reg}` : ''}.${a.genDe ? ` Tomado de ${a.genDe.Campana || a.genDe.Title}.` : ''}`;
+    }
+
+    // Paso 3: el carrier se coteja ANTES de elegirlo (P5): vigencia a la vista; si su oficio no ampara la corriente, apagado.
+    const cid = $('paCarrier').value;
+    const carriers = [...$('paCarrier').options].filter(o => o.value).map(o => porId(estado.carriers, o.value)).filter(Boolean);
+    const elegido = cid ? porId(estado.carriers, cid) : null;
+    if (elegido && !carrierAmpara(elegido, corr)) { $('paCarrier').value = ''; pintarUnidadesChoferesPrealta(); return pintarAsistentePrealta(); }
+    const cuenta = (col, c) => col.filter(x => Number(x.CarrierId) === Number(c.id) && x.Activo !== false).length;
+    pintarOpcionesPa($('paCarriers'), carriers.map(c => {
+        const ok = carrierAmpara(c, corr);
+        return { valor: String(c.id), sel: String(c.id) === cid, titulo: c.Title, deshabilitada: !ok,
+            dato: ok ? etiquetaVigencia('carriers', c) || undefined : etiqueta('no ampara', 'vencida'),
+            detalle: ok ? `${plural(cuenta(estado.unidades, c), 'unidad', 'unidades')} · ${plural(cuenta(estado.choferes, c), 'chofer', 'choferes')}` : `Su oficio no ampara «${etiquetaCorriente(corr).toLowerCase()}»`,
+            alClic: () => { $('paCarrier').value = String(c.id); pintarUnidadesChoferesPrealta(); pintarAsistentePrealta(); } };
+    }));
+    if (!carriers.length) $('paCarriers').appendChild(el('p', 'pista', 'No hay carriers activos en el padrón: da de alta uno.'));
+    const h = elegido ? vigenciasPadron('carriers', elegido).filter(x => !sinFecha(x)) : [];
+    $('paCarrierAviso').classList.toggle('oculto', !h.length);
+    $('paCarrierAviso').classList.toggle('mal', h.some(x => !x.ok));
+    if (h.length) $('paCarrierAviso').firstChild.textContent = `${elegido.Title}: ${h.map(x => `${x.regla} ${x.detalle}`).join(' · ')}. Si el envío llega con esto así, la puerta lo rechaza.`;
+    $('paTransporte').classList.toggle('oculto', !elegido);
+    for (const [cont, nn] of [['paUnidades', 'paNUnidades'], ['paChoferes', 'paNChoferes']]) {
+        const t = $(cont).querySelectorAll('input').length;
+        $(nn).textContent = t ? `${$(cont).querySelectorAll('input:checked').length} de ${t}` : '';
+    }
+
+    // Paso 5: Revisar, con «Cambiar» por sección (P9: cambias una y Siguiente te regresa aquí).
+    if (n === 5) {
+        const rv = $('paRevisar'); rv.textContent = '';
+        const sec = (titulo, texto, paso) => {
+            const d = el('section'); d.appendChild(el('h3', '', titulo)); d.appendChild(el('p', '', texto));
+            const b = el('button', 'enlace', 'Cambiar'); b.type = 'button'; b.addEventListener('click', () => { a.revisar = true; irPasoPrealta(paso); }); d.appendChild(b);
+            rv.appendChild(d);
+        };
+        const nom = valorPa('paTitulo'); const r0 = el('div', 'pa-nombre'); r0.appendChild(el('small', '', 'Programa')); r0.appendChild(el('b', 'mono', nom || '—')); rv.appendChild(r0);
+        sec('Cliente y generador', [cli, valorPa('paGenerador') || 'sin generador', valorPa('paGeneradorRegistro')].filter(Boolean).join(' · '), 1);
+        sec('Pozo y corriente', [parteTitulo('paPozoTitulo'), etiquetaCorriente(corr)].filter(Boolean).join(' · '), 2);
+        sec('Transporte', elegido ? `${elegido.Title} · ${plural($('paUnidades').querySelectorAll('input:checked').length, 'unidad', 'unidades')} · ${plural($('paChoferes').querySelectorAll('input:checked').length, 'chofer', 'choferes')}` : '—', 3);
+        sec('Envío y correo', [valorPa('paFecha') && `primer envío ${valorPa('paFecha')}`, valorPa('paGondolas') && plural(Number(valorPa('paGondolas')), 'góndola'), valorPa('paCorreoFecha') && `correo del ${valorPa('paCorreoFecha')}`, valorPa('paCorreoRemitente')].filter(Boolean).join(' · ') || 'sin datos (opcional)', 4);
+    }
+
+    // P8: el botón dice qué falta; Atrás nombra a dónde vuelve.
+    const falta = faltaPrealta(n), sig = $('btnPaSiguiente');
+    $('btnPaAtras').hidden = n === 1; $('btnPaAtras').textContent = n > 1 ? `‹ ${PASOS_PREALTA[n - 2]}` : '';
+    sig.hidden = n === 5; $('btnGuardarPrealta').hidden = n !== 5;
+    sig.classList.toggle('falta', !!falta);
+    sig.textContent = n === 5 ? '' : falta ? falta.t : a.revisar ? 'Volver a revisar ›' : n === 4 ? 'Revisar ›' : `Siguiente: ${PASOS_PREALTA[n]} ›`;
+
+    pintarResumenPrealta(elegido);
+}
+/** P4, escritorio: «Así va la pre-alta» a la derecha, en vivo. En celular no se ve: el nombre ya va arriba. */
+function pintarResumenPrealta(carrier) {
+    const r = $('paResumen'); r.textContent = '';
+    r.appendChild(el('h2', '', 'Así va la pre-alta'));
+    const dl = el('dl');
+    const fila = (dt, dd) => { dl.appendChild(el('dt', '', dt)); const d = el('dd', dd ? '' : 'f'); if (dd instanceof Node) d.appendChild(dd); else d.textContent = dd || '—'; dl.appendChild(d); };
+    const sec = t => dl.appendChild(el('span', 'sec', t));
+    sec('Programa'); fila('Cliente', parteTitulo('paCliente')); fila('Pozo', parteTitulo('paPozoTitulo')); fila('Corriente', etiquetaCorriente($('paCorriente').value));
+    sec('Generador'); fila('Razón social', valorPa('paGenerador')); fila('Registro', valorPa('paGeneradorRegistro'));
+    sec('Transporte'); fila('Carrier', carrier ? carrier.Title : '');
+    if (carrier) { fila('Unidades', $('paNUnidades').textContent); fila('Choferes', $('paNChoferes').textContent); }
+    sec('Envío'); fila('Primer envío', valorPa('paFecha')); fila('Góndolas', valorPa('paGondolas'));
+    r.appendChild(dl);
+    r.appendChild(el('p', 'pista', 'Obligatorio: cliente, pozo, año, corriente y carrier. Lo demás se puede completar después.'));
+}
+function enfocarPasoPrealta() { const a = estado.paAsis; if (a) $('paPaso' + a.paso).querySelector('.pregunta').focus({ preventScroll: true }); }
+function irPasoPrealta(n) {
+    const a = estado.paAsis; if (!a) return;
+    a.paso = n; a.max = Math.max(a.max, n);
+    limpiarAvisos(); pintarAsistentePrealta(); window.scrollTo({ top: 0 }); enfocarPasoPrealta();
+}
+function siguientePrealta() {
+    const a = estado.paAsis; if (!a) return;
+    const f = faltaPrealta(a.paso);
+    if (f) { const x = f.foco(); if (x) x.focus(); return; }
+    irPasoPrealta(a.revisar ? 5 : a.paso + 1);
 }
 for (const id of PARTES_TITULO) $(id).addEventListener('input', armarTituloPrealta);
-$('paForma').addEventListener('input', pintarEstadoPrealta);
-$('paForma').addEventListener('change', pintarEstadoPrealta);
+$('paAsis').addEventListener('input', pintarAsistentePrealta);
+$('paAsis').addEventListener('change', pintarAsistentePrealta);
+$('btnPaSiguiente').addEventListener('click', siguientePrealta);
+$('btnPaAtras').addEventListener('click', () => irPasoPrealta(estado.paAsis.paso - 1));
+for (const b of $('paPasos').querySelectorAll('button')) b.addEventListener('click', () => irPasoPrealta(Number(b.dataset.p)));
+$('btnPaMiga').addEventListener('click', salirAsistentePrealta);
+$('btnPaGenCambiar').addEventListener('click', () => { estado.paAsis.genEdit = true; pintarAsistentePrealta(); $('paGenerador').focus(); });
+$('btnPaQuitarBase').addEventListener('click', () => { estado.paAsis.base = null; pintarAsistentePrealta(); });
 
 async function guardarPrealta() {
     if (!PUEDE.capturarPrealta(estado.rol)) { avisar('Tu rol no captura pre-altas.', 'error'); return; }
@@ -1909,8 +2105,7 @@ async function guardarPrealta() {
             });
             await estado.cliente.actualizarRenglon(estado.siteId, L.prealtas, edit.id, cambios);
             aplicar('prealtas', edit, cambios);   // C-23
-            estado.prealtaEdit = null;
-            cerrarForma('paForma');
+            cerrarAsistentePrealta();
             if (estado.pestana === 'prealtas') pintarPrealtas(); else pintarInsignias();
             verPrealta(edit);
             avisar('Borrador actualizado. Sigue pendiente de firma.', 'bien');   // al final: abrir el detalle limpia los avisos
@@ -1933,7 +2128,7 @@ async function guardarPrealta() {
         const nuevo = await estado.cliente.crearRenglon(estado.siteId, L.prealtas, campos);
         await asegurarFolioUnico(nuevo, 'L');
         anclar('prealtas', nuevo);   // C-23
-        cerrarForma('paForma');
+        cerrarAsistentePrealta();
         avisar('Pre-alta guardada como borrador. Falta la firma del validador.', 'bien');
         pintarPrealtas();
     } catch (e) { avisar('No se pudo guardar: ' + e.message, 'error'); } });
@@ -2825,7 +3020,7 @@ async function guardarPadron(clave) {
             if (pendiente) avisar(`${NOMBRE_PADRON[clave]} dado de alta, pero su vigencia ASEA NO quedó en el tablero (${pendiente}). Edítalo y guarda para crearla.`, 'ojo');
             else avisarAlta(AVISO_ALTA[clave], clave, nuevo);
             // U-10 (v0.23.0): si el alta vino desde la pre-alta (que sigue abierta atras), el carrier nuevo queda elegido en ella.
-            if (clave === 'carriers' && $('paForma').open) elegirCarrierEnPrealta(nuevo);
+            if (clave === 'carriers' && asistentePrealtaAbierto()) elegirCarrierEnPrealta(nuevo);
             pintarPadron();
         }
     } catch (e) { avisar('No se pudo guardar: ' + e.message, 'error'); } });
@@ -3346,18 +3541,18 @@ $('paCarrier').addEventListener('change', pintarUnidadesChoferesPrealta);
 function elegirCarrierEnPrealta(c) {
     opciones($('paCarrier'), estado.carriers.filter(x => x.Activo !== false || x.id === c.id), x => x.id, x => x.Title);
     $('paCarrier').value = String(c.id);
-    pintarUnidadesChoferesPrealta(); pintarEstadoPrealta();
+    pintarUnidadesChoferesPrealta(); pintarAsistentePrealta();
 }
 $('btnAltaCarrierPrealta').addEventListener('click', () => abrirFormaPadron('carriers'));
 $('btnGuardarPrealta').addEventListener('click', guardarPrealta);
-$('btnCancelarPrealta').addEventListener('click', () => cerrarForma('paForma'));
+$('btnCancelarPrealta').addEventListener('click', salirAsistentePrealta);
 // Escape cierra el <dialog> sin pasar por Cancelar: la edicion pendiente del padron se suelta igual.
 for (const clave of Object.keys(FORMA_PADRON)) $(FORMA_PADRON[clave].forma).addEventListener('close', () => { if (estado.padronEdit && estado.padronEdit.clave === clave) estado.padronEdit = null; });
 // U-09 (v0.22.0): Escape sobre un formulario CON algo capturado pregunta antes de tirarlo — el <dialog> nativo cerraba sin
 // pasar por Cancelar y la pre-alta de 14 campos se perdia. Vacio (o solo con los valores por omision) cierra directo; el
 // boton Cancelar sigue cerrando sin preguntar. Un select cuenta solo si no esta en su primera opcion.
 const hayCaptura = d => [...d.querySelectorAll('input:not([type=hidden]):not([type=checkbox]), textarea, select')].some(c => c.tagName === 'SELECT' ? c.selectedIndex > 0 : String(c.value).trim() !== '');
-for (const id of ['paForma', 'pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer']) $(id).addEventListener('cancel', async ev => {
+for (const id of ['pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer']) $(id).addEventListener('cancel', async ev => {
     if (!hayCaptura($(id)) || huellaForma($(id)) === $(id).dataset.huella) return;   // U-34: sin cambios desde que abrió → cierra directo
     ev.preventDefault();
     const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: 'Este formulario tiene datos sin guardar. Si lo cierras, se pierden.' });

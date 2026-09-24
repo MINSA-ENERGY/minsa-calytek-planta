@@ -490,6 +490,67 @@ button:not(:disabled):active { transform: scale(.98); }
     .pa-tabla .renglon.prog .avance { grid-column: 1 / -1; grid-row: 2; }
 }
 
+/* ---------------------------------------------------------------- pre-altas: el asistente (rediseño tanda 2, v0.54.0)
+   El marco es el de Góndolas (.asis .gasis, .pasos5, .opciones, .asis-pie). Aquí solo lo propio: la barra de pasos es de
+   botones (se vuelve a un paso ya visto), avisos en línea, casillas en caja y el resumen de la derecha (≥ 900 px). */
+#p-prealtas.asistiendo > :not(#paAsis) { display: none; }
+#paAsis > .migas .pa-cancelar { margin-left: auto; width: auto; min-height: var(--control-h-sm); margin-top: 0; }
+.pa-pasos button { all: unset; box-sizing: border-box; display: grid; gap: 4px; align-content: start; min-width: 0; font-size: .8rem; color: var(--faint); }
+.pa-pasos button:not(:disabled) { cursor: pointer; }
+.pa-pasos button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
+.pasos5.pa-pasos .ahora i { background: var(--acc); }   /* entero: el 33% por tercio es de la llegada de Góndolas */
+.pa-pasos .visto { color: var(--body); }
+.pa-pasos small { font-size: .74rem; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1em; }
+@media (max-width: 720px) { .pa-pasos small { display: none; } }
+.aviso-pa { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: var(--r-sm); background: var(--info-soft); border: 1px solid color-mix(in srgb, var(--info) 30%, transparent); font-size: .9rem; color: var(--ink-body); }
+.aviso-pa > span { flex: 1; min-width: 0; }
+.aviso-pa .enlace { flex: none; }
+.aviso-pa.acc { background: var(--acc-soft); border-color: color-mix(in srgb, var(--acc) 25%, transparent); }
+.aviso-pa.ojo { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.aviso-pa.mal { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+.pa-pozo { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: var(--sp-3); }
+.pa-gen { display: grid; gap: var(--sp-3); padding-top: var(--sp-2); border-top: 1px solid var(--line-soft); }
+.pa-gen .campo, .pa-gen .dos { margin: 0; }
+.opciones .o:disabled { cursor: not-allowed; }
+.opciones .o:disabled:hover { background: none; }
+.opciones .o:disabled .t b { color: var(--faint); }
+.opciones .o:disabled .r { border-style: dashed; }
+.opciones .o.otro .t b { color: var(--acc); }
+.opciones .o.otro .r { border-style: dashed; }
+.pa-transporte { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+.pa-sub-h { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-2); margin-bottom: 6px; }
+.pa-sub-h .cuenta { font-family: var(--mono); font-size: .76rem; color: var(--mute); }
+.pa-chks { background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.pa-chks label.chk { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); font-family: var(--mono); font-size: .86rem; text-transform: none; letter-spacing: 0; color: var(--ink); cursor: pointer; }
+.pa-chks label.chk:last-child { border-bottom: 0; }
+.pa-chks > .pista { margin: 0; padding: 10px 14px; }
+.asis-botones .principal.falta { border-color: var(--line); color: var(--mute); box-shadow: none; }
+.asis-botones .principal.falta:hover { background: var(--surf2); color: var(--mute); box-shadow: none; }
+.pa-rev { display: grid; background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.pa-rev .pa-nombre { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 10px 16px; background: var(--surf2); }
+.pa-rev .pa-nombre small { font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; }
+.pa-rev .pa-nombre b { font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+.pa-rev section { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 12px 16px; border-top: 1px solid var(--line-soft); }
+.pa-rev h3 { margin: 0; font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; }
+.pa-rev p { margin: 0; color: var(--ink); font-size: .93rem; overflow-wrap: anywhere; }
+.pa-rev .enlace { grid-row: 1 / 3; grid-column: 2; align-self: center; min-height: 36px; }
+.pa-resumen { display: none; }
+@media (min-width: 900px) {
+    .pa-resumen { display: grid; gap: var(--sp-3); align-content: start; margin: 0; position: sticky; top: var(--sp-4); }
+    .pa-resumen h2 { margin: 0; }
+    .pa-resumen dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; font-size: .87rem; }
+    .pa-resumen dt { color: var(--mute); }
+    .pa-resumen dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+    .pa-resumen dd.f { color: var(--faint); }
+    .pa-resumen .sec { grid-column: 1 / -1; font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+    .pa-resumen .sec:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+    .pa-resumen > .pista { margin: 0; padding-top: 10px; border-top: 1px solid var(--line-soft); font-size: .82rem; }
+}
+@media (max-width: 720px) {
+    .pa-pozo { grid-template-columns: minmax(0, 1fr) 96px; }
+    .pa-transporte { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ---------------------------------------------------------------- padrón y pre-altas (acordeones) */
 
 .padron details { background: var(--surf); border: 1px solid var(--line-soft); border-radius: var(--r-md); margin-bottom: var(--sp-3); }

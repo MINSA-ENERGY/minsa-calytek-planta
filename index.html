@@ -335,6 +335,99 @@
       <div class="gpanel" id="ppBorradores"><div class="pa-tabla" id="paBorradores"></div><p class="pista" id="paResBorradores"></p></div>
       <div class="gpanel" id="ppFirmadas" hidden><div class="pa-tabla" id="paFirmadas"></div><p class="pista" id="paResFirmadas"></p></div>
       <div class="gpanel" id="ppCerradas" hidden><div class="pa-tabla" id="paCerradas"></div><p class="pista" id="paResCerradas"></p></div>
+      <!-- Rediseño de Pre-altas, tanda 2 (v0.54.0): el asistente de 5 pasos (artifact 3PrGGb7ruvmrFhYNrrqdU1 v9) en la pestaña, como
+           el de Góndolas, en vez del <dialog id="paForma">. Los ids de los campos NO cambiaron: guardarPrealta los lee igual, y los
+           selects paCorriente/paCarrier siguen siendo la fuente de verdad (ocultos; los renglones solo los llenan). Mientras está
+           abierto la lista se esconde (#p-prealtas.asistiendo). Salir de la pestaña lo conserva; Cancelar pregunta si hay cambios. -->
+      <div class="asis gasis oculto" id="paAsis">
+        <nav class="migas" aria-label="Ruta"><button type="button" class="miga" id="btnPaMiga">Pre-altas</button><span aria-hidden="true">/</span><b id="paFormaTitulo">Nueva</b><button id="btnCancelarPrealta" class="secundario pa-cancelar" type="button">Cancelar</button></nav>
+        <div class="asis-cab">
+          <nav class="pasos5 pa-pasos" id="paPasos" aria-label="Pasos de la pre-alta">
+            <button type="button" data-p="1"><i></i><span>Cliente</span><small></small></button>
+            <button type="button" data-p="2"><i></i><span>Pozo y corriente</span><small></small></button>
+            <button type="button" data-p="3"><i></i><span>Transporte</span><small></small></button>
+            <button type="button" data-p="4"><i></i><span>Envío</span><small></small></button>
+            <button type="button" data-p="5"><i></i><span>Revisar</span><small></small></button>
+          </nav>
+          <div class="asis-quien"><div><b id="paTituloVista" class="mono">—</b><small>Nombre del programa · CLIENTE-POZO-AÑO</small></div><span class="asis-k" id="paPasoK">Paso 1 de 5</span></div>
+        </div>
+        <div class="gasis-cuerpo">
+          <div class="gasis-paso">
+            <div class="tarjeta">
+              <div class="dlg-avisos" id="paAvisos" aria-live="polite"></div>
+              <div class="asis-pantalla" id="paPaso1" data-p="1">
+                <h2 class="pregunta" tabindex="-1">¿De qué cliente es el programa?</h2>
+                <p class="sub">El generador y sus datos salen de su último programa.</p>
+                <div class="opciones" id="paClientes" role="group" aria-label="Cliente"></div>
+                <div class="campo oculto" id="paClienteOtro"><label for="paCliente">Clave del cliente</label><input type="text" id="paCliente" autocapitalize="characters" placeholder="GSM"><p class="pista">Es el inicio del nombre del programa. Queda en la lista para la próxima.</p></div>
+              </div>
+              <div class="asis-pantalla" id="paPaso2" data-p="2" hidden>
+                <h2 class="pregunta" tabindex="-1">¿Qué pozo y qué corriente?</h2>
+                <p class="sub">El pozo forma el nombre del programa.</p>
+                <div class="aviso-pa acc oculto" id="paBaseAviso"><span></span><button type="button" class="enlace" id="btnPaQuitarBase">Quitar la base</button></div>
+                <div class="pa-pozo">
+                  <div class="campo"><label for="paPozoTitulo">Pozo</label><input type="text" id="paPozoTitulo" autocapitalize="characters" placeholder="IXACHI 15" autocomplete="off"></div>
+                  <div class="campo"><label for="paMes">Año</label><input type="text" id="paMes" class="mono" inputmode="numeric" maxlength="4" placeholder="2026"></div>
+                </div>
+                <input type="hidden" id="paTitulo">
+                <span class="etiqueta-campo" id="paCorrienteTitulo">Corriente</span>
+                <div class="opciones" id="paCorrientes" role="group" aria-labelledby="paCorrienteTitulo"></div>
+                <select id="paCorriente" class="oculto" aria-hidden="true" tabindex="-1">
+                  <option value="">— elige —</option>
+                </select>
+                <div class="aviso-pa oculto" id="paGenAviso"><span></span><button type="button" class="enlace" id="btnPaGenCambiar">Cambiar</button></div>
+                <div class="pa-gen" id="paGenCampos">
+                  <span class="etiqueta-campo">Generador y origen · opcional</span>
+                  <div class="campo"><label for="paGenerador">Generador (razón social)</label><input type="text" id="paGenerador"></div>
+                  <div class="dos">
+                    <div class="campo"><label for="paGeneradorRegistro">No. registro ASEA</label><input type="text" id="paGeneradorRegistro" class="mono" placeholder="09-ASEA-GRME-1971-2019"></div>
+                    <div class="campo"><label for="paPozo">Pozo / instalación</label><input type="text" id="paPozo"></div>
+                  </div>
+                  <div class="campo"><label for="paGeneradorDireccion">Dirección del generador</label><input type="text" id="paGeneradorDireccion" placeholder="calle, número, colonia, municipio, estado"></div>
+                </div>
+              </div>
+              <div class="asis-pantalla" id="paPaso3" data-p="3" hidden>
+                <h2 class="pregunta" tabindex="-1">¿Quién lo transporta?</h2>
+                <p class="sub">Solo carriers del padrón. Unidades y choferes vienen todos marcados: quita el que no venga.</p>
+                <div class="opciones" id="paCarriers" role="group" aria-label="Carrier"></div>
+                <select id="paCarrier" class="oculto" aria-hidden="true" tabindex="-1"></select>
+                <button id="btnAltaCarrierPrealta" class="enlace" type="button" title="Dar de alta un carrier sin cerrar la pre-alta">+ Alta de carrier</button>
+                <div class="aviso-pa ojo oculto" id="paCarrierAviso"><span></span></div>
+                <div class="pa-transporte" id="paTransporte">
+                  <div><div class="pa-sub-h"><span class="etiqueta-campo">Unidades autorizadas</span><span class="cuenta" id="paNUnidades"></span></div><div class="pa-chks" id="paUnidades"></div></div>
+                  <div><div class="pa-sub-h"><span class="etiqueta-campo">Choferes autorizados</span><span class="cuenta" id="paNChoferes"></span></div><div class="pa-chks" id="paChoferes"></div></div>
+                </div>
+              </div>
+              <div class="asis-pantalla" id="paPaso4" data-p="4" hidden>
+                <h2 class="pregunta" tabindex="-1">¿Cuándo llega y cuántas góndolas?</h2>
+                <p class="sub">Opcional: si todavía no lo sabes, sigue; se puede completar después.</p>
+                <div class="dos">
+                  <div class="campo"><label for="paFecha">Primer envío (estimado)</label><input type="text" id="paFecha" class="fecha mono" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off"></div>
+                  <div class="campo"><label for="paGondolas">Góndolas esperadas</label><input type="number" id="paGondolas" min="0"></div>
+                </div>
+                <div class="dos">
+                  <div class="campo"><label for="paCorreoFecha">Fecha del correo del cliente</label><input type="text" id="paCorreoFecha" class="fecha mono" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off"></div>
+                  <div class="campo"><label for="paCorreoRemitente">Remitente</label><input type="text" id="paCorreoRemitente"></div>
+                </div>
+                <div class="campo"><label for="paNotas">Notas</label><textarea id="paNotas"></textarea></div>
+              </div>
+              <div class="asis-pantalla" id="paPaso5" data-p="5" hidden>
+                <h2 class="pregunta" tabindex="-1">Revisa y guarda</h2>
+                <p class="sub">Queda por firmar. La puerta no recibe sus góndolas hasta que la Responsable Ambiental la firme.</p>
+                <div class="pa-rev" id="paRevisar"></div>
+              </div>
+              <div class="asis-pie">
+                <div class="asis-botones">
+                  <button id="btnPaAtras" class="secundario" type="button" hidden>‹ Atrás</button>
+                  <button id="btnPaSiguiente" class="principal" type="button">Siguiente</button>
+                  <button id="btnGuardarPrealta" class="principal" type="button" hidden>Guardar para firma</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <aside class="tarjeta pa-resumen" id="paResumen" aria-label="Así va la pre-alta"></aside>
+        </div>
+      </div>
     </section>
 
     <!-- PADRON: acordeones en celular (P3), tres columnas en escritorio (P6); elegido por Carlos 2026-09-05.
@@ -445,59 +538,7 @@
     <button id="tkImprimir" class="principal" type="button">Imprimir / guardar PDF</button>
   </div>
 </dialog>
-<!-- Formularios de alta en pop-up (v0.19.8, pedido de Carlos): pre-alta y padrón se capturan en un
-     <dialog> modal, no en una tarjeta desplegada dentro del acordeón. Los ids de los campos no cambiaron. -->
-<dialog id="paForma" class="dlg dlg-forma" aria-label="Nueva pre-alta">
-        <h2 id="paFormaTitulo">Nueva pre-alta</h2>
-        <div class="dlg-avisos" aria-live="polite"></div>
-        <!-- Cuatro bloques numerados, el mismo lenguaje que la puerta (I4 de la auditoría del 7-sep). Los ids no cambiaron. -->
-        <div class="bloque" id="paBloque1">
-          <div class="bt"><span class="bn">1</span><h2>Programa</h2><span class="est" id="paEst1"></span></div>
-          <!-- Nombre del programa por partes (v0.19.17, Carlos): CLIENTE-POZO-AÑO en mayúsculas; paTitulo se arma solo. -->
-          <div class="tres">
-            <div class="campo"><label for="paCliente">Cliente</label><input type="text" id="paCliente" autocapitalize="characters" placeholder="GSM"></div>
-            <div class="campo"><label for="paPozoTitulo">Pozo</label><input type="text" id="paPozoTitulo" autocapitalize="characters" placeholder="IXACHI 15"></div>
-            <div class="campo"><label for="paMes">Año</label><input type="text" id="paMes" inputmode="numeric" maxlength="4" placeholder="2026"></div>
-          </div>
-          <p class="pista">Nombre del programa: <b class="mono" id="paTituloVista">—</b></p>
-          <input type="hidden" id="paTitulo">
-          <div class="campo"><label for="paCorriente">Corriente</label>
-            <select id="paCorriente">
-              <option value="">— elige —</option>
-            </select></div>
-        </div>
-        <div class="bloque" id="paBloque2">
-          <div class="bt"><span class="bn">2</span><h2>Generador y origen</h2><span class="est" id="paEst2"></span></div>
-          <div class="campo"><label for="paGenerador">Generador (razón social)</label><input type="text" id="paGenerador"></div>
-          <div class="campo"><label for="paGeneradorDireccion">Dirección del generador</label><input type="text" id="paGeneradorDireccion" placeholder="calle, número, colonia, municipio, estado"></div>
-          <div class="dos">
-            <div class="campo"><label for="paGeneradorRegistro">No. registro ASEA</label><input type="text" id="paGeneradorRegistro" class="mono" placeholder="09-ASEA-GRME-1971-2019"></div>
-            <div class="campo"><label for="paPozo">Pozo / instalación</label><input type="text" id="paPozo"></div>
-          </div>
-        </div>
-        <div class="bloque" id="paBloque3">
-          <div class="bt"><span class="bn">3</span><h2>Transporte</h2><span class="est" id="paEst3"></span></div>
-          <div class="campo"><label for="paCarrier">Carrier (del padrón)</label><div class="con-boton"><select id="paCarrier"></select><button id="btnAltaCarrierPrealta" class="alta" type="button" title="Dar de alta un carrier sin cerrar la pre-alta">+ Alta de carrier</button></div></div>
-          <div class="campo"><span class="etiqueta-campo">Unidades autorizadas</span><div id="paUnidades"></div></div>
-          <div class="campo"><span class="etiqueta-campo">Choferes autorizados</span><div id="paChoferes"></div></div>
-        </div>
-        <div class="bloque" id="paBloque4">
-          <div class="bt"><span class="bn">4</span><h2>Logística y correo</h2><span class="est" id="paEst4"></span></div>
-          <div class="dos">
-            <div class="campo"><label for="paFecha">Primer envío (estimado)</label><input type="text" id="paFecha" class="fecha mono" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off"></div>
-            <div class="campo"><label for="paGondolas">Góndolas esperadas</label><input type="number" id="paGondolas" min="0"></div>
-          </div>
-          <div class="dos">
-            <div class="campo"><label for="paCorreoFecha">Fecha del correo del cliente</label><input type="text" id="paCorreoFecha" class="fecha mono" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off"></div>
-            <div class="campo"><label for="paCorreoRemitente">Remitente</label><input type="text" id="paCorreoRemitente"></div>
-          </div>
-          <div class="campo"><label for="paNotas">Notas</label><textarea id="paNotas"></textarea></div>
-        </div>
-        <div class="dlg-botones">
-          <button id="btnCancelarPrealta" class="secundario" type="button">Cancelar</button>
-          <button id="btnGuardarPrealta" class="principal" type="button">Guardar como borrador</button>
-        </div>
-</dialog>
+<!-- Formularios de alta del padrón en pop-up (v0.19.8). La pre-alta dejó de serlo en la v0.54.0: es el asistente #paAsis. -->
 <dialog id="pdFormaCarrier" class="dlg dlg-forma" aria-label="Alta de carrier">
         <h2>Alta de carrier</h2>
         <div class="dlg-avisos" aria-live="polite"></div>

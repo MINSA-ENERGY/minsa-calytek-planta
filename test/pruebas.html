@@ -560,21 +560,28 @@ try {
     document.querySelector('#pestanas button[data-p="prealtas"]').click();
     if (captura) {
         clic('btnNuevaPrealta');
+        // Rediseño de Pre-altas, tanda 2 (v0.54.0): el asistente vive en la pestaña (la lista se esconde) y abre en el paso 1;
+        // el botón dice qué falta (P8) y, sin cliente, no avanza.
+        R.ok('tanda 2: «Nueva pre-alta» abre el asistente en la pestaña, en el paso 1, con la lista escondida', visible('paAsis') && $('p-prealtas').classList.contains('asistiendo') && !$('paPaso1').hidden && $('paPaso2').hidden, $('paPasoK').textContent);
+        R.ok('tanda 2 (P8): el botón dice qué falta', $('btnPaSiguiente').textContent === 'Elige el cliente' && $('btnPaSiguiente').classList.contains('falta'), $('btnPaSiguiente').textContent);
+        clic('btnPaSiguiente');
+        R.ok('tanda 2 (P8): sin cliente, «Siguiente» no avanza', !$('paPaso1').hidden && $('paPaso2').hidden);
         poner('paCliente', 'cliente demo'); poner('paPozoTitulo', 'pozo 1'); poner('paMes', '2026'); poner('paGenerador', 'GENERADOR DEMO'); poner('paGeneradorDireccion', 'Calle Demo 123, Col. Centro, Poza Rica, Veracruz'); poner('paCorriente', 'base-aceite');
+        R.ok('tanda 2: un cliente que no está en la lista es «Otro cliente» y deja ver su campo', visible('paClienteOtro') && $('paClientes').querySelector('.o.otro.sel') !== null);
         R.ok('el nombre del programa se arma CLIENTE-POZO-AÑO en mayúsculas y rellena el pozo', $('paTitulo').value === 'CLIENTE DEMO-POZO 1-2026' && $('paPozo').value === 'POZO 1', $('paTitulo').value);
         poner('paPozo', 'Pozo-1');
         // U-10 (v0.23.0): «+ Alta de carrier» abre la forma del padron ENCIMA de la pre-alta; al guardar, el nuevo queda elegido
         // y lo capturado en los bloques 1 y 2 sigue ahi. El aviso sale en la forma de encima (avisar mira la ULTIMA abierta).
         {
             clic('btnAltaCarrierPrealta'); await esperar(() => $('pdFormaCarrier').open, 'forma de carrier sobre la pre-alta');
-            R.ok('U-10: la forma del carrier se abre ENCIMA y la pre-alta sigue abierta', $('pdFormaCarrier').open && $('paForma').open);
+            R.ok('U-10: la forma del carrier se abre ENCIMA y la pre-alta sigue abierta', $('pdFormaCarrier').open && visible('paAsis'));
             clic('btnGuardarCarrier'); await dormir(30);
-            R.ok('U-10: el aviso de validación sale en la forma de encima (la del carrier), no en la pre-alta', $('pdFormaCarrier').querySelector('.dlg-avisos').textContent.includes('razón social') && !$('paForma').querySelector('.dlg-avisos').textContent.trim(), $('pdFormaCarrier').querySelector('.dlg-avisos').textContent);
+            R.ok('U-10: el aviso de validación sale en la forma de encima (la del carrier), no en la pre-alta', $('pdFormaCarrier').querySelector('.dlg-avisos').textContent.includes('razón social') && !$('paAvisos').textContent.trim(), $('pdFormaCarrier').querySelector('.dlg-avisos').textContent);
             poner('pcTitle', 'CARRIER DESDE PREALTA'); clic('btnGuardarCarrier');
             await esperar(() => !$('pdFormaCarrier').open, 'carrier desde pre-alta guardado');
             const nuevoC = filas('carriers').find(c => c.fields.Title === 'CARRIER DESDE PREALTA');
-            R.ok('U-10: al guardar, el carrier nuevo queda ELEGIDO en la pre-alta y los bloques 1 y 2 conservan lo capturado', !!nuevoC && $('paForma').open && $('paCarrier').value === String(nuevoC.id) && $('paTitulo').value === 'CLIENTE DEMO-POZO 1-2026' && $('paGenerador').value === 'GENERADOR DEMO' && $('paUnidades').textContent.includes('no tiene unidades'), `${$('paCarrier').value} · ${$('paTitulo').value}`);
-            R.ok('U-10: el aviso del alta se ve en la pre-alta (única forma abierta)', $('paForma').querySelector('.dlg-avisos').textContent.includes('Carrier dado de alta'));
+            R.ok('U-10: al guardar, el carrier nuevo queda ELEGIDO en la pre-alta y los bloques 1 y 2 conservan lo capturado', !!nuevoC && visible('paAsis') && $('paCarrier').value === String(nuevoC.id) && $('paTitulo').value === 'CLIENTE DEMO-POZO 1-2026' && $('paGenerador').value === 'GENERADOR DEMO' && $('paUnidades').textContent.includes('no tiene unidades'), `${$('paCarrier').value} · ${$('paTitulo').value}`);
+            R.ok('U-10: el aviso del alta se ve en la pre-alta (única forma abierta)', $('paAvisos').textContent.includes('Carrier dado de alta'));
         }
         poner('paCarrier', String(carrierId)); await dormir(20);
         poner('paFecha', '2026-10-15'); poner('paGondolas', '10');
@@ -583,12 +590,21 @@ try {
         const aaL = String(new Date().getFullYear()).slice(-2);
         const ajena = { id: DB.siguienteId++, fields: { Title: 'OTRO-POZO-2026', Estado: 'borrador', Corriente: 'base-agua', CarrierId: carrierId, Campana: `L-${aaL}-001` } };
         filas('prealtas').push(ajena);
+        // Tanda 2: con lo obligatorio, cuatro «Siguiente» llegan a Revisar (P9); «Cambiar» regresa y Siguiente vuelve a Revisar.
+        for (let i = 0; i < 4; i++) clic('btnPaSiguiente');
+        R.ok('tanda 2: cuatro «Siguiente» llegan a Revisar con el programa, el carrier y Guardar a la vista', !$('paPaso5').hidden && visible('btnGuardarPrealta') && !visible('btnPaSiguiente') && $('paRevisar').textContent.includes('CLIENTE DEMO-POZO 1-2026') && $('paRevisar').textContent.includes('TRANSPORTES DEMO'), $('paPasoK').textContent);
+        R.ok('tanda 2: los pasos recorridos quedan hechos con su resumen', $('paPasos').querySelector('[data-p="2"]').classList.contains('hecho') && $('paPasos').querySelector('[data-p="2"] small').textContent.includes('POZO 1'), $('paPasos').querySelector('[data-p="2"] small').textContent);
+        $('paRevisar').querySelectorAll('.enlace')[1].click();
+        R.ok('tanda 2 (P9): «Cambiar» abre ese paso y el botón regresa a Revisar', !$('paPaso2').hidden && $('btnPaSiguiente').textContent === 'Volver a revisar ›', $('btnPaSiguiente').textContent);
+        clic('btnPaSiguiente');
+        R.ok('tanda 2 (P9): y regresa', !$('paPaso5').hidden);
         clic('btnGuardarPrealta');
         await esperar(() => avisoCon('Pre-alta guardada como borrador'), 'pre-alta guardada');
         const nuestra = filas('prealtas').find(p => p.fields.Title === 'CLIENTE DEMO-POZO 1-2026');
         R.ok('C-04: la campaña se escoge con la lista releída, no con la memoria (la ajena L-AA-001 no se repite)', nuestra && nuestra.fields.Campana === `L-${aaL}-002`, nuestra && nuestra.fields.Campana);
         filas('prealtas').splice(filas('prealtas').indexOf(ajena), 1);
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga tras la campaña ajena');
+        R.ok('tanda 2: guardar cierra el asistente y regresa a la lista', !visible('paAsis') && !$('p-prealtas').classList.contains('asistiendo'));
         R.ok('pre-alta en borrador con campaña L-AA-NNN', /^L-\d\d-\d{3}$/.test(filas('prealtas')[0].fields.Campana), filas('prealtas')[0].fields.Campana);
         R.ok('pre-alta liga unidades y choferes del carrier', filas('prealtas')[0].fields.UnidadesIds === String(unidadId) && filas('prealtas')[0].fields.ChoferesIds === String(choferId));
         // U-23 (v0.26.0) con el rediseño de Pre-altas (tanda 1, v0.53.0): sin ninguna firmada, la pestaña Firmadas cuenta 0 y su
@@ -614,14 +630,19 @@ try {
         document.querySelector('#pestanas button[data-p="prealtas"]').click();
         document.querySelector('#paBorradores .renglon button').click();
         await esperar(() => visible('paDetalle'), 'detalle del borrador otra vez');
-        clic('btnEditarPrealta'); await esperar(() => $('paForma').open, 'formulario de edición');
+        clic('btnEditarPrealta'); await esperar(() => visible('paAsis'), 'formulario de edición');
+        R.ok('tanda 2: Editar abre el asistente en Revisar', !$('paPaso5').hidden && $('paFormaTitulo').textContent.startsWith('Editar') && visible('btnGuardarPrealta'), $('paPasoK').textContent);
         R.ok('el formulario abre con los datos del borrador', $('paCliente').value === 'CLIENTE DEMO' && $('paPozoTitulo').value === 'POZO 1' && $('paMes').value === '2026' && $('paTitulo').value === 'CLIENTE DEMO-POZO 1-2026' && $('paPozo').value === 'Pozo-1' && $('paCarrier').value === String(carrierId));
-        // U-34 (v0.26.0): Escape sobre un Editar SIN cambios no pregunta (la huella al abrir es la misma); con un cambio, sí.
-        $('paForma').dispatchEvent(new Event('cancel', { cancelable: true })); await dormir(30);
-        R.ok('U-34: Escape sobre Editar sin tocar nada no abre «Descartar»', !$('dlg').open);
+        // U-34 (v0.26.0): Cancelar sobre un Editar SIN cambios no pregunta (la huella al abrir es la misma); con un cambio, sí.
+        // Tanda 2: era Escape sobre el <dialog>; el asistente ya no es pop-up y lo hace su «Cancelar».
+        clic('btnCancelarPrealta'); await dormir(30);
+        R.ok('U-34: Cancelar sobre Editar sin tocar nada no abre «Descartar» y cierra', !$('dlg').open && !visible('paAsis'));
+        document.querySelector('#paBorradores .renglon button').click(); await esperar(() => visible('paDetalle'), 'detalle para editar de nuevo');
+        clic('btnEditarPrealta'); await esperar(() => visible('paAsis'), 'edición otra vez');
         poner('paPozo', 'Pozo-2');
-        $('paForma').dispatchEvent(new Event('cancel', { cancelable: true })); await esperar(() => $('dlg').open, 'descarte tras cambio');
+        clic('btnCancelarPrealta'); await esperar(() => $('dlg').open, 'descarte tras cambio');
         R.ok('U-34: con un cambio sí pregunta', $('dlgTitulo').textContent.includes('Descartar')); clic('dlgCancelar'); await dormir(30);
+        R.ok('U-34: «no descartar» deja el asistente abierto con lo capturado', visible('paAsis') && $('paPozo').value === 'Pozo-2');
         poner('paPozo', 'Pozo-2'); poner('paGondolas', '12'); clic('btnGuardarPrealta');
         await esperar(() => avisoCon('Borrador actualizado'), 'borrador actualizado');
         const pe = filas('prealtas')[0].fields;
@@ -701,7 +722,8 @@ try {
         {
             const b = [...document.querySelectorAll('#paBases .pa-base')].find(x => x.textContent.includes('CLIENTE DEMO-POZO 1-2026'));
             R.ok('tanda 1: la firmada sale en «O parte de uno reciente» y Firmadas la cuenta', visible('paRecientes') && !!b && $('paNFirmadas').textContent === '1', $('paNFirmadas').textContent);
-            b.click(); await esperar(() => $('paForma').open, 'pre-alta desde la base');
+            b.click(); await esperar(() => visible('paAsis'), 'pre-alta desde la base');
+            R.ok('tanda 2: la base abre el asistente en el paso 2 con su aviso y los pasos 1 y 3 ya vistos', !$('paPaso2').hidden && visible('paBaseAviso') && !$('paPasos').querySelector('[data-p="3"]').disabled && $('paPasos').querySelector('[data-p="4"]').disabled);
             R.ok('tanda 1: «Usar como base» copia cliente, generador, corriente y carrier; el pozo queda vacío y con el foco', $('paCliente').value === 'CLIENTE DEMO' && $('paGenerador').value === 'GENERADOR DEMO' && $('paCorriente').value === 'base-aceite' && $('paCarrier').value === String(carrierId) && $('paPozoTitulo').value === '' && document.activeElement === $('paPozoTitulo') && $('paTitulo').value === '', `${$('paCliente').value} · ${$('paCarrier').value} · ${$('paPozoTitulo').value}`);
             clic('btnCancelarPrealta');
         }
@@ -1305,9 +1327,16 @@ try {
         document.querySelector('#pestanas button[data-p="prealtas"]').click();
         clic('btnNuevaPrealta');
         R.ok('U-54: «+ Nueva» prellena el año en curso', $('paMes').value === String(new Date().getFullYear()), $('paMes').value);
+        // Tanda 2 (P5): el carrier se coteja antes de elegirlo: con una corriente que su oficio no ampara sale apagado y con el motivo.
+        R.ok('tanda 2 (P3): el cliente ya capturado sale en la lista con su conteo', [...$('paClientes').querySelectorAll('.o')].some(o => o.textContent.includes('CLIENTE DEMO') && o.textContent.includes('1 programa')));
+        poner('paCorriente', 'fluidos-base-agua');
+        {
+            const oc = $('paCarriers').querySelector(`.o[data-v="${carrierId}"]`);
+            R.ok('tanda 2 (P5): con una corriente que el oficio no ampara, el carrier sale apagado y dice por qué', !!oc && oc.disabled && oc.textContent.includes('no ampara'), oc && oc.textContent);
+        }
         poner('paCliente', 'Borrador'); poner('paPozoTitulo', 'equivocado'); poner('paMes', 'x'); poner('paCorriente', 'base-agua'); poner('paCarrier', String(carrierId)); await dormir(20); clic('btnGuardarPrealta');
         await dormir(30);
-        R.ok('U-54: un año que no es de cuatro cifras no se guarda y lo dice la forma', filas('prealtas').length === 1 && $('paForma').querySelector('.dlg-avisos').textContent.includes('cuatro cifras'), $('paForma').querySelector('.dlg-avisos').textContent);
+        R.ok('U-54: un año que no es de cuatro cifras no se guarda y lo dice la forma', filas('prealtas').length === 1 && $('paAvisos').textContent.includes('cuatro cifras'), $('paAvisos').textContent);
         poner('paMes', '2026'); clic('btnGuardarPrealta');
         await esperar(() => filas('prealtas').length === 2, 'segunda pre-alta');
         const rBorr = [...document.querySelectorAll('#paBorradores .renglon')].find(r => r.textContent.includes('BORRADOR-EQUIVOCADO-2026'));
