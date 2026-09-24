@@ -809,12 +809,14 @@ try {
             b.click(); await esperar(() => visible('paAsis'), 'pre-alta desde la base');
             R.ok('tanda 2: la base abre el asistente en el paso 2 con su aviso y los pasos 1 y 3 ya vistos', !$('paPaso2').hidden && visible('paBaseAviso') && !$('paPasos').querySelector('[data-p="3"]').disabled && $('paPasos').querySelector('[data-p="4"]').disabled);
             R.ok('tanda 1: «Usar como base» copia cliente, generador, corriente y carrier; el pozo queda vacío y con el foco', $('paCliente').value === 'CLIENTE DEMO' && $('paGenerador').value === 'GENERADOR DEMO' && $('paCorriente').value === 'base-aceite' && $('paCarrier').value === String(carrierId) && $('paPozoTitulo').value === '' && document.activeElement === $('paPozoTitulo') && $('paTitulo').value === '', `${$('paCliente').value} · ${$('paCarrier').value} · ${$('paPozoTitulo').value}`);
-            // v0.57.0 (U-93): «Quitar la base» suelta lo copiado y vuelve al paso 1; (U-105) elegir un cliente conocido avanza al 2.
+            // v0.57.0 (U-93): «Quitar la base» suelta lo copiado y vuelve al paso 1; (v0.59.0) elegir un cliente NO avanza: se pulsa «Siguiente».
             poner('paPozoTitulo', 'pozo 9'); clic('btnPaQuitarBase');
             R.ok('U-93: «Quitar la base» limpia cliente, generador, corriente y carrier y vuelve al paso 1; el pozo tecleado se queda', !$('paPaso1').hidden && $('paCliente').value === '' && $('paGenerador').value === '' && $('paCorriente').value === '' && $('paCarrier').value === '' && $('paPozoTitulo').value === 'pozo 9');
             [...$('paClientes').querySelectorAll('.o')].find(o => o.textContent.includes('CLIENTE DEMO')).click();
+            R.ok('v0.59.0: elegir un cliente conocido se queda en el paso 1, con el cliente marcado', !$('paPaso1').hidden && $('paPaso2').hidden && $('paCliente').value === 'CLIENTE DEMO' && !!$('paClientes').querySelector('.o.sel'), $('paPasoK').textContent);
+            clic('btnPaSiguiente');
             // C-64 (v0.58.0): el aviso de la base vive en el paso 2 y se cotejaba con el 1 a la vista; ahora se mira al volver al 2.
-            R.ok('U-105: elegir un cliente conocido avanza al paso 2 con el generador de su último programa (y ya sin el aviso de la base, U-93)', !$('paPaso2').hidden && $('paGenerador').value === 'GENERADOR DEMO' && !visible('paBaseAviso'), $('paPasoK').textContent);
+            R.ok('«Siguiente» lleva al paso 2 con el generador del último programa del cliente (y ya sin el aviso de la base, U-93)', !$('paPaso2').hidden && $('paGenerador').value === 'GENERADOR DEMO' && !visible('paBaseAviso'), $('paPasoK').textContent);
             // C-66 (v0.58.0): P3 — el generador traído se muestra como aviso con su origen, y «Cambiar» abre sus campos con el foco.
             const progDemo = filas('prealtas').find(p => p.fields.Title === 'CLIENTE DEMO-POZO 1-2026').fields;
             R.ok('C-66/P3: el generador traído sale como aviso «Tomado de» su programa, sin los campos', visible('paGenAviso') && $('paGenAviso').textContent.includes(`Tomado de ${progDemo.Campana || progDemo.Title}`) && !visible('paGenCampos'), $('paGenAviso').textContent);
@@ -1435,7 +1437,7 @@ try {
         // Tanda 2 (P5): el carrier se coteja antes de elegirlo: con una corriente que su oficio no ampara sale apagado y con el motivo.
         R.ok('tanda 2 (P3): el cliente ya capturado sale en la lista con su conteo', [...$('paClientes').querySelectorAll('.o')].some(o => o.textContent.includes('CLIENTE DEMO') && o.textContent.includes('1 programa')));
         // C-64 (v0.58.0): el paso 3 se pinta al entrar, no con el 1 a la vista: se llega por el camino del asistente.
-        [...$('paClientes').querySelectorAll('.o')].find(o => o.textContent.includes('CLIENTE DEMO')).click();
+        [...$('paClientes').querySelectorAll('.o')].find(o => o.textContent.includes('CLIENTE DEMO')).click(); clic('btnPaSiguiente');
         poner('paPozoTitulo', 'pozo p5'); poner('paCorriente', 'fluidos-base-agua'); clic('btnPaSiguiente');
         {
             const oc = $('paCarriers').querySelector(`.o[data-v="${carrierId}"]`);

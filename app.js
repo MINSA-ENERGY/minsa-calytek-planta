@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta } from './reglas.js';
 
-const VERSION = '0.58.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.59.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1969,7 +1969,8 @@ function faltaPrealta(n) {
 function carrierAmpara(c, corriente) { const l = lista(c.Corrientes); return !corriente || !l.length || l.includes(corriente); }   // la misma regla que la compuerta
 /**
  * P3: elegir un cliente conocido trae el generador de su último programa (con «Cambiar» en el paso 2). C-67 (v0.57.0): el
- * programa se resuelve por su id al tocar, no con el objeto que el renglón capturó al pintarse. U-105: y avanza al paso 2.
+ * programa se resuelve por su id al tocar, no con el objeto que el renglón capturó al pintarse. v0.59.0: ya NO avanza al paso 2
+ * (revierte U-105 a pedido de Carlos): el usuario pulsa «Siguiente».
  */
 function elegirClientePrealta(clave, ultimoId) {
     const a = estado.paAsis;
@@ -1977,7 +1978,7 @@ function elegirClientePrealta(clave, ultimoId) {
     a.otro = false; $('paCliente').value = clave;
     const u = porId(estado.prealtas, ultimoId);
     if (u && (cambio || !valorPa('paGenerador'))) { llenarGeneradorPrealta(u); a.genDeId = u.Generador ? u.id : null; a.genEdit = false; }
-    armarTituloPrealta(); siguientePrealta();
+    armarTituloPrealta(); pintarAsistentePrealta();
 }
 function resumenPasoPrealta(n) {
     if (n === 1) return parteTitulo('paCliente');
