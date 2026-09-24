@@ -1017,6 +1017,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .ver-capturado { all: unset; cursor: pointer; display: inline-flex; align-items: center; min-height: 36px; font-size: .82rem; font-weight: 600; color: var(--acc); }   /* U-86 */
 .ver-capturado:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 .gasis-cuerpo { display: grid; gap: var(--sp-4); align-items: start; }
+#p-puerta .gasis-paso { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }   /* Nueva góndola: pantallas y pie sin tarjeta, con el panel «Así va la góndola» al lado */
 .gasis-paso > .tarjeta { margin: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
 .gasis-paso .tarjeta h2.pregunta { margin: 0; font-family: var(--titulo); font-weight: 600; font-size: 1.3rem; letter-spacing: 0; text-transform: none; color: var(--ink); }
 .gasis-paso .sub { font-size: .88rem; color: var(--mute); margin: calc(-1 * var(--sp-2)) 0 0; }

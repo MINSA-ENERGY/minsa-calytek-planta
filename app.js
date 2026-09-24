@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.66.3';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.67.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -776,6 +776,22 @@ function pintarQuienPuerta() {
     const chofer = $('puChoferNombre').value.trim() || (porId(estado.choferes, $('puChofer').value) || {}).Title;
     $('puQuienSub').textContent = pre ? [pre.Title, pre.CarrierId ? nombreDe(estado.carriers, pre.CarrierId) : null, chofer].filter(Boolean).join(' · ') : 'sin programa todavía';
 }
+/** Escritorio: «Así va la góndola» a la derecha, en vivo; la misma estructura que «Así va la pre-alta». En celular no se ve. */
+function pintarResumenPuerta() {
+    const r = $('puResumen'); r.textContent = '';
+    r.appendChild(el('h2', '', 'Así va la góndola'));
+    const dl = el('dl');
+    const fila = (dt, dd) => { dl.appendChild(el('dt', '', dt)); dl.appendChild(el('dd', dd ? '' : 'f', dd || '—')); };
+    const sec = t => dl.appendChild(el('span', 'sec', t));
+    const pre = porId(estado.prealtas, $('puPrealta').value);
+    sec('Programa'); fila('Pre-alta', pre ? pre.Title : ''); fila('Carrier', pre && pre.CarrierId ? nombreDe(estado.carriers, pre.CarrierId) : '');
+    if (pre) { const { rec, esp } = gondolasDe(pre); fila('Recibidas', esp ? `${rec} de ${esp}` : String(rec)); }
+    const chofer = $('puChoferNombre').value.trim() || (porId(estado.choferes, $('puChofer').value) || {}).Title;
+    sec('Vehículo y chofer'); fila('Placa tractor', placaNormal($('puPlaca').value)); fila('Placa plana', placaNormal($('puPlacaPlana').value)); fila('Chofer', chofer);
+    sec('Carga'); fila('Manifiesto', $('puManifiesto').value.trim()); fila('Corriente', $('puCorriente').value ? etiquetaCorriente($('puCorriente').value) : ''); fila('Art. 79', $('pu79').checked ? 'identificado y etiquetado' : '');
+    r.appendChild(dl);
+    r.appendChild(el('p', 'pista', 'Obligatorio: programa, placa del tractor, chofer, manifiesto y corriente. Después se revisan los documentos.'));
+}
 /** Dónde vive cada campo que la compuerta necesita, y qué recibe el foco cuando falta (el select oculto no puede). */
 const PANTALLA_DE = { puPrealta: 1, puPlaca: 2, puPlacaPlana: 2, puChofer: 2, puChoferNombre: 2, puManifiesto: 3, puCorriente: 3 };
 function enfocarCampoPuerta(id) {
@@ -926,6 +942,7 @@ function pintarPrevioPuerta() {
 
     pintarVivoPuerta(e, faltan);
     pintarQuienPuerta();
+    pintarResumenPuerta();
 }
 /**
  * M3 (tanda 4): la lista larga «Lo que va a revisar» se vuelve un renglón al pie: «Hasta ahora · 6 en verde · 1 aviso».

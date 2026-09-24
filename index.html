@@ -117,7 +117,7 @@
            —Programa · Vehículo y chofer · Carga—, una pregunta a la vez, eligiendo con renglones tocables. Los ids de los campos
            NO cambiaron: los selects siguen siendo la fuente de verdad (ocultos) y los renglones solo los llenan, así que
            evaluarPuerta() y la compuerta no se tocaron. puEst1–3 siguen diciendo qué falta en cada pantalla. -->
-      <div class="asis">
+      <div class="asis gasis">
         <div class="asis-cab">
           <div class="pasos5" aria-hidden="true">
             <div class="ahora" id="puPaso1"><i></i><span>Programa y documentos</span></div>
@@ -133,6 +133,8 @@
             <button type="button" data-s="3" id="puSub3"><span>Carga</span><span class="est" id="puEst3"></span></button>
           </nav>
         </div>
+        <div class="gasis-cuerpo">
+        <div class="gasis-paso">
         <div class="asis-pantalla" id="puBloque1" data-s="1">
           <p class="pregunta" id="puPreg1">¿De qué programa viene?</p>
           <p class="sub">Solo salen las pre-altas firmadas.</p>
@@ -181,6 +183,10 @@
             <button id="btnPuSiguiente" class="principal" type="button">Siguiente · el vehículo ›</button>
             <button id="btnCompuerta" class="principal" type="button" hidden>Revisar documentos ›</button>
           </div>
+        </div>
+        </div>
+        <!-- «Así va la góndola»: el mismo panel lateral de Pre-altas (#paResumen), solo escritorio. -->
+        <aside class="tarjeta pa-resumen" id="puResumen" aria-label="Así va la góndola"></aside>
         </div>
       </div>
     </section>
