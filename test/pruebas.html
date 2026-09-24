@@ -317,7 +317,7 @@ async function probarArchivos(emb1) {
     const oculto = x => !x || x.classList.contains('oculto') || !!x.closest('.oculto');
     const gets0 = DB.llamadas.filter(x => x.startsWith('GET /sites/sitio-falso/drive/root:')).length;
     document.querySelector('#pestanasExtra button[data-p="archivos"]').click();
-    R.ok('v0.33.0: «Archivos» vive en la sección aparte del rail y abre #p-archivos con su cabecera', visible('p-archivos') && document.querySelector('#pestanasExtra button[data-p="archivos"]').getAttribute('aria-current') === 'page' && $('p-archivos').querySelector('.cabecera .titulo-ico') !== null);
+    R.ok('v0.33.0: «Archivos» vive en la sección aparte del rail y abre #p-archivos con su cabecera', visible('p-archivos') && document.querySelector('#pestanasExtra button[data-p="archivos"]').getAttribute('aria-current') === 'page' && $('p-archivos').querySelector('.pa-banda h1') !== null)   /* v0.66.0: la banda, sin icono */;
     await esperar(() => arbol().querySelectorAll(':scope > details').length === 3, 'las tres ramas');
     await esperar(() => $('lnkArchivosSharePoint').href.includes('example.invalid'), 'webUrl de la biblioteca');
     R.ok('v0.33.0: tres ramas (evidencia · oficios/CSF · buzón) con la ruta de config en title, y «Ver en SharePoint» apunta al webUrl de la biblioteca', [...arbol().querySelectorAll(':scope > details > summary')].map(s => s.title).join('|') === '02_Planta/Bascula|04_SGI/02_Ambiental/Permisos-y-Autorizaciones|99_Pendiente-Archivar' && $('lnkArchivosSharePoint').href.includes('Documentos%20compartidos') && $('lnkArchivosSharePoint').target === '_blank', [...arbol().querySelectorAll(':scope > details > summary')].map(s => s.title).join('|'));
@@ -446,7 +446,8 @@ try {
         R.ok('tanda 2: el rail es Hoy · Góndolas · Pre-altas · Padrón | Reportes · Archivos', rail === 'hoy gondolas prealtas padron | reportes archivos', rail);
         R.ok('tanda 2/3: sin carril Puerta → Báscula → Ticket en ninguna sección, Hoy sin Fila del día y la Fila fundida en las pestañas de Góndolas', !document.querySelector('.flujo') && !$('tbFila') && !$('p-hoy').querySelector('.gtabla') && !!$('gTabs'));
         irGondolas();
-        R.ok('tanda 2: «Góndolas» abre la lista con su botón marcado', visible('p-bascula') && document.querySelector('#pestanas button[data-p="gondolas"]').getAttribute('aria-current') === 'page' && $('p-bascula').querySelector('.cabecera h1').textContent === 'Góndolas');
+        R.ok('tanda 2: «Góndolas» abre la lista con su botón marcado', visible('p-bascula') && document.querySelector('#pestanas button[data-p="gondolas"]').getAttribute('aria-current') === 'page' && $('p-bascula').querySelector('.pa-banda h1').textContent === 'Góndolas');
+        R.ok('v0.66.0: la banda de Góndolas cuenta lo mismo que sus pestañas', ['Planta', 'Hoy', 'Rechazos'].every(k => $('gk' + k).textContent === ($('gn' + k).textContent || '0')), ['Planta', 'Hoy', 'Rechazos'].map(k => $('gk' + k).textContent + '/' + $('gn' + k).textContent).join(' '));
         const capturo = ['trazabilidad', 'gerencia'].includes(ROL);
         R.ok('tanda 2: «+ Nueva góndola» solo para quien captura en la puerta', visible('btnNuevaGondola') === capturo, `visible ${visible('btnNuevaGondola')} · rol ${ROL}`);
         if (capturo) {

@@ -13,7 +13,7 @@ import { crearCliente } from './graph.js';
 import { comprimir } from './imagen.js';
 import { compuerta, siguienteFolio, avisoNeto, placaNormal, fechaMexico, horaMexico, slug, rolDe, PUEDE, lista, diasPara, evaluarVigencia, accionCorreccion, prealtaSinMovimiento, fechaCorta, aIsoDia, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, clienteDe, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, mesesPrealtas } from './reglas.js';
 
-const VERSION = '0.65.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+const VERSION = '0.66.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 const $ = id => document.getElementById(id);
 const L = CONFIG.listas;
 
@@ -1154,7 +1154,7 @@ async function asegurarFolioUnico(renglon, tipo, avisar) {
 const VISTAS_GONDOLAS = { planta: 'gpPlanta', hoy: 'gpHoy', rechazos: 'gpRechazos', historial: 'gpHistorial' };
 function elegirVistaGondolas(v) {
     estado.vistaGondolas = VISTAS_GONDOLAS[v] ? v : 'planta';
-    for (const b of $('gTabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.g === estado.vistaGondolas));
+    for (const b of document.querySelectorAll('#gTabs button, #gKpis button')) b.setAttribute('aria-pressed', String(b.dataset.g === estado.vistaGondolas));
     for (const [k, id] of Object.entries(VISTAS_GONDOLAS)) $(id).hidden = k !== estado.vistaGondolas;
 }
 
@@ -1296,6 +1296,8 @@ function pintarListasGondolas() {
     const cuenta = (id, n, alerta) => { $(id).textContent = n ? String(n) : ''; $(id).classList.toggle('alerta', !!alerta && n > 0); };
     const esperan = planta.filter(esperaAutorizacion).length;
     cuenta('gnPlanta', planta.length, esperan > 0); cuenta('gnHoy', cerradasHoy.length); cuenta('gnRechazos', rechazosHoy.length, true);
+    // v0.66.0: la banda cuenta lo mismo que las pestañas; en cero dice 0, no se vacía.
+    for (const [id, n, alerta] of [['gkPlanta', planta.length, esperan > 0], ['gkHoy', cerradasHoy.length, false], ['gkRechazos', rechazosHoy.length, true]]) { $(id).textContent = String(n); $(id).parentElement.classList.toggle('alerta', alerta && n > 0); }
     elegirVistaGondolas(estado.vistaGondolas);
     $('btnNuevaGondola').classList.toggle('oculto', !PUEDE.puerta(estado.rol));   // tanda 2: la llegada se abre desde aquí; quien no captura no la ve
 
@@ -2992,6 +2994,7 @@ function pintarPadron() {
     const q = normaliza($('pdBusca').value.trim());
     const pega = filtroTexto(q);   // C-26
     $('pdResCarriers').textContent = ''; $('pdResCarriers').appendChild(resumenPadron('carriers', estado.carriers, 'activo'));
+    $('pdkCarriers').textContent = String(estado.carriers.length); $('pdkUnidades').textContent = String(estado.unidades.length); $('pdkChoferes').textContent = String(estado.choferes.length);   // v0.66.0: la banda
     $('pdResUnidades').textContent = ''; $('pdResUnidades').appendChild(resumenPadron('unidades', estado.unidades, 'amparada'));
     $('pdResChoferes').textContent = ''; $('pdResChoferes').appendChild(resumenPadron('choferes', estado.choferes, ['con licencia', 'con licencia']));
     let encontrados = 0;
@@ -3566,9 +3569,8 @@ function pintarHoy() {
     const pendientes = excepcionesPendientes();
     const borradores = estado.prealtas.filter(p => p.Estado === 'borrador');
 
-    // v0.32.0: la fecha es el subtítulo y el rol el kicker (la cabecera de Proyectos); los KPI viven en Reportes.
+    // v0.32.0: la fecha es el subtítulo; los KPI viven en Reportes. v0.66.0: el kicker es fijo (la banda de Pre-altas) y el rol ya no va aquí.
     $('hoyTitulo').textContent = `${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long', day: 'numeric', month: 'long' })} · ${activos.length === 1 ? '1 góndola en planta' : `${activos.length} góndolas en planta`}${borradores.length ? ` · ${borradores.length === 1 ? '1 pre-alta por firmar' : `${borradores.length} pre-altas por firmar`}` : ''}`;
-    $('hoyKicker').textContent = estado.rol;
 
     // U-12 (v0.22.0): los mismos botones (Autorizar · Anular/Eliminar) salen en la franja y en su renglon de «Pendiente
     // revisar», que era la unica entrada de esa tarjeta sin accion; la excepcion se cuenta una sola vez (en la tarjeta).
@@ -3607,7 +3609,9 @@ function exportarCsv() {
 $('btnExportar').addEventListener('click', exportarCsv);
 $('pdBusca').addEventListener('input', () => { estado.padronFicha = null; pintarPadron(); });
 $('baBusca').addEventListener('input', pintarHistorial);
-for (const b of $('gTabs').querySelectorAll('button')) b.addEventListener('click', () => elegirVistaGondolas(b.dataset.g));
+for (const b of document.querySelectorAll('#gTabs button, #gKpis button')) b.addEventListener('click', () => elegirVistaGondolas(b.dataset.g));
+// v0.66.0: cada conteo del padrón abre su grupo y lo trae a la vista.
+for (const b of $('pdKpis').querySelectorAll('button')) b.addEventListener('click', () => { const g = $(b.dataset.grupo); g.open = true; g.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
 
 // ================================================================ arranque
 

@@ -245,24 +245,13 @@ h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-tra
 #syncMovil { display: none; margin: 0 0 var(--sp-2); }
 @media (max-width: 720px) { #syncMovil:not(.oculto) { display: flex; } }
 
-/* Cabecera de sección (Proyectos): icono de sección en cuadro tenue, título Saira, kicker en mono y subtítulo a todo el ancho. */
-.cabecera { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); margin: 0 0 var(--sp-4); }
-.cabecera h1 { margin: 0; font-family: var(--titulo); font-weight: 600; font-size: 1.5rem; letter-spacing: -.01em; color: var(--ink); text-wrap: balance; }
-.cabecera .k { font-family: var(--mono); font-size: .7rem; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); white-space: nowrap; }
-.cabecera .sub { flex-basis: 100%; margin: 0; color: var(--mute); font-size: .9rem; }
-.cabecera .sub:empty { display: none; }
-.titulo-ico { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: var(--r-sm); color: var(--ok); background: color-mix(in srgb, var(--ok) 16%, transparent); flex: none; }
-.titulo-ico svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.cabecera > .mn-btn { margin-left: auto; }
-.cabecera > .principal { width: auto; }   /* tanda 2: la acción primaria de la cabecera a su ancho, a la derecha del título */
-
 /* Migas (tanda 2 del rediseño, v0.47.0): la ruta va ARRIBA del título aunque en el DOM venga después (order); el
    eslabón de arriba es un botón que regresa. Solo las pantallas hijas las llevan: una sección del rail no tiene de dónde venir. */
-.cabecera .migas { order: -1; flex-basis: 100%; display: flex; align-items: center; gap: var(--sp-1); font-size: .8rem; color: var(--mute); }
-.cabecera .migas b { color: var(--body); font-weight: 500; }
-.cabecera .migas .miga { all: unset; cursor: pointer; display: inline-flex; align-items: center; min-height: 36px; color: var(--acc); font-weight: 500; }   /* U-86: la de la llegada, igual que la del asistente */
-.cabecera .migas .miga:hover { text-decoration: underline; }
-.cabecera .migas .miga:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
+.pa-banda .migas { margin-bottom: var(--sp-1); display: flex; align-items: center; gap: var(--sp-1); font-size: .8rem; color: var(--mute); }
+.pa-banda .migas b { color: var(--body); font-weight: 500; }
+.pa-banda .migas .miga { all: unset; cursor: pointer; display: inline-flex; align-items: center; min-height: 36px; color: var(--acc); font-weight: 500; }   /* U-86: la de la llegada, igual que la del asistente */
+.pa-banda .migas .miga:hover { text-decoration: underline; }
+.pa-banda .migas .miga:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 
 /* ---------------------------------------------------------------- entrada */
 
@@ -451,17 +440,17 @@ button:not(:disabled):active { transform: scale(.98); }
 .pa-kicker { display: block; margin-bottom: 4px; font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
 .pa-banda h1 { margin: 0; font-family: var(--titulo); font-weight: 600; font-size: 1.75rem; line-height: 1.1; text-transform: none; letter-spacing: 0; color: var(--ink); }
 .pa-banda p { margin: 6px 0 0; color: var(--mute); max-width: 60ch; }
-.pa-kpis { display: flex; margin: 0; }
+:is(.pa-kpis, .bn-kpis) { display: flex; margin: 0; }
 /* U-110 (v0.63.0): cada conteo es un botón que lleva a su pestaña; neutro en cero y ámbar solo con algo que atender (.alerta,
    la misma regla que las pestañas). Antes «Por firmar» iba siempre ámbar y «Firmadas» siempre verde. */
-.pa-kpis > button { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; padding: 0 var(--sp-5); border-left: 1px solid var(--line); }
-.pa-kpis > button span { font-size: .84rem; color: var(--mute); }
-.pa-kpis > button b { font-family: var(--mono); font-weight: 500; font-size: 1.5rem; line-height: 1; color: var(--ink-body); }
-.pa-kpis > button.alerta b { color: var(--warn-fg); }
-.pa-kpis > button:hover span, .pa-kpis > button[aria-pressed="true"] span { color: var(--ink); }
-.pa-kpis > button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
+:is(.pa-kpis, .bn-kpis) > button { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; padding: 0 var(--sp-5); border-left: 1px solid var(--line); }
+:is(.pa-kpis, .bn-kpis) > button span { font-size: .84rem; color: var(--mute); }
+:is(.pa-kpis, .bn-kpis) > button b { font-family: var(--mono); font-weight: 500; font-size: 1.5rem; line-height: 1; color: var(--ink-body); }
+:is(.pa-kpis, .bn-kpis) > button.alerta b { color: var(--warn-fg); }
+:is(.pa-kpis, .bn-kpis) > button:hover span, :is(.pa-kpis, .bn-kpis) > button[aria-pressed="true"] span { color: var(--ink); }
+:is(.pa-kpis, .bn-kpis) > button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 .pa-acciones { display: flex; gap: var(--sp-2); }
-.pa-acciones button { width: auto; margin: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.pa-acciones button, .pa-acciones a { width: auto; margin: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .pa-acciones svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .pa-bases { margin-top: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
 .pa-bases .pa-base:first-child { border-top: 0; }
@@ -542,11 +531,12 @@ button:not(:disabled):active { transform: scale(.98); }
 @media (max-width: 720px) {
     .pa-banda { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); margin: calc(-1 * var(--sp-3)) calc(-1 * var(--sp-3)) var(--sp-4); padding: var(--sp-5) var(--sp-3) var(--sp-4); }
     .pa-banda p { display: none; }
-    .pa-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .pa-kpis > button { padding: 0 var(--sp-3); }
-    .pa-kpis > button:first-child { padding-left: 0; border-left: 0; }
+    :is(.pa-kpis, .bn-kpis) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    :is(.pa-kpis, .bn-kpis) > button { padding: 0 var(--sp-3); }
+    :is(.pa-kpis, .bn-kpis) > button:first-child { padding-left: 0; border-left: 0; }
     .pa-acciones { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
-    .pa-acciones button { width: 100%; padding-inline: var(--sp-2); }
+    .pa-acciones button, .pa-acciones a { width: 100%; padding-inline: var(--sp-2); }
+    .pa-acciones:has(> :only-child) { grid-template-columns: 1fr; }   /* v0.66.0: una sola acción, a todo el ancho */
     .pa-fases { flex-direction: column; align-items: flex-start; }
     .pa-fases li + li::before { content: none; }
 }
@@ -1015,7 +1005,7 @@ button:not(:disabled):active { transform: scale(.98); }
 /* ---------------------------------------------------------------- tanda 5: el asistente de la báscula (M5–M8)
    Pasos 3 a 5 con la misma barra que la llegada. Mientras está abierto la lista se esconde: es una pantalla por paso.
    En escritorio (≥ 900 px) el paso va a la izquierda y «Lo capturado» a la derecha (M7); en celular es una hoja (M6). */
-#p-bascula.asistiendo > .cabecera, #p-bascula.asistiendo > .gtabs, #p-bascula.asistiendo > .gpanel { display: none; }
+#p-bascula.asistiendo > .pa-banda, #p-bascula.asistiendo > .gtabs, #p-bascula.asistiendo > .gpanel { display: none; }
 .gasis { max-width: none; }
 .gasis > .migas { display: flex; align-items: center; gap: var(--sp-1); font-size: .8rem; color: var(--mute); }
 .gasis > .migas b { color: var(--body); font-weight: 500; font-family: var(--mono); }
