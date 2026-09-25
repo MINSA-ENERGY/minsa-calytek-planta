@@ -176,7 +176,7 @@ export function pintarPrealtas() {
 
 export function nuevaPrealta() {
     estado.prealtaEdit = null;
-    $('paFormaTitulo').textContent = 'Nueva'; $('btnGuardarPrealta').textContent = 'Guardar para firma';
+    $('paFormaTitulo').textContent = $('paFormaMiga').textContent = 'Nueva pre-alta'; $('btnGuardarPrealta').textContent = 'Guardar para firma';
     estado.paAsis = { paso: 1, max: 1, revisar: false, genEdit: false, genDeId: null, otro: false, baseId: null };   // C-67: ids, no objetos
     opciones($('paCarrier'), estado.carriers.filter(c => c.Activo !== false), c => c.id, c => c.Title);
     $('paCarrier').value = '';   // U-40: opciones() ya conserva el value; una pre-alta nueva empieza sin carrier
@@ -215,7 +215,7 @@ export async function editarPrealta() {
     const p = estado.prealtaAbierta; if (!p || p.Estado !== 'borrador' || !PUEDE.capturarPrealta(estado.rol)) return;
     if (!(await soltarCapturaPrealta())) return;   // U-95: el asistente conservado con una pre-alta a medias no se pisa callado
     estado.prealtaEdit = p;
-    $('paFormaTitulo').textContent = `Editar ${p.Title}`; $('btnGuardarPrealta').textContent = 'Guardar cambios';
+    $('paFormaTitulo').textContent = $('paFormaMiga').textContent = `Editar ${p.Title}`; $('btnGuardarPrealta').textContent = 'Guardar cambios';
     estado.paAsis = { paso: 5, max: 5, revisar: true, genEdit: false, genDeId: null, otro: false, baseId: null };
     opciones($('paCarrier'), estado.carriers.filter(c => c.Activo !== false || Number(c.id) === Number(p.CarrierId)), c => c.id, c => c.Title);
     const f = textoDe;   // C-26

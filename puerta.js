@@ -104,15 +104,6 @@ export function pintarCorrientesPuerta() {
         cont.appendChild(b);
     }
 }
-/** Arriba del asistente, la góndola que se está capturando: placas o «Góndola nueva», y el programa y el chofer debajo. */
-function pintarQuienPuerta() {
-    const placa = placaNormal($('puPlaca').value), plana = placaNormal($('puPlacaPlana').value);
-    $('puQuien').textContent = placa ? (plana ? `${placa} · ${plana}` : placa) : 'Góndola nueva';
-    $('puQuien').classList.toggle('mono', !!placa);
-    const pre = porId(estado.prealtas, $('puPrealta').value);
-    const chofer = $('puChoferNombre').value.trim() || (porId(estado.choferes, $('puChofer').value) || {}).Title;
-    $('puQuienSub').textContent = pre ? [pre.Title, pre.CarrierId ? nombreDe(estado.carriers, pre.CarrierId) : null, chofer].filter(Boolean).join(' · ') : 'sin programa todavía';
-}
 /** Escritorio: «Así va la góndola» a la derecha, en vivo; la misma estructura que «Así va la pre-alta». En celular no se ve. */
 function pintarResumenPuerta() {
     const r = $('puResumen'); r.textContent = '';
@@ -279,7 +270,6 @@ export function pintarPrevioPuerta() {
     } else btn.textContent = 'Revisar documentos ›';
 
     pintarVivoPuerta(e, faltan);
-    pintarQuienPuerta();
     pintarResumenPuerta();
 }
 /**

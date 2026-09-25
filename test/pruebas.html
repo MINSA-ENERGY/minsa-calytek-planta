@@ -1016,7 +1016,7 @@ try {
             R.ok('tanda 4: «Siguiente» lleva al vehículo (una pantalla a la vez; la barra en el segundo tercio)', visible('puBloque2') && !visible('puBloque1') && $('puPasoK').textContent.includes('Vehículo') && $('puPaso1').dataset.tercio === '2' && visible('btnPuAtras') && !visible('btnCompuerta'), $('puPasoK').textContent);
             const rUni = document.querySelector('#puUnidades .o.u[data-placa="55XY9K"]');
             rUni.click(); await dormir(20);
-            R.ok('tanda 4: tocar la unidad llena las dos placas y el encabezado dice la góndola', $('puPlaca').value === '55XY9K' && $('puPlacaPlana').value === '66ZW3M' && rUni.classList.contains('sel') && $('puQuien').textContent === '55XY9K · 66ZW3M', `${$('puPlaca').value} / ${$('puPlacaPlana').value} · ${$('puQuien').textContent}`);
+            R.ok('tanda 4: tocar la unidad llena las dos placas', $('puPlaca').value === '55XY9K' && $('puPlacaPlana').value === '66ZW3M' && rUni.classList.contains('sel'), `${$('puPlaca').value} / ${$('puPlacaPlana').value}`);
             R.ok('v0.67.0: «Así va la góndola» repite las placas en vivo', $('puResumen').querySelector('h2')?.textContent === 'Así va la góndola' && $('puResumen').textContent.includes('55XY9K') && $('puResumen').textContent.includes('66ZW3M'), $('puResumen').textContent.slice(0, 160));
             [...document.querySelectorAll('#puChoferes .o')].find(b => b.textContent.includes('JUAN')).click(); await dormir(20);
             R.ok('tanda 4: tocar el chofer lo elige y llena el nombre de la licencia', $('puChofer').value !== '' && $('puChoferNombre').value.includes('JUAN') && $('puEst2').textContent === 'Listo', `${$('puChofer').value} · ${$('puChoferNombre').value} · ${$('puEst2').textContent}`);

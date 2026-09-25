@@ -126,7 +126,7 @@
             <div><i></i><span>Tara</span></div>
             <div><i></i><span>Ticket</span></div>
           </div>
-          <div class="asis-quien"><div><b id="puQuien">Góndola nueva</b><small id="puQuienSub">sin programa todavía</small></div><span class="asis-k" id="puPasoK">Paso 1 de 5 · Programa</span></div>
+          <div class="asis-quien"><span class="asis-k" id="puPasoK">Paso 1 de 5 · Programa</span></div>
           <nav class="subpasos" id="puSubpasos" aria-label="Paso 1: programa y documentos" hidden>   <!-- v0.69.0: oculto a pedido de Carlos (lo repite «Así va la góndola»); la E2E lo sigue usando -->
             <button type="button" data-s="1" id="puSub1"><span>Programa</span><span class="est" id="puEst1"></span></button>
             <button type="button" data-s="2" id="puSub2"><span>Vehículo y chofer</span><span class="est" id="puEst2"></span></button>
@@ -352,7 +352,7 @@
            selects paCorriente/paCarrier siguen siendo la fuente de verdad (ocultos; los renglones solo los llenan). Mientras está
            abierto la lista se esconde (#p-prealtas.asistiendo). Salir de la pestaña lo conserva; Cancelar pregunta si hay cambios. -->
       <div class="asis gasis oculto" id="paAsis">
-        <nav class="migas" aria-label="Ruta"><button type="button" class="miga" id="btnPaMiga">Pre-altas</button><span aria-hidden="true">/</span><b id="paFormaTitulo">Nueva</b><button id="btnCancelarPrealta" class="secundario pa-cancelar" type="button">Cancelar</button></nav>
+        <section class="pa-banda"><div class="pa-banda-t"><nav class="migas" aria-label="Ruta"><button type="button" class="miga" id="btnPaMiga">Pre-altas</button><span aria-hidden="true">/</span><b id="paFormaMiga">Nueva pre-alta</b></nav><h1 id="paFormaTitulo">Nueva pre-alta</h1><p>Cliente · pozo y corriente · transporte · envío, una pregunta a la vez.</p></div><div class="pa-acciones"><button id="btnCancelarPrealta" class="secundario" type="button" title="Volver a Pre-altas">Cancelar</button></div></section>
         <div class="asis-cab">
           <nav class="pasos5 pa-pasos" id="paPasos" aria-label="Pasos de la pre-alta">
             <button type="button" data-p="1" aria-label="Paso 1 · Cliente"><i></i><span>Cliente</span><small></small></button>

@@ -542,7 +542,6 @@ button:not(:disabled):active { transform: scale(.98); }
    El marco es el de Góndolas (.asis .gasis, .pasos5, .opciones, .asis-pie). Aquí solo lo propio: la barra de pasos es de
    botones (se vuelve a un paso ya visto), avisos en línea, casillas en caja y el resumen de la derecha (≥ 900 px). */
 #p-prealtas.asistiendo > :not(#paAsis) { display: none; }
-#paAsis > .migas .pa-cancelar { margin-left: auto; width: auto; min-height: var(--control-h-sm); margin-top: 0; }
 .pa-pasos button { all: unset; box-sizing: border-box; display: grid; gap: 4px; align-content: start; min-width: 0; font-size: .8rem; color: var(--faint); }
 .pa-pasos button:not(:disabled) { cursor: pointer; }
 .pa-pasos button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
@@ -895,7 +894,7 @@ button.vig.abre .d::after { content: ' ›'; color: var(--mute); font-weight: 40
 .asis-quien b { display: block; font-weight: 600; color: var(--ink); }
 .asis-quien b.mono { font-family: var(--mono); font-weight: 500; }
 .asis-quien small { display: block; color: var(--mute); font-size: .82rem; }
-.asis-k { font-family: var(--mono); font-size: .76rem; color: var(--acc); white-space: nowrap; }
+.asis-k { margin-left: auto; font-family: var(--mono); font-size: .76rem; color: var(--acc); white-space: nowrap; }
 /* Las tres pantallas como pestañas: tocar una salta a ella; su estado dice qué falta (U-48, antes en la cabecera de cada bloque). */
 .subpasos { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; background: var(--surf); }
 .subpasos button { display: grid; gap: 1px; align-content: center; min-height: var(--control-h); min-width: 0; padding: 6px 10px; border: 0; border-radius: 0; background: none; font: inherit; text-align: left; color: var(--ink-body); cursor: pointer; }
