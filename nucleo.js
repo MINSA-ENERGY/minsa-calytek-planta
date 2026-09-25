@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { autoformatoFecha, compuerta, firmaAmparaPrealta, horaMexico, limpiar, lista, palabraCompuerta, PUEDE, rolDe } from './reglas.js';
 
-export const VERSION = '0.75.3';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+export const VERSION = '0.76.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 export const $ = id => document.getElementById(id);
 export const L = CONFIG.listas;
 
@@ -321,8 +321,9 @@ export const enListaPlanta = () => estado.embarques.filter(e => enPlanta(e) || e
  * autoriza y no acepta ningun sello sin firma; «Hoy» lo dice en Pendiente revisar. Antes volvia al «sello solo» y una
  * cuenta a la que le quitaran Leer en la lista corria como antes de S-01. Otro error (red, 5xx) sube y la recarga falla entera.
  */
+const CAMPOS_FIRMA = ['Title', 'Tipo', 'ObjetoId', 'Firmante', 'FirmadoEl', 'Motivo', 'Created'];   // v0.76.0: las de esquema.json + Created (S-29 lo lee), nada mas
 async function cargarFirmas(c, s, avisar) {
-    try { const f = await c.renglones(s, L.firmas, null, avisar); estado.firmasError = null; return f; }
+    try { const f = await c.renglones(s, L.firmas, null, avisar, CAMPOS_FIRMA); estado.firmasError = null; return f; }
     catch (e) {
         if (!(e && (e.status === 404 || e.status === 403))) throw e;   // C-15: por status (idDeLista tipa su 404), no por texto
         estado.firmasError = String(e.message); return [];

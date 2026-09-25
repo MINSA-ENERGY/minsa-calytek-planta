@@ -10,6 +10,7 @@
 // C-40 (v0.40.0): las fechas en hora de Mexico, como el papel — el runner de Actions corre en UTC.
 import { material, cifrar, descifrar } from './cifrado-certificado.mjs';
 import { readFileSync, writeFileSync, readdirSync, unlinkSync, mkdirSync, existsSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 import { join } from 'node:path';
 
 const { TENANT_ID, CLIENT_ID, CLIENT_SECRET } = process.env;
@@ -17,6 +18,12 @@ if (!TENANT_ID || !CLIENT_ID || !CLIENT_SECRET) { console.error('faltan PUBLICAD
 const HOST = 'minsaenergy.sharepoint.com', RUTA_SITIO = '/sites/Ambiental-CALYTEK', LISTA = 'PLANTA_Certificados';
 const CARPETA = join(process.cwd(), 'certificado', 'datos');
 const RE_NOMBRE = /^CT-\d{2}-\d{4}-[a-z2-9]{12}$/;
+// v0.76.0: el PBKDF2 (100 000 it., ~40 ms) se pagaba por CADA certificado en CADA corrida -- el nombre del archivo sale de el --,
+// y a ~2,900 certificados por anio la corrida pasaba del timeout de 10 min hacia el anio 2-3. El indice guarda, por id de
+// renglon, el archivo y una huella HMAC (llave = el secreto del publicador, que no esta en el repo) de nombre + contenido:
+// si la huella no cambio, no se deriva nada. Vive en .github/ (Jekyll no sirve carpetas con punto) y no lleva el sufijo.
+// Rotar el secreto solo invalida el indice: la siguiente corrida recalcula todo una vez.
+const RUTA_INDICE = join(process.cwd(), '.github', 'indice-certificados.json');
 
 async function token() {
     const r = await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`, {
@@ -71,7 +78,9 @@ let sinFirma = 0;
 mkdirSync(CARPETA, { recursive: true });
 const ahora = new Date().toISOString();
 const esperados = new Set();
-let escritos = 0, sinSufijo = 0, iguales = 0;
+let escritos = 0, sinSufijo = 0, iguales = 0, derivados = 0;
+let indice = {}; try { indice = JSON.parse(readFileSync(RUTA_INDICE, 'utf8')); } catch (_) { /* primera corrida o ilegible: se recalcula todo */ }
+const indiceNuevo = {};
 for (const f of renglones) {
     const nombre = `${f.Title || ''}-${f.Sufijo || ''}`;
     if (!RE_NOMBRE.test(nombre)) { sinSufijo++; continue; }
@@ -89,9 +98,15 @@ for (const f of renglones) {
         residuo, kg: f.Kg ?? null, manifiesto, ticket: f.TicketBascula ?? null, embarques: emb, fechas, transportista: f.Transportista ?? null,
         emitidoEl: f.EmitidoEl ?? null, sustituidoPor: pub.sustituidoPor, motivo: f.Estado === 'cancelado' ? motivoPublico(f.Motivo) : null, publicadoEl: ahora
     };
-    const k = material(f.Title, f.Sufijo), archivo = k.nombre;
+    const { publicadoEl: _p, ...sinFecha } = doc;
+    const huella = createHmac('sha256', CLIENT_SECRET).update(nombre + '\n' + JSON.stringify(sinFecha)).digest('hex');
+    const previo = indice[f._id];
+    if (previo && previo.huella === huella && existsSync(join(CARPETA, previo.archivo))) {
+        esperados.add(previo.archivo); indiceNuevo[f._id] = previo; iguales++; continue;
+    }
+    const k = material(f.Title, f.Sufijo), archivo = k.nombre; derivados++;
     const ruta = join(CARPETA, archivo);
-    esperados.add(archivo);
+    esperados.add(archivo); indiceNuevo[f._id] = { archivo, huella };
     if (existsSync(ruta)) {
         try {
             const viejo = descifrar(readFileSync(ruta, 'utf8'), k);
@@ -103,4 +118,7 @@ for (const f of renglones) {
 }
 let borrados = 0;
 for (const a of readdirSync(CARPETA)) if (a.endsWith('.json') && !esperados.has(a)) { unlinkSync(join(CARPETA, a)); borrados++; }
-console.log(`certificados: ${renglones.length} renglones · ${esperados.size} publicables · ${escritos} escritos · ${iguales} sin cambio · ${borrados} borrados · ${sinSufijo} sin sufijo valido · ${sinFirma} vigentes SIN FIRMA publicados como no validos`);
+const indiceTxt = JSON.stringify(Object.fromEntries(Object.keys(indiceNuevo).sort((a, b) => a - b).map(i => [i, indiceNuevo[i]])), null, 1) + '\n';
+mkdirSync(join(process.cwd(), '.github'), { recursive: true });
+if (!existsSync(RUTA_INDICE) || readFileSync(RUTA_INDICE, 'utf8') !== indiceTxt) writeFileSync(RUTA_INDICE, indiceTxt, 'utf8');
+console.log(`certificados: ${renglones.length} renglones · ${esperados.size} publicables · ${escritos} escritos · ${iguales} sin cambio · ${borrados} borrados · ${sinSufijo} sin sufijo valido · ${sinFirma} vigentes SIN FIRMA publicados como no validos · ${derivados} llaves derivadas`);

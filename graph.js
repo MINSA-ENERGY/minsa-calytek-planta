@@ -146,12 +146,15 @@ export function crearCliente(graph, token) {
         /**
          * Todos los renglones de una lista, aplanados. $top=500 y sigue @odata.nextLink: a
          * 8 gondolas/dia son ~2,000 embarques/ano, asi que hay que paginar de verdad.
+         * @param {string[]} [campos]  v0.76.0: solo esas columnas y el id (sin createdBy/lastModifiedBy/eTag...): para la
+         *                            lista que crece sin tope y se lee entera (PLANTA_Firmas), la mitad del peso por pagina.
          * @param {string} [filtro]  OData, p. ej. "fields/Estado eq 'firmada'" (necesita columna indexada o la
          *                            cabecera Prefer: HonorNonIndexedQueriesWarningMayFailRandomly)
          */
-        async renglones(siteId, nombreLista, filtro, avisar) {
+        async renglones(siteId, nombreLista, filtro, avisar, campos) {
             const listaId = await this.idDeLista(siteId, nombreLista);
-            let url = `${graph}/sites/${siteId}/lists/${listaId}/items?expand=fields&$top=500`
+            let url = `${graph}/sites/${siteId}/lists/${listaId}/items?`
+                + (campos ? `$select=id&expand=fields($select=${campos.join(',')})` : 'expand=fields') + '&$top=500'
                 + (filtro ? `&$filter=${encodeURIComponent(filtro)}` : '');
             const todos = [];
             while (url) {

@@ -38,7 +38,7 @@ jobs:
         run: |
           git config user.name 'CALYTEK Planta Publicador'
           git config user.email 'publicador@users.noreply.github.com'
-          git add -- certificado/datos
+          git add -- certificado/datos .github/indice-certificados.json
           if git diff --cached --quiet; then echo 'sin cambios'; exit 0; fi
           git commit -m "certificados: verificacion publicada $(date -u +%Y-%m-%dT%H:%MZ)"
           git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF_NAME}"

@@ -34,6 +34,22 @@ try {
     assert.equal(c1.fechas, '22/09/2026', 'C-40: 02:30Z del 23 es el 22 en Mexico (TZ=UTC como el runner)');
     assert.equal(leer('CT-26-0005', 'efghjkmnpqrs').motivo, 'Emisión fallida', 'S-22: la cancelacion automatica no publica el error de Graph');
     assert.equal(leer('CT-26-0006', 'fghjkmnpqrst').motivo, 'El generador pidió otra razón social', 'S-22: el motivo tecleado por gerencia si se publica');
+    // v0.76.0: la segunda corrida no deriva ninguna llave (el indice manda), no reescribe nada y el indice no lleva sufijos.
+    const antes = Object.fromEntries(readdirSync(join(dir, 'certificado', 'datos')).map(a => [a, readFileSync(join(dir, 'certificado', 'datos', a), 'utf8')]));
+    const rIdx = correr(dir);
+    assert.equal(rIdx.status, 0, 'segunda corrida: ' + rIdx.stderr);
+    assert.match(rIdx.stdout, / 0 escritos .* 0 llaves derivadas/, 'v0.76.0: sin cambios no se deriva ni se escribe: ' + rIdx.stdout);
+    for (const [a, t] of Object.entries(antes)) assert.equal(readFileSync(join(dir, 'certificado', 'datos', a), 'utf8'), t, 'v0.76.0: el archivo no cambia: ' + a);
+    const rutaIdx = join(dir, '.github', 'indice-certificados.json'), idx = readFileSync(rutaIdx, 'utf8');
+    assert.ok(!/abcdefghjkmn|bcdefghjkmnp/.test(idx), 'v0.76.0: el indice (repo publico) no lleva el sufijo del QR');
+    // Con otra llave del publicador (secreto rotado) las huellas no casan: se recalcula todo y lo publicado queda igual.
+    const rRot = correr(dir, { CLIENT_SECRET: 'otro' });
+    assert.match(rRot.stdout, / 0 escritos .* [1-9]\d* llaves derivadas/, 'v0.76.0: secreto rotado -> se derivan de nuevo, sin reescribir: ' + rRot.stdout);
+    // Si falta un archivo publicado, el indice no lo tapa: se vuelve a escribir.
+    const uno = material('CT-26-0002', 'bcdefghjkmnp').nombre; rmSync(join(dir, 'certificado', 'datos', uno));
+    const rFalta = correr(dir, { CLIENT_SECRET: 'otro' });
+    assert.match(rFalta.stdout, / 1 escritos .* 1 llaves derivadas/, 'v0.76.0: archivo borrado -> se rederiva y reescribe solo ese: ' + rFalta.stdout);
+    assert.equal(leer('CT-26-0002', 'bcdefghjkmnp').estado, 'vigente', 'v0.76.0: el reescrito sigue vigente');
     // Si el publicador no ve PLANTA_Firmas (llega vacia con vigentes) aborta: no pone NO VALIDO a los buenos.
     const dir2 = mkdtempSync(join(tmpdir(), 'publicador-'));
     try { const r2 = correr(dir2, { FALSO_SIN_FIRMAS: '1' }); assert.equal(r2.status, 4, 'sin firmas legibles el publicador aborta con 4'); }
