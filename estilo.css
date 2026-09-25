@@ -650,6 +650,8 @@ button:not(:disabled):active { transform: scale(.98); }
     padding: var(--sp-2) 64px var(--sp-2) var(--sp-4); min-height: 72px; border: 1px solid var(--line); background: var(--surf2);
     font-variant-numeric: tabular-nums; -moz-appearance: textfield;
 }
+/* La cursiva del placeholder, alineada a la derecha y a 2.6rem, se sale de la caja y el input la recorta: mientras se ve el placeholder, un respiro extra a la derecha (el dato tecleado no se mueve). */
+.peso input:placeholder-shown { padding-right: calc(64px + .2em); }
 .peso input::-webkit-outer-spin-button, .peso input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .peso .unidad { position: absolute; right: 16px; bottom: 22px; font-family: var(--mono); font-size: .9rem; color: var(--mute); font-weight: 600; }
 .teclado { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); margin: var(--sp-3) 0 var(--sp-4); }
