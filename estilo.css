@@ -1226,7 +1226,7 @@ select, .archivos-filtros select, .con-boton select {
 /* v0.68.0 (pedido de Carlos): detalle de pre-alta — «Volver» arriba a la derecha, «Cerrar el programa» en grande abajo y solo. */
 #paDetalle .pd-cabeza { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); }   /* v0.75.2: Volver arriba a la izquierda; con el boton a 100 % en celular el h2 quedaba en 0 px y se leia letra por letra */
 #paDetalle .pd-cabeza h2 { margin: 0; min-width: 0; width: 100%; overflow-wrap: anywhere; }
-#paDetalle .pd-cabeza button { flex: none; width: auto; margin: 0; }
+#paDetalle .pd-cabeza button { flex: none; width: auto; margin: 0; align-self: flex-end; }   /* v0.75.3 (Carlos): a la derecha */
 #paDetalle .pd-cerrar-programa { display: block; width: 100%; min-height: 56px; margin-top: var(--sp-4); font-size: 1.05rem; font-weight: 600; color: var(--bad-ink); background: var(--bad); border: 1px solid var(--bad); border-radius: var(--r-sm, 6px); cursor: pointer; }
 #paDetalle .pd-cerrar-programa:hover:not(:disabled) { filter: brightness(.92); }
 #paDetalle .pd-cerrar-programa.oculto { display: none; }
