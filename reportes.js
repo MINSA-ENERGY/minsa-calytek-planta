@@ -62,10 +62,11 @@ export function pintarReportes() {
     // rechazos y excepciones (misma definición que la tarjeta de Hoy, sin el tope de 10) y netos fuera de banda
     const rj = $('repRechazos'); rj.textContent = '';
     const rech = rechazosYExcepciones();
-    if (!rech.length) rj.appendChild(el('p', 'vacio', 'Ninguno en lo cargado.'));
+    if (!rech.length) rj.appendChild(el('p', 'vacio', 'Ningún rechazo ni excepción en lo cargado.'));
     for (const e of rech) rj.appendChild(renglonRechazo(e));
     const nt = $('repNetos'); nt.textContent = '';
     const fuera = estado.embarques.filter(e => e.Etapa === 'cerrado' && /Neto fuera de banda/.test(e.Notas || '')).sort((a, b) => b.id - a.id);
-    if (!fuera.length) nt.appendChild(el('p', 'vacio', `Ninguno: las ${cerrados(() => true).length} cerradas quedaron dentro de la banda.`));
+    const nCerr = cerrados(() => true).length;
+    if (!fuera.length) nt.appendChild(el('p', 'vacio', !nCerr ? 'Ninguno: todavía no hay góndolas cerradas en lo cargado.' : nCerr === 1 ? 'Ninguno: la góndola cerrada quedó dentro de la banda.' : `Ninguno: las ${nCerr} cerradas quedaron dentro de la banda.`));
     for (const e of fuera) nt.appendChild(renglon(`${e.Title} · ${e.PlacaTractor}`, `${fechaCorta(e.TaraHora || e.Arribo)} · neto ${Number(e.NetoKg).toLocaleString('es-MX')} kg · ${(e.Notas || '').replace(/\n.*$/s, '')}`));
 }

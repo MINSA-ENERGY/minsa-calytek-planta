@@ -249,7 +249,12 @@
         R.lineas.push(`[${clase}] ${texto}`);
     };
     R.ok = (nombre, cond, detalle) => { if (cond) { R.oks++; R.log('ok', nombre + (detalle ? ' — ' + detalle : '')); } else { R.fallas++; R.log('falla', nombre + (detalle ? ' — ' + detalle : '')); } };
+    // v0.77.0 (2ª corrida): toda excepción sin atrapar o promesa rechazada sin catch durante la corrida es falla (antes no se miraba la consola).
+    R.errores = [];
+    window.addEventListener('error', ev => R.errores.push('error: ' + (ev.message || ev.error)));
+    window.addEventListener('unhandledrejection', ev => R.errores.push('promesa sin catch: ' + (ev.reason && ev.reason.message ? ev.reason.message : ev.reason)));
     R.cerrar = async () => {
+        R.ok('v0.77.0: sin errores de JS ni promesas sin catch en toda la corrida', R.errores.length === 0, R.errores.slice(0, 5).join(' | '));
         const resumen = `${R.oks} ok · ${R.fallas} falla(s)`;
         R.log(R.fallas ? 'falla' : 'ok', 'RESUMEN: ' + resumen);
         document.title = 'PRUEBAS TERMINADAS: ' + resumen;
@@ -1237,6 +1242,12 @@ try {
         R.ok('neto 4,600 kg (< 30 % de 25 t) dispara el aviso y pide motivo', visible('baAvisoNeto') && visible('baMotivoNetoCampo'));
         await foto(); window.__sinTicket = true; clic('btnGuardarPeso'); await dormir(50); window.__sinTicket = false;
         R.ok('C-43 (v0.42.0): sin ticket de báscula la tara no se guarda y la góndola sigue en planta', !!avisoCon('Falta el número del ticket de báscula') && emb2.fields.Etapa !== 'cerrado' && document.activeElement === $('baTicketBascula'), `etapa ${emb2.fields.Etapa}`);
+        // v0.77.0 (2ª corrida): tara >= bruto o kilos con decimales no cierran ni con motivo escrito (antes: neto 0/negativo o 11500.1999…).
+        poner('baKg', '44600'); poner('baMotivoNeto', 'motivo de prueba'); clic('btnGuardarPeso'); await dormir(50);
+        R.ok('v0.77.0: tara igual al bruto no cierra aunque lleve motivo', !!avisoCon('no puede ser igual o mayor que el bruto') && emb2.fields.Etapa !== 'cerrado', `etapa ${emb2.fields.Etapa}`);
+        poner('baKg', '40000.5'); clic('btnGuardarPeso'); await dormir(50);
+        R.ok('v0.77.0: kilos con decimales no se guardan', !!avisoCon('sin decimales') && emb2.fields.Etapa !== 'cerrado', `etapa ${emb2.fields.Etapa}`);
+        poner('baKg', '40000'); poner('baMotivoNeto', ''); await dormir(30);
         clic('btnGuardarPeso'); await dormir(50);
         R.ok('sin motivo no cierra', !!avisoCon('se sale de la banda'));
         poner('baMotivoNeto', 'Góndola venía a un cuarto, confirmado con el chofer'); clic('btnGuardarPeso');

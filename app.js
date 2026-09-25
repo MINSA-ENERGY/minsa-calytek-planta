@@ -10,7 +10,7 @@
 
 import { CONFIG } from './config.js';
 import { CORRIENTES, placaNormal, subpasoDeRegla } from './reglas.js';
-import { $, abrirForma, avisar, cerrarForma, confirmar, el, estado, hayCaptura, huellaForma, limpiarAvisos, porId, salir, VERSION, vivo } from './nucleo.js';
+import { $, abrirForma, avisar, cerrarForma, confirmar, el, estado, hayCaptura, huellaForma, limpiarAvisos, pintarSync, porId, salir, VERSION, vivo } from './nucleo.js';
 import { arrancar, botonesRail, entrar, irDesdePestana, recargar, repintar, soltarPesaje } from './navegacion.js';
 import { camposCapturaPuerta, cerrarVeredicto, correrCompuerta, enfocarCampoPuerta, irSubpaso, marcarChip, marcarOpcion, pintarChoferesPuerta, pintarCorrientesPuerta, pintarPrevioPuerta, pintarUnidadesPuerta, puertaConCaptura, registrarPuerta, subpasoInicial } from './puerta.js';
 import { abrirHojaCapturado, abrirTicketPop, cerrarAsistente, cerrarHojaCapturado, guardarPeso, kgG, revisarNeto, tomarFoto } from './gondolas.js';
@@ -75,6 +75,9 @@ $('btnActualizarMovil').addEventListener('click', () => { $('menuMovil').open = 
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && estado.siteId && Date.now() - estado.cargadoEl > 60000) recargar(true);
 });
+// Sin red: el indicador lo dice al momento; al volver la señal se relee si el estado envejeció.
+window.addEventListener('offline', () => { if (estado.siteId) { pintarSync(); avisar('Sin conexión: puedes consultar lo cargado, pero nada se guarda hasta que vuelva la señal.', 'ojo'); } });
+window.addEventListener('online', () => { if (estado.siteId) { limpiarAvisos(); pintarSync(); if (Date.now() - estado.cargadoEl > 60000) recargar(true); } });
 // Y cada CONFIG.refrescoMs mientras la app esta a la vista: la excepcion que gerencia autoriza desde su sesion le
 // llega a la caseta sin tocar Actualizar (H8, auditoria del 7-sep). recargar() ya no pisa un pesaje ni un veredicto abiertos.
 if (CONFIG.refrescoMs > 0) setInterval(() => {

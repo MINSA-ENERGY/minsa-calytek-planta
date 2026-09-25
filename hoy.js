@@ -46,7 +46,7 @@ export function pintarKpisReportes({ cerradosHoy, cerradosAyer, cerradosSemana, 
         t.appendChild(document.createTextNode(texto)); return t;
     };
     kpi('Góndolas cerradas hoy', cerradosHoy.length, null, tend(cerradosHoy.length, cerradosAyer.length, 'vs ayer'), 'ok');
-    kpi('Toneladas netas hoy', (kg(cerradosHoy) / 1000).toFixed(1), 't', el('div', 't', cerradosHoy.length ? `${(kg(cerradosHoy) / 1000 / cerradosHoy.length).toFixed(1)} t por góndola · semana ${(kg(cerradosSemana) / 1000).toFixed(1)} t` : `semana ${(kg(cerradosSemana) / 1000).toFixed(1)} t`), 'ok');
+    kpi('Toneladas netas hoy', (kg(cerradosHoy) / 1000).toFixed(1), 't', el('div', 't', cerradosHoy.length ? `${(kg(cerradosHoy) / 1000 / cerradosHoy.length).toFixed(1)}\u00a0t por góndola · semana ${(kg(cerradosSemana) / 1000).toFixed(1)}\u00a0t` : `semana ${(kg(cerradosSemana) / 1000).toFixed(1)}\u00a0t`), 'ok');   // espacio duro: la «t» caía sola en otro renglón
     const enP = kpi('En planta ahora', activos.length, null, el('div', 't', `${activos.filter(e => e.Etapa === 'bruto').length} por tara · ${activos.filter(e => e.Etapa === 'compuerta').length} por bruto`), 'info');
     const med = el('div', 'medidor'); const mi = el('i'); mi.style.width = Math.min(100, Math.round(((cerradosHoy.length + activos.length) / CONFIG.techoGondolasDia) * 100)) + '%'; med.appendChild(mi); enP.appendChild(med);
     enP.appendChild(el('div', 't', `techo ${CONFIG.techoGondolasDia} al día`));

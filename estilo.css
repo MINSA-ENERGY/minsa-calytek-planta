@@ -241,6 +241,8 @@ h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-tra
 .sync::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
 .sync.viejo::before { background: var(--warn); }
 .sync.leyendo::before { background: var(--acc); }
+.sync.sin-red { color: var(--bad-fg); }
+.sync.sin-red::before { background: var(--bad); }
 /* U-63 (v0.34.0): en escritorio el estado de lectura vive detrás del «···»; este punto lo saca al renglón de sesión (el texto va en title). */
 .rail .sesion-fila .sync-punto { gap: 0; padding: 0 var(--sp-1); min-height: var(--control-h-sm); }
 .rail .sesion-fila .sync-punto::before { width: 8px; height: 8px; }
@@ -452,6 +454,7 @@ button:not(:disabled):active { transform: scale(.98); }
 :is(.pa-kpis, .bn-kpis) > button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 .pa-acciones { display: flex; gap: var(--sp-2); }
 .pa-acciones button, .pa-acciones a { width: auto; margin: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.pa-acciones a { text-decoration: none; }   /* «Ver en SharePoint» de Archivos es un enlace con cara de botón: sin subrayado, como los demás de la banda */
 .pa-acciones svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .pa-bases { margin-top: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
 .pa-bases .pa-base:first-child { border-top: 0; }
@@ -535,7 +538,7 @@ button:not(:disabled):active { transform: scale(.98); }
     :is(.pa-kpis, .bn-kpis) > button:first-child { padding-left: 0; border-left: 0; }
     .pa-acciones { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
     .pa-acciones button, .pa-acciones a { width: 100%; padding-inline: var(--sp-2); }
-    .pa-acciones:has(> :only-child) { grid-template-columns: 1fr; }   /* v0.66.0: una sola acción, a todo el ancho */
+    .pa-acciones:not(:has(> :not(.oculto) ~ :not(.oculto))) { grid-template-columns: 1fr; }   /* v0.66.0: una sola acción, a todo el ancho */
     .pa-fases { flex-direction: column; align-items: flex-start; }
     .pa-fases li + li::before { content: none; }
 }
@@ -932,7 +935,7 @@ button.vig.abre .d::after { content: ' ›'; color: var(--mute); font-weight: 40
 .opciones .o .d { font-family: var(--mono); font-size: .78rem; color: var(--mute); white-space: nowrap; }
 .opciones .o.fuera .t b { color: var(--mute); font-weight: 500; }
 .opciones > .pista { margin: 0; padding: 12px 14px; }
-.teclear summary { list-style: none; cursor: pointer; width: fit-content; font-size: .88rem; font-weight: 600; color: var(--acc); }
+.teclear summary { list-style: none; cursor: pointer; width: fit-content; display: flex; align-items: center; min-height: 44px;   /* toque con guante: sola medía 21 px */ font-size: .88rem; font-weight: 600; color: var(--acc); }
 .teclear summary::-webkit-details-marker { display: none; }
 .teclear[open] summary { margin-bottom: var(--sp-2); }
 /* El pie: la línea viva (M3) y los botones. En celular se queda pegado arriba de la barra de pestañas. */
@@ -986,11 +989,6 @@ button.vig.abre .d::after { content: ' ›'; color: var(--mute); font-weight: 40
    En escritorio (≥ 900 px) el paso va a la izquierda y «Lo capturado» a la derecha (M7); en celular es una hoja (M6). */
 #p-bascula.asistiendo > .pa-banda, #p-bascula.asistiendo > .gtabs, #p-bascula.asistiendo > .gpanel { display: none; }
 .gasis { max-width: none; }
-.gasis > .migas { display: flex; align-items: center; gap: var(--sp-1); font-size: .8rem; color: var(--mute); }
-.gasis > .migas b { color: var(--body); font-weight: 500; font-family: var(--mono); }
-.gasis > .migas .miga { all: unset; cursor: pointer; display: inline-flex; align-items: center; min-height: 36px; color: var(--acc); font-weight: 500; }   /* U-86: área táctil de 36 px, aspecto de enlace */
-.gasis > .migas .miga:hover { text-decoration: underline; }
-.gasis > .migas .miga:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 2px; }
 .pasos5 .hecho { color: var(--body); }
 .pasos5 .hecho i { background: var(--ok); }
 .asis-der { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }

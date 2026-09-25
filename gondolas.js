@@ -423,7 +423,10 @@ export function revisarNeto() {
 export async function guardarPeso() {
     const p = estado.pesando; if (!p) return;
     const kg = Number($('baKg').value);
-    if (!Number.isFinite(kg) || kg <= 0) { avisar('Captura el peso en kilogramos.', 'error'); return; }
+    // Kilos ENTEROS (el teclado y step=1 ya lo son; en computadora se podía teclear «12500.5» y el neto salía 11500.199999…)
+    if (!Number.isInteger(kg) || kg <= 0) { avisar('Captura el peso en kilogramos, sin decimales.', 'error'); return; }
+    // La tara igual o mayor que el bruto no es «fuera de banda»: daría neto 0 o negativo, y esa góndola ya no certifica.
+    if (p.fase === 'tara' && kg >= Number(p.embarque.BrutoKg)) { avisar(`La tara (${kgG(kg)}) no puede ser igual o mayor que el bruto (${kgG(p.embarque.BrutoKg)}): revisa el indicador.`, 'error'); return; }
     if (!estado.fotoBytes) { avisar('Falta la foto del indicador: es lo que hace comprobable un peso tecleado.', 'error'); return; }
     // El ticket de bascula es obligatorio al cerrar: despues no hay donde capturarlo, y el certificado de la gondola lo lleva impreso.
     if (p.fase === 'tara' && !$('baTicketBascula').value.trim()) { avisar('Falta el número del ticket de báscula: es lo que va impreso en el certificado de esta góndola.', 'error'); $('baTicketBascula').focus(); return; }

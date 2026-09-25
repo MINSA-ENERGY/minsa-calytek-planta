@@ -158,14 +158,14 @@ export function hallazgosDe(e, ...clases) {
 export const reglasDe = (e, ...clases) => hallazgosDe(e, ...clases).map(h => h.regla).join(', ');
 export function renglonRechazo(e) {
     const causa = reglasDe(e, 'legal', 'comercial');
-    const r = renglon(`${e.Title || '(excepción)'} · ${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + quien(e.ExcepcionAutorizo) : ''}`, 'Ver', () => abrirGondolaDe(vivo('embarques', e)));   // U-134 (v0.74.0)
+    const r = renglon(`${e.Title || 'sin folio'} · ${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}`, `${horaCorta(e.Arribo)} · ${causa}${e.ExcepcionAutorizo ? ' · autorizó ' + quien(e.ExcepcionAutorizo) : ''}`, 'Ver', () => abrirGondolaDe(vivo('embarques', e)));   // U-134 (v0.74.0)
     r.firstChild.firstChild.prepend(etiquetaCompuertaDe(e));   // U-143 (v0.73.0): la etiqueta va primero; al final caía sola en otro renglón
     return r;
 }
 export function pintarRechazosHoy() {
     const rj = $('tbRechazos'); rj.textContent = '';
     const rech = rechazosYExcepciones().slice(0, 10);
-    if (!rech.length) rj.appendChild(el('p', 'pista', 'Ninguno.'));
+    if (!rech.length) rj.appendChild(el('p', 'vacio', 'Ningún rechazo ni excepción en lo cargado.'));   // mismo vacío que Reportes
     for (const e of rech) rj.appendChild(renglonRechazo(e));
 }
 

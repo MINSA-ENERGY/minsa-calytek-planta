@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { autoformatoFecha, compuerta, firmaAmparaPrealta, horaMexico, limpiar, lista, palabraCompuerta, PUEDE, rolDe } from './reglas.js';
 
-export const VERSION = '0.76.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+export const VERSION = '0.77.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 export const $ = id => document.getElementById(id);
 export const L = CONFIG.listas;
 
@@ -287,11 +287,14 @@ let avisoReintento = false;
 export function pintarSync(leyendo = false, texto = 'Leyendo las listas…') {
     const t = Date.now() - estado.cargadoEl;
     const hace = !estado.cargadoEl ? '' : t < 60000 ? `hace ${Math.max(1, Math.round(t / 1000))} s` : t < 3600000 ? `hace ${Math.round(t / 60000)} min` : `hace ${Math.round(t / 3600000)} h`;
-    const dice = leyendo ? texto : estado.cargadoEl ? `Al día · leído ${hace}` : '';
+    // Sin red la app abre (SW) pero no guarda nada: se dice en el indicador en vez de «Al día» (la cola offline quedó descartada, I7)
+    const sinRed = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const dice = sinRed ? 'Sin conexión · no se guarda nada' : leyendo ? texto : estado.cargadoEl ? `Al día · leído ${hace}` : '';
     for (const x of document.querySelectorAll('.sync')) {
         // U-63 (v0.34.0): el punto del renglón de sesión del rail no lleva texto (la hora sigue dentro del «···», decisión cerrada)
         if (x.classList.contains('sync-punto')) { x.title = dice; x.setAttribute('aria-label', dice); } else x.textContent = dice;
         x.classList.toggle('viejo', !leyendo && t > 300000);
+        x.classList.toggle('sin-red', sinRed);
         x.classList.toggle('leyendo', leyendo);
     }
     // U-63: en escritorio el reintento de C-17 quedaba detrás del «···»; se dice también en #avisos y se limpia al terminar de leer

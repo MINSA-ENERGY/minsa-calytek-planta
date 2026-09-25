@@ -17,7 +17,8 @@ export async function conReintento(hacer, alAvisar) {
         try {
             r = await hacer();
         } catch (e) {
-            if (intento === REINTENTOS) throw e;
+            // el TypeError del navegador («Failed to fetch») no le dice nada al de la caseta: se traduce, con status 0
+            if (intento === REINTENTOS) throw Object.assign(new Error('Sin conexión con SharePoint: no se guardó nada. Revisa la señal y vuelve a intentar.'), { status: 0, codigo: 'sinConexion', causa: e });
             if (alAvisar) alAvisar(`sin conexión, reintentando (${intento}/${REINTENTOS - 1})`);
             await dormir(espera); espera *= 2;
             continue;
