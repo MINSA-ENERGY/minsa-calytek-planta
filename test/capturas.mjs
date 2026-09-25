@@ -32,6 +32,10 @@ const VISTAS_TODAS = {
     'padron': 'vista=padron', 'padron-carrier': 'vista=padron&pd=carrier', 'padron-ficha': 'vista=padron&pd=ficha', 'padron-alta': 'vista=padron&pd=alta',
     'reportes': 'vista=reportes', 'archivos': 'vista=archivos', 'certificado': 'vista=certificado',
     // con un filtro puesto: el aviso de carpetas sin abrir (U-135). El texto se teclea tras la corrida, como lo haría el usuario.
+    // el menú «···» del rail abierto en oscuro, con el texto de sincronía más largo (v0.75.2: se salía del rail y quedaba recortado).
+    'menu-rail': ['vista=hoy&tema=oscuro', "(() => { document.getElementById('syncRail').textContent = 'Al día · leído hace 44 s'; document.getElementById('menuRail').open = true; })()"],
+    // el detalle de una pre-alta (v0.75.2: Volver arriba a la izquierda; a 390 el título se leía letra por letra).
+    'prealta-detalle': ['vista=prealtas', "document.querySelector('#p-prealtas .pa-tabla [tabindex=\"0\"]')?.click()"],
     'archivos-filtro': ['vista=archivos', "(() => { const b = document.getElementById('arBusca'); b.value = 'E-25-00042'; b.dispatchEvent(new Event('input', { bubbles: true })); })()"],
 };
 

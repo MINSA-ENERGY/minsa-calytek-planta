@@ -162,18 +162,19 @@ h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-tra
 
 /* la SESIÓN: dos renglones (Proyectos v0.48.0) — nombre + rol y «···» · el tema como segmento a todo el ancho */
 .rail .sesion { margin-top: auto; padding: var(--sp-3) var(--sp-2) 0; border-top: 1px solid var(--line-soft); display: grid; gap: var(--sp-2); font-size: .8rem; color: var(--mute); }
-.rail .sesion-fila { display: flex; align-items: center; gap: var(--sp-2); }
+.rail .sesion-fila { position: relative; display: flex; align-items: center; gap: var(--sp-2); }
 .rail .sesion .quien { flex: 1; display: grid; gap: 2px; min-width: 0; color: var(--ink); overflow-wrap: anywhere; }
 .rail .sesion .quien b { font-weight: 600; }
 .rail .sesion .quien .rol { font-family: var(--mono); font-size: .64rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 500; color: var(--mute); }
 .rail .mn-btn { border: 1px solid var(--line); background: var(--surf); color: var(--ink-body); justify-content: center; gap: var(--sp-2); }
 .rail .mn-btn:hover { background: var(--rail-hover); }
-.menu-rail { position: relative; flex: none; }
+.menu-rail { flex: none; }   /* la caja se ancla a la fila, no al boton: a lo ancho del rail, que recorta lo que se sale */
 .menu-rail > summary { list-style: none; cursor: pointer; letter-spacing: .1em; }
 .menu-rail > summary::-webkit-details-marker { display: none; }
-.menu-rail .menu-caja { position: absolute; right: 0; bottom: calc(100% + 4px); z-index: 100; background: var(--surf); border: 1px solid var(--line-soft); border-radius: var(--r-md); box-shadow: var(--sombra-pop); padding: var(--sp-2); display: grid; gap: var(--sp-2); min-width: 210px; }
-.menu-rail .menu-caja .mn-btn { justify-content: flex-start; width: 100%; text-decoration: none; }
-.menu-rail .menu-caja .sync { margin-left: auto; padding-left: var(--sp-2); white-space: nowrap; }
+.menu-rail .menu-caja { position: absolute; left: 0; right: 0; bottom: calc(100% + 4px); z-index: 100; background: var(--surf); border: 1px solid var(--line-soft); border-radius: var(--r-md); box-shadow: var(--sombra-pop); padding: var(--sp-2); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; }
+.menu-rail .menu-caja .mn-btn { flex-wrap: wrap; justify-content: flex-start; width: 100%; text-decoration: none; }
+.menu-rail .menu-caja .mn-btn .ico { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+.menu-rail .menu-caja .sync { flex-basis: 100%; padding-left: 0; font-size: .66rem; letter-spacing: 0; white-space: nowrap; }   /* la hora de lectura baja a su renglon: el rail no le da ancho junto a «Actualizar» */
 .menu-rail .menu-caja .sync:empty { display: none; }
 .menu-rail .menu-caja .salir { margin-top: var(--sp-1); }
 .tema { display: inline-flex; gap: var(--sp-1); }
@@ -201,6 +202,7 @@ h2 { margin: 0 0 var(--sp-3); font-size: .68rem; letter-spacing: .07em; text-tra
     .rail-plegado .rail .tema.seg { grid-auto-flow: row; grid-auto-columns: auto; }
     .rail-plegado .rail .tema.seg .mn-btn { padding: 0; }
     .rail-plegado .rail .menu-rail > summary { width: 100%; }
+    .rail-plegado .rail .menu-caja { right: auto; min-width: 210px; }
 }
 
 /* celular: el rail es la barra de pestañas fija abajo; la sesión vive en la barra móvil de arriba */
@@ -1222,9 +1224,9 @@ select, .archivos-filtros select, .con-boton select {
     .app:has(#pantallaEntrar:not(.oculto)) .rotulo { display: none; }
 }
 /* v0.68.0 (pedido de Carlos): detalle de pre-alta — «Volver» arriba a la derecha, «Cerrar el programa» en grande abajo y solo. */
-#paDetalle .pd-cabeza { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
-#paDetalle .pd-cabeza h2 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-#paDetalle .pd-cabeza button { flex: none; margin: 0; }
+#paDetalle .pd-cabeza { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); }   /* v0.75.2: Volver arriba a la izquierda; con el boton a 100 % en celular el h2 quedaba en 0 px y se leia letra por letra */
+#paDetalle .pd-cabeza h2 { margin: 0; min-width: 0; width: 100%; overflow-wrap: anywhere; }
+#paDetalle .pd-cabeza button { flex: none; width: auto; margin: 0; }
 #paDetalle .pd-cerrar-programa { display: block; width: 100%; min-height: 56px; margin-top: var(--sp-4); font-size: 1.05rem; font-weight: 600; color: var(--bad-ink); background: var(--bad); border: 1px solid var(--bad); border-radius: var(--r-sm, 6px); cursor: pointer; }
 #paDetalle .pd-cerrar-programa:hover:not(:disabled) { filter: brightness(.92); }
 #paDetalle .pd-cerrar-programa.oculto { display: none; }
