@@ -436,6 +436,12 @@ try {
     DB.fallas.push({ metodo: 'GET', incluye: '/sites/', status: 500, veces: 1 });
     await import('./app.js');
     R.log('nota', `app importada · rol de prueba: ${ROL} · versión: ${$('pie').textContent}`);
+    {   // C-95 (v0.81.0): U-157 no tenía aserción. Un código de MSAL conocido sale en palabras de planta; uno desconocido, con su mensaje.
+        const { fraseEntrada } = await import('./navegacion.js');
+        R.ok('U-157: fraseEntrada traduce un código conocido (user_cancelled) y deja pasar el mensaje de un código desconocido',
+            fraseEntrada('No se pudo: ', { errorCode: 'user_cancelled' }).startsWith('Se canceló el inicio de sesión.') && fraseEntrada('No se pudo: ', { errorCode: 'raro', message: 'algo' }) === 'No se pudo: algo',
+            fraseEntrada('No se pudo: ', { errorCode: 'user_cancelled' }));
+    }
     await esperar(() => $('entradaAviso').textContent.includes('No se pudo terminar'), 'aviso de entrada fallida');
     R.ok('U-08: el error de inicio de sesión sale dentro de la pantalla de entrada y no en #avisos; «Entrar» queda disponible',
         visible('entradaAviso') && !$('btnEntrar').disabled && $('avisos').childElementCount === 0 && $('btnEntrar').textContent.includes('Entrar con mi cuenta de MINSA'),
@@ -539,7 +545,9 @@ try {
     clic('btnPdSiguiente');
     R.ok('v0.72.0: el paso 2 muestra el registro y esconde el oficio', !$('pcSCT').closest('.pd-paso').hidden && $('pcTitle').closest('.pd-paso').hidden && visible('btnPdAtras'));
     poner('pcCSF', '2027-01-01');
-    clic('btnPdSiguiente');
+    // C-95 (v0.81.0): U-148 no tenía aserción. Enter en un campo del asistente es «Siguiente»; aquí lleva del paso 2 al 3.
+    $('pcCSF').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    R.ok('U-148: Enter en un campo del alta avanza como «Siguiente»', !$('pdAsisRevisar').hidden);
     R.ok('v0.72.0: el paso 3 revisa todo y el botón dice «Dar de alta el carrier»', !$('pdAsisRevisar').hidden && $('pdAsisRevisar').textContent.includes('TRANSPORTES DEMO SA DE CV') && $('btnPdSiguiente').textContent.includes('Dar de alta'));
     clic('btnPdSiguiente');
     await esperar(() => avisoCon('Carrier dado de alta'), 'carrier guardado');

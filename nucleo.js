@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { autoformatoFecha, firmaAmparaPrealta, horaMexico, limpiar, palabraCompuerta, PUEDE, rolDe } from './reglas.js';
 
-export const VERSION = '0.80.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+export const VERSION = '0.81.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 export const $ = id => document.getElementById(id);
 export const L = CONFIG.listas;
 
