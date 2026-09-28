@@ -322,7 +322,7 @@ export async function salirAsistentePrealta() {
 async function soltarCapturaPrealta() {
     const d = $('paAsis');
     if (!estado.paAsis || !hayCaptura(d) || huellaForma(d) === d.dataset.huella) return true;
-    const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: 'Esta pre-alta tiene datos sin guardar. Si sales, se pierden.' });
+    const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', cancelar: 'Seguir capturando', texto: 'Esta pre-alta tiene datos sin guardar. Si sales, se pierden.' });
     return !!ok;
 }
 const valorPa = id => $(id).value.trim();
@@ -673,11 +673,14 @@ export function verPrealta(p) {
     $('btnFirmar').title = motivoSinFirmas() || '';   // S-07
     $('btnEditarPrealta').classList.toggle('oculto', !(p.Estado === 'borrador' && PUEDE.capturarPrealta(estado.rol)));
     $('btnFirmar').disabled = hayLegal || !!estado.firmasError;   // S-07 + hallazgo legal (C-26: antes se asignaba dos veces)
-    if (hayLegal && porFirmar) avisar('No se puede firmar con un hallazgo legal abierto: corrige el padrón (con el oficio a la vista) o cambia el carrier.', 'ojo');
-    else if (porFirmar && p.Estado === 'firmada') avisar('Falta la firma del validador: trae el sello pero no la firma registrada (se escribió por fuera de la app o antes del corte). La puerta no la ve hasta que un validador o gerencia la firme.', 'ojo');   // U-31
+    // U-156 (v0.78.0): un solo aviso con todo lo que aplica; avisar() reemplaza el anterior y dos seguidos se pisaban.
+    const avisos = [];
+    if (hayLegal && porFirmar) avisos.push('No se puede firmar con un hallazgo legal abierto: corrige el padrón (con el oficio a la vista) o cambia el carrier.');
+    else if (porFirmar && p.Estado === 'firmada') avisos.push('Falta la firma de la Responsable Ambiental: trae el sello pero no la firma registrada (se escribió por fuera de la app o antes del corte). La puerta no la ve hasta que ella o gerencia la firme.');   // U-31
     $('btnCerrarPrealta').classList.toggle('oculto', !(p.Estado === 'firmada' && PUEDE.capturarPrealta(estado.rol)));
     const sm = sinMovimientoDe(p);
-    if (sm) avisar(`Este programa ${sm.motivo}. Sigue saliendo en la puerta hasta que se cierre; si ya no vienen más góndolas, ciérralo.`, 'ojo');
+    if (sm) avisos.push(`Este programa ${sm.motivo}. Sigue saliendo en la puerta hasta que se cierre; si ya no vienen más góndolas, ciérralo.`);
+    if (avisos.length) avisar(avisos.join(' · '), 'ojo');
     // Un borrador equivocado se elimina; una firmada ya la vio la puerta y solo se CIERRA (2026-09-05).
     $('btnEliminarPrealta').classList.toggle('oculto', !(p.Estado === 'borrador' && PUEDE.corregir(estado.rol)));
     pintarCertificadoEnDetalle(p);   // v0.35.0
@@ -685,12 +688,14 @@ export function verPrealta(p) {
 
 export async function eliminarPrealta() {
     const p = estado.prealtaAbierta; if (!p || p.Estado !== 'borrador' || !PUEDE.corregir(estado.rol)) return;
+    await escribiendo('btnEliminarPrealta', async () => {   // C-81 (v0.78.0)
     // La ventana de 90 dias no puede contestar esto: una pre-alta vieja tendria sus embarques
     // fuera de la carga y el borrador se borraria con historia colgando. Se pregunta EN VIVO.
+    // U-145 (v0.78.0): un borrador no tiene «Cerrar»: los avisos ya no mandan a una acción que no existe.
     let citada;
     try { citada = (await estado.cliente.renglones(estado.siteId, L.embarques, `fields/PreAltaId eq ${p.id}`)).length; }
-    catch (err) { avisar('No pude confirmar si tiene embarques (' + err.message + '). No se elimina: ciérrala.', 'error'); return; }
-    if (citada) { avisar('Esta pre-alta ya tiene embarques: no se puede eliminar, ciérrala.', 'error'); return; }
+    catch (err) { avisar('No pude confirmar si tiene góndolas (' + err.message + '). No se elimina: inténtalo de nuevo con señal.', 'error'); return; }
+    if (citada) { avisar('Esta pre-alta ya tiene góndolas: no se puede eliminar. Queda como borrador en el historial.', 'error'); return; }
     const { ok } = await confirmar({ titulo: 'Eliminar la pre-alta', peligro: true, ok: 'Eliminar',
         texto: `«${p.Title}» nunca se firmó, así que la puerta no la ha usado. Se borra el renglón; la campaña ${p.Campana || ''} queda libre.`, motivo: 'opcional', etiquetaMotivo: 'Por qué (opcional)' });
     if (!ok) return;
@@ -701,6 +706,7 @@ export async function eliminarPrealta() {
         estado.prealtaAbierta = null;
         avisar('Pre-alta eliminada.', 'bien'); trasCambioPrealta();
     } catch (e) { avisar('No se pudo eliminar: ' + e.message, 'error'); }
+    });
 }
 
 export async function firmarPrealta() {

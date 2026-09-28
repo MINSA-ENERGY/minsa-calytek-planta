@@ -10,8 +10,8 @@
 
 import { CONFIG } from './config.js';
 import { CORRIENTES, placaNormal, subpasoDeRegla } from './reglas.js';
-import { $, abrirForma, avisar, cerrarForma, confirmar, el, estado, hayCaptura, huellaForma, limpiarAvisos, pintarSync, porId, salir, VERSION, vivo } from './nucleo.js';
-import { arrancar, botonesRail, entrar, irDesdePestana, recargar, repintar, soltarPesaje } from './navegacion.js';
+import { $, abrirForma, atraparFoco, avisar, cerrarForma, confirmar, el, estado, hayCaptura, huellaForma, limpiarAvisos, pintarSync, porId, salir, VERSION, vivo } from './nucleo.js';
+import { arrancar, botonesRail, capturaAMedias, entrar, irDesdePestana, recargar, repintar, soltarPesaje } from './navegacion.js';
 import { camposCapturaPuerta, cerrarVeredicto, correrCompuerta, enfocarCampoPuerta, irSubpaso, marcarChip, marcarOpcion, pintarChoferesPuerta, pintarCorrientesPuerta, pintarPrevioPuerta, pintarUnidadesPuerta, puertaConCaptura, registrarPuerta, subpasoInicial } from './puerta.js';
 import { abrirHojaCapturado, abrirTicketPop, cerrarAsistente, cerrarHojaCapturado, guardarPeso, kgG, revisarNeto, tomarFoto } from './gondolas.js';
 import { cerrarPrealta, editarPrealta, elegirVistaPrealtas, eliminarPrealta, firmarPrealta, guardarPrealta, nuevaPrealta, pintarUnidadesChoferesPrealta, salirAsistentePrealta } from './prealtas.js';
@@ -95,7 +95,7 @@ $('migaGondolasPuerta').addEventListener('click', () => irDesdePestana('bascula'
 /** v0.72.0 (a pedido de Carlos): Cancelar con algo capturado pregunta, como en Pre-altas; Descartar deja la puerta en cero. */
 $('btnCancelarPuerta').addEventListener('click', async () => {
     if (puertaConCaptura()) {
-        const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: 'Esta góndola tiene datos sin guardar. Si sales, se pierden.' });
+        const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', cancelar: 'Seguir capturando', texto: 'Esta góndola tiene datos sin guardar. Si sales, se pierden.' });
         if (!ok) return;
         for (const id of [...camposCapturaPuerta(), 'puChofer']) $(id).value = '';
         $('pu79').checked = false; delete $('puChoferNombre').dataset.auto;
@@ -174,9 +174,10 @@ $('btnBaGondolas').addEventListener('click', async () => {
     cerrarAsistente(); repintar();
 });
 $('btnPausaLista').addEventListener('click', () => { cerrarAsistente(); repintar(); });
-$('btnPausaTicket').addEventListener('click', () => { const e = estado.asisEmbarque; if (e) abrirTicketPop([vivo('embarques', e)], 0); });
+const asisEmbarque = () => porId(estado.embarques, estado.asisEmbarqueId);   // C-85 (v0.78.0)
+$('btnPausaTicket').addEventListener('click', () => { const e = asisEmbarque(); if (e) abrirTicketPop([e], 0); });
 $('btnTerminar').addEventListener('click', () => {   // M8: de vuelta a la lista, con el aviso de lo que se cerró
-    const e = estado.asisEmbarque;
+    const e = asisEmbarque();
     cerrarAsistente(); repintar();
     if (e) avisar(`${e.Title} cerrada · neto ${kgG(e.NetoKg)}. Queda en Cerradas hoy.`, 'bien');
 });
@@ -187,12 +188,7 @@ $('baCapturado').addEventListener('keydown', ev => {
     if (!$('baCapturado').classList.contains('abierta') || $('baVelo').hidden) return;
     if (ev.key === 'Escape') { cerrarHojaCapturado(); $('btnLoCapturado').focus(); return; }
     // U-81: con la hoja abierta, Tab no sale al contenido atenuado de atrás (como el veredicto, U-16).
-    if (ev.key !== 'Tab') return;
-    const focables = [...$('baCapturado').querySelectorAll('button, a[href], input, select, textarea')].filter(x => !x.disabled && x.offsetParent !== null);
-    if (!focables.length) return;
-    const i = focables.indexOf(document.activeElement);
-    ev.preventDefault();
-    focables[ev.shiftKey ? (i <= 0 ? focables.length - 1 : i - 1) : (i < 0 || i === focables.length - 1 ? 0 : i + 1)].focus();
+    if (ev.key === 'Tab') atraparFoco($('baCapturado'), ev);
 });
 $('btnNuevaPrealta').addEventListener('click', nuevaPrealta);
 $('btnPaBases').addEventListener('click', () => abrirForma('paRecientes'));
@@ -211,7 +207,7 @@ for (const clave of Object.keys(FORMA_PADRON)) $(FORMA_PADRON[clave].forma).addE
 for (const id of ['pdFormaCarrier', 'pdFormaUnidad', 'pdFormaChofer']) $(id).addEventListener('cancel', async ev => {
     if (!hayCaptura($(id)) || huellaForma($(id)) === $(id).dataset.huella) return;   // U-34: sin cambios desde que abrió → cierra directo
     ev.preventDefault();
-    const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: 'Este formulario tiene datos sin guardar. Si lo cierras, se pierden.' });
+    const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', cancelar: 'Seguir capturando', texto: 'Este formulario tiene datos sin guardar. Si lo cierras, se pierden.' });
     if (ok) cerrarForma(id);
 });
 $('btnFirmar').addEventListener('click', firmarPrealta);
@@ -245,6 +241,19 @@ $('btnGuardarUnidad').addEventListener('click', () => guardarPadron('unidades'))
 $('btnNuevoChofer').addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); abrirFormaPadron('choferes'); });
 $('btnCancelarChofer').addEventListener('click', () => cerrarFormaPadron('choferes'));
 $('btnGuardarChofer').addEventListener('click', () => guardarPadron('choferes'));
+// U-148 (v0.78.0): Enter en un campo es «Siguiente» (o guardar, en el último paso), como en el asistente de pre-alta (U-100).
+// Solo en <input> de texto: en Notas (textarea) Enter sigue siendo un renglón nuevo, y un checkbox no avanza.
+function enterAvanza(contenedor, boton) {
+    $(contenedor).addEventListener('keydown', ev => {
+        const t = ev.target;
+        if (ev.key !== 'Enter' || ev.isComposing || t.tagName !== 'INPUT' || t.type === 'checkbox' || t.type === 'radio') return;
+        const b = boton(); if (!b || b.hidden || b.disabled || b.offsetParent === null) return;
+        ev.preventDefault(); b.click();
+    });
+}
+enterAvanza('p-puerta', () => $('veredicto').classList.contains('oculto') ? $(estado.subpasoPuerta === 3 ? 'btnCompuerta' : 'btnPuSiguiente') : null);
+enterAvanza('pdAsis', () => $('btnPdSiguiente'));
+for (const [d, b] of [['pdFormaCarrier', 'btnGuardarCarrier'], ['pdFormaUnidad', 'btnGuardarUnidad'], ['pdFormaChofer', 'btnGuardarChofer']]) enterAvanza(d, () => $(b));
 
 $('pie').textContent = `CALYTEK Planta ${VERSION}`;
 arrancar();
@@ -262,7 +271,15 @@ if ('serviceWorker' in navigator) {
     const ofrecer = sw => {
         const caja = $('nuevaVersion'); if (!caja || !sw) return;
         caja.classList.remove('oculto');
-        $('btnNuevaVersion').onclick = () => { caja.classList.add('oculto'); sw.postMessage('activar'); };
+        $('btnNuevaVersion').onclick = async () => {
+            // U-158 (v0.78.0): actualizar recarga la app; con algo a medias pasa por la misma compuerta que salir de una captura.
+            if (capturaAMedias()) {
+                const { ok } = await confirmar({ titulo: 'Actualizar la app', peligro: true, ok: 'Actualizar y descartar', cancelar: 'Seguir capturando',
+                    texto: 'Hay una captura sin guardar. Al actualizar la app se recarga y se pierde. Guárdala primero y vuelve a tocar «Actualizar ahora».' });
+                if (!ok) return;
+            }
+            caja.classList.add('oculto'); sw.postMessage('activar');
+        };
     };
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js').then(r => {

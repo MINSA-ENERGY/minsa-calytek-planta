@@ -285,7 +285,7 @@ export async function confirmarSustitucion() {
 export async function cancelarCertificado() {
     const e = estado.certificadoEmbarque; const vig = e && certificadoVigente(e); if (!vig || !PUEDE.emitirCertificado(estado.rol)) return;
     await escribiendo('btnCancelarCertificado', async () => {
-    const { ok, motivo } = await confirmar({ titulo: 'Cancelar el certificado', ok: 'Cancelar el certificado', peligro: true, motivo: true, etiquetaMotivo: 'Por qué se cancela (sale en la verificación pública del QR)',
+    const { ok, motivo } = await confirmar({ titulo: 'Cancelar el certificado', ok: 'Cancelar el certificado', cancelar: 'No cancelar', peligro: true, motivo: true, etiquetaMotivo: 'Por qué se cancela (sale en la verificación pública del QR)',
         texto: `${vig.Title} deja de valer: su QR dirá «cancelado». No se borra: queda como historial. Si hace falta uno bueno, después se emite otro.` });
     if (!ok) return;
     try {

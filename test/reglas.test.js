@@ -1,7 +1,7 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, textoHuellaPrealta, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, claveMes, mesesPrealtas, registroPuerta, registroCertificado } from '../reglas.js';
+import { diasPara, compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, textoHuellaPrealta, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, claveMes, mesesPrealtas, registroPuerta, registroCertificado } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -97,6 +97,15 @@ assert.equal(slug('Bruto E-26-00001 · góndola'), 'bruto-e-26-00001-gondola');
 assert.equal(rolDe('Validador@example.invalid', [{ Title: 'validador@example.invalid', Rol: 'validador' }]), 'validador');
 assert.equal(rolDe('nadie@example.invalid', []), 'lectura');
 assert.equal(evaluarVigencia('x', null, 'legal', 30, hoy).ok, false);
+// C-79: el dia del vencimiento es legal hasta las 23:59 de Mexico, no hasta mediodia (aIsoDia guarda T18:00Z).
+const venceHoy = aIsoDia('28/09/2026');
+assert.equal(diasPara(venceHoy, new Date('2026-09-28T17:59:00Z')), 0);   // 11:59 Mexico
+assert.equal(diasPara(venceHoy, new Date('2026-09-28T18:01:00Z')), 0);   // 12:01
+assert.equal(diasPara(venceHoy, new Date('2026-09-29T05:59:00Z')), 0);   // 23:59
+assert.equal(diasPara(venceHoy, new Date('2026-09-29T06:01:00Z')), -1);  // 00:01 del dia siguiente
+assert.equal(diasPara(venceHoy, new Date('2026-09-27T18:01:00Z')), 1);
+assert.equal(evaluarVigencia('ASEA', venceHoy, 'legal', 30, new Date('2026-09-28T18:01:00Z')).ok, true);
+assert.equal(evaluarVigencia('ASEA', venceHoy, 'legal', 30, new Date('2026-09-29T06:01:00Z')).ok, false);
 
 // Corregir una captura (2026-09-05): sin folio se elimina; con folio se anula; anulado no se toca.
 assert.equal(accionCorreccion({ Etapa: 'compuerta', Title: '' }), 'eliminar');

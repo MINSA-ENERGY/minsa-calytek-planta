@@ -38,11 +38,39 @@ const TIPOS = {
     '.ico':  'image/x-icon'
 };
 
+// S-34 (v0.78.0), portado de proyectos (S-10 v0.82.1 y S-11 v0.94.0): una pestaña AJENA del mismo navegador podia hacer
+// POST /guardar (pisar _salida-dev.json, la salida de la E2E, con un verde falso) y leer .git/ bajo la raiz; y sin validar Host,
+// un DNS rebinding (dominio ajeno que resuelve a 127.0.0.1) volvia el servidor legible desde otra pestaña. /guardar exige un
+// Origin de este servidor; solo se atiende Host localhost/127.0.0.1:8080; y toda ruta cuyo primer segmento empiece por «.» o sea
+// _salida-dev.json responde 403. Se juzga sobre el DESTINO YA RESUELTO (no la URL): `/x/../.git/HEAD`, `/%5C.git/HEAD` y
+// `/_SALIDA-DEV.JSON` pasaban la version que miraba la URL. Cualquier `:` es 403 (NTFS abre `nombre::$DATA`) y cada segmento
+// se compara sin puntos ni espacios finales (`nombre.` abre `nombre`).
+const ORIGENES = new Set(['http://localhost:8080', 'http://127.0.0.1:8080']);
+const HOSTS = new Set(['localhost:8080', '127.0.0.1:8080']);
+const RESERVADOS = ['_salida-dev.json'];
+export function rutaVedada(destino, raiz = RAIZ) {
+    const rel = path.relative(raiz, destino);
+    if (rel.includes(':')) return true;
+    const primero = (rel.split(path.sep)[0] || '').toLowerCase().replace(/[. ]+$/, '');
+    return primero.startsWith('.') || RESERVADOS.includes(primero);
+}
+export function hostValido(host, hosts = HOSTS) { return hosts.has(String(host || '').toLowerCase()); }
+
 const servidor = http.createServer((req, res) => {
+    if (!hostValido(req.headers.host)) {   // S-34
+        console.log(`  403  Host ${req.headers.host || '(sin Host)'}`);
+        res.writeHead(403, { 'Content-Type': 'text/plain' }).end('403');
+        return;
+    }
     // Buzon de ida y vuelta para las herramientas de desarrollo: la pagina manda lo que
     // encontro y aterriza en un archivo local, para no tener que copiar y pegar a mano.
     // Solo existe en este servidor de pruebas; no es parte de la app.
     if (req.method === 'POST' && req.url === '/guardar') {
+        if (!ORIGENES.has(req.headers.origin)) {   // S-34
+            console.log(`  403  POST /guardar desde origen ${req.headers.origin || '(sin Origin)'}`);
+            res.writeHead(403, { 'Content-Type': 'text/plain' }).end('403');
+            return;
+        }
         let cuerpo = '';
         req.on('data', d => { cuerpo += d; if (cuerpo.length > 5e6) req.destroy(); });
         req.on('end', () => {
@@ -64,7 +92,8 @@ const servidor = http.createServer((req, res) => {
         // al final importa: sin el, un directorio HERMANO cuyo nombre empiece igual
         // ('app-x' junto a 'app') pasaria la comprobacion por puro prefijo.
         destino = path.resolve(RAIZ, '.' + rel);
-        if (!destino.startsWith(RAIZ + path.sep)) {
+        if (!destino.startsWith(RAIZ + path.sep) || rutaVedada(destino)) {   // S-34
+            console.log(`  403  ${rel}`);
             res.writeHead(403).end('403');
             return;
         }
@@ -84,7 +113,9 @@ const servidor = http.createServer((req, res) => {
 
 // S-08 (copiado de proyectos v0.80.0): solo la interfaz local. Sin host, Node abre 0.0.0.0/:: y cualquier equipo de la misma
 // Wi-Fi leia la app servida y podia hacer POST /guardar y pisar _salida-dev.json mientras corria la E2E.
-servidor.listen(PUERTO, '127.0.0.1', () => {
+// S-34: solo escucha como programa principal; importado (sw.test.js prueba rutaVedada y hostValido) no abre el puerto.
+const esPrincipal = !!process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (esPrincipal) servidor.listen(PUERTO, '127.0.0.1', () => {
     console.log('');
     console.log(`Sirviendo ${RAIZ}`);
     console.log(`Indice: ${INDICE}`);

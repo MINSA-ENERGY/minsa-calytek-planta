@@ -95,7 +95,7 @@ export function pintarGondolas() {
  * en curso: la góndola no está en la báscula).
  */
 function mostrarAsistente(e, pantalla, paso) {
-    estado.asisEmbarque = e;
+    estado.asisEmbarqueId = e ? e.id : null;   // C-85
     for (const id of ['baPesar', 'baPausa', 'baTicketCaja']) $(id).classList.toggle('oculto', id !== pantalla);
     $('baAsis').classList.remove('oculto');
     $('p-bascula').classList.add('asistiendo');
@@ -117,7 +117,7 @@ export function cerrarAsistente() {
     for (const id of ['baAsis', 'baPesar', 'baPausa', 'baTicketCaja']) $(id).classList.add('oculto');
     $('p-bascula').classList.remove('asistiendo');
     cerrarHojaCapturado();
-    estado.asisEmbarque = null;
+    estado.asisEmbarqueId = null;
 }
 /** M5: tras el bruto, la pausa de la descarga — el folio ya nació y la góndola se retoma desde la lista. */
 function mostrarPausa(e) {
@@ -245,7 +245,7 @@ function pintarHistorial() {
         { t: 'Programa', m: 'c', v: programaG },
         { t: 'Estado', m: 'e', v: estadoH },
         { t: 'Neto', m: 'd', num: true, v: e => (e.NetoKg ? kgG(e.NetoKg) : null), clase: 'mono' },
-        { t: 'Fecha', m: 'x', v: e => horaMexico(momento(e)), clase: 'mono mudo' }
+        { t: 'Fecha', m: 'g', v: e => horaMexico(momento(e)), clase: 'mono mudo' }   // U-149 (v0.78.0): m-g se ve en celular, junto al estado
     ], visibles, e => botonesCerrada(e, visibles), q ? `Nada coincide en los últimos ${CONFIG.ventanaDias} días.` : 'Ningún folio cerrado en la ventana cargada.', e => e.Etapa);
     $('baBuscaCuenta').textContent = q ? plural(visibles.length, 'resultado') : '';
     // U-76 (v0.42.0): cuántas cerradas siguen sin certificado, sobre todo lo cargado (no sobre lo filtrado).
@@ -270,7 +270,7 @@ export function botonCorreccion(e) {
  * Despues se vuelve a correr la puerta y sale un folio nuevo.
  */
 async function eliminarEmbarque(e, btn) {
-    if (accionCorreccion(e) !== 'eliminar') { avisar('Este embarque ya tiene folio: se anula, no se elimina.', 'error'); return; }
+    if (accionCorreccion(e) !== 'eliminar') { avisar('Esta góndola ya tiene folio: se anula, no se elimina.', 'error'); return; }
     await escribiendo(btn, async () => {   // C-24
     const { ok, motivo } = await confirmar({
         titulo: 'Eliminar la captura', peligro: true, ok: 'Eliminar',
@@ -332,7 +332,7 @@ export async function autorizarExcepcion(e, btn) {
     if (!PUEDE.autorizarExcepcion(estado.rol)) return;
     await escribiendo(btn, async () => {   // C-24 / C-23
     const { ok } = await confirmar({ titulo: 'Autorizar la excepción', ok: 'Autorizar',
-        texto: `${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}. Motivo que dio la caseta: «${e.ExcepcionMotivo || 'sin motivo'}». Queda colgada de este embarque, no del carrier.` });
+        texto: `${e.PlacaTractor} · ${nombreDe(estado.carriers, e.CarrierId)}. Motivo que dio la caseta: «${e.ExcepcionMotivo || 'sin motivo'}». Queda colgada de esta góndola, no del carrier.` });
     if (!ok) return;
     try {
         await refrescarCliente();
@@ -342,7 +342,7 @@ export async function autorizarExcepcion(e, btn) {
         const campos = { ExcepcionAutorizo: estado.cuenta.username, ExcepcionEl: new Date().toISOString() };
         await estado.cliente.actualizarRenglon(estado.siteId, L.embarques, e.id, campos);
         aplicar('embarques', e, campos);   // C-23
-        avisar('Excepción autorizada. Queda colgada de este embarque, no del carrier.', 'bien');
+        avisar('Excepción autorizada. Queda colgada de esta góndola, no del carrier.', 'bien');
         pintarInsignias();
         pintarHoy();
     } catch (err) { avisar('No se pudo autorizar: ' + err.message, 'error'); }
@@ -494,14 +494,14 @@ async function guardarTara(e, kg, ahora, aviso, paso) {
     // C-13 (v0.25.0): la tara relee SU renglon antes de subir la foto, como el bruto relee el anio. Gerencia pudo
     // anular la gondola desde Hoy mientras el basculista tecleaba: el PATCH de cierre pisaba «anulado» con «cerrado»
     // (renglon con AnuladoPor Y Etapa cerrado, contado en KPI y CSV). Y se re-ancla por id (C-12), como el bruto.
-    paso('Revisando el embarque…');
+    paso('Revisando la góndola…');
     const vigente = await estado.cliente.renglon(estado.siteId, L.embarques, e.id, paso);
     Object.assign(e, vigente);
     anclar('embarques', e);
     if (e.Etapa !== 'bruto') throw new Error(`esta góndola ${yaCapturado(e, quien)} (lo movió otra sesión). Tu tara no se guardó; vuelve a la lista.`);   // decisión 11
     paso('Subiendo la foto…');
     const lote = await subirEvidencia(e.Title, 'tara', kg, paso);
-    paso('Cerrando el embarque…');
+    paso('Cerrando la góndola…');
     const neto = Number(e.BrutoKg) - kg;
     const campos = limpiar({ Etapa: 'cerrado', TaraKg: kg, TaraHora: ahora, TaraFoto: lote.ref, NetoKg: neto,
         TicketBascula: $('baTicketBascula').value.trim() || null,

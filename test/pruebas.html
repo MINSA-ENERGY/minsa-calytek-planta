@@ -575,6 +575,13 @@ try {
         R.ok('v0.71.0: la ficha trae migas hasta el carrier, vigencias y Dónde se ha usado', $('pdMigas').textContent.includes('TRANSPORTES DEMO') && $('pdFichaDatos').querySelectorAll('.pd-vigs li').length === 2 && $('pdUso').textContent.includes('Pre-altas'));
         clic('btnPdVolver');
         R.ok('v0.71.0: Volver desde la ficha regresa al expediente del carrier', !$('pdExpediente').hidden && $('pdFicha').hidden);
+        // U-146 (v0.78.0): una placa ACTIVA repetida no pasa del paso 1 (antes solo se avisaba en «Así va» y se guardaba igual).
+        clic('btnNuevaUnidad'); await esperar(() => !$('pdAsis').hidden, 'alta de unidad repetida');
+        poner('puuCarrier', String(carrierId)); poner('puuPlaca', '55 xy 9k');
+        clic('btnPdSiguiente'); await dormir(20);
+        R.ok('U-146: la placa activa repetida se frena en el paso 1', !!avisoCon('ya está en el padrón') && $('pdPasos').querySelector('[aria-current="step"]').dataset.p === '1' && filas('unidades').length === 1, $('avisos').textContent.slice(0, 90));
+        clic('btnPdCancelar'); await esperar(() => $('dlg').open, 'descartar la unidad repetida'); clic('dlgOk');
+        await esperar(() => $('pdAsis').hidden && !$('pdExpediente').hidden, 'alta repetida descartada, de vuelta al expediente');
         document.querySelector('#pdSubTabs button[data-sub="choferes"]').click();
         R.ok('v0.71.0: la pestaña Choferes cambia el botón de alta', visible('btnNuevoChofer') && !visible('btnNuevaUnidad') && !$('pdpChoferes').hidden);
     }
@@ -831,7 +838,7 @@ try {
             const rSF = [...document.querySelectorAll('#paFirmadas .renglon')].find(r => r.textContent.includes('SELLO SIN FIRMA'));
             R.ok('S-01: en Pre-altas lleva la etiqueta «sin firma»', !!rSF && rSF.textContent.includes('sin firma'));
             rSF.click(); await esperar(() => visible('paDetalle'), 'detalle del sello sin firma');
-            R.ok('S-01: el detalle dice SIN FIRMA y ofrece Firmar aunque el Estado ya sea firmada', visible('btnFirmar') && !$('btnFirmar').disabled && $('paDetalleLista').textContent.includes('sello sin firma') && !!avisoCon('Falta la firma del validador'));
+            R.ok('S-01: el detalle dice SIN FIRMA y ofrece Firmar aunque el Estado ya sea firmada', visible('btnFirmar') && !$('btnFirmar').disabled && $('paDetalleLista').textContent.includes('sello sin firma') && !!avisoCon('Falta la firma de la Responsable Ambiental'));
             clic('btnFirmar'); await confirmar(); await esperar(() => avisoCon('Pre-alta firmada'), 'firma del sello');
             R.ok('S-01: firmar crea el renglón y el sello pasa a quien firmó', !!filas('firmas').find(x => x.fields.Tipo === 'prealta' && Number(x.fields.ObjetoId) === sinFirma.id) && sinFirma.fields.FirmadaPor === window.__CUENTA.username);
             irPuerta();
@@ -1119,7 +1126,8 @@ try {
         poner('baKg', '44600');
         // U-24 (v0.26.0): Cancelar con peso tecleado (o foto) pregunta antes de tirarlo; al no confirmar, el pesaje sigue con su peso.
         clic('btnCancelarPeso'); await esperar(() => $('dlg').open, 'confirmación de cancelar pesaje');
-        R.ok('U-24: Cancelar con kg tecleado abre «Cancelar el pesaje»', $('dlgTitulo').textContent.includes('Cancelar el pesaje')); clic('dlgCancelar'); await dormir(30);
+        R.ok('U-24: Cancelar con kg tecleado abre «Cancelar el pesaje»', $('dlgTitulo').textContent.includes('Cancelar el pesaje'));
+        R.ok('U-147: la salida del diálogo dice lo que conserva («Seguir pesando»), no «Cancelar»', $('dlgCancelar').textContent === 'Seguir pesando', $('dlgCancelar').textContent); clic('dlgCancelar'); await dormir(30);
         R.ok('U-24: al no confirmar, el pesaje sigue abierto con su peso', visible('baPesar') && $('baKg').value === '44600');
         clic('btnGuardarPeso'); await dormir(50);
         R.ok('sin foto del indicador no se guarda', !!avisoCon('Falta la foto del indicador'));
@@ -1685,7 +1693,7 @@ try {
                 try { await esperar(() => $('dlg').open && $('dlgTitulo').textContent.includes('Cambio de vigencia'), 'diálogo de cambio de vigencia'); }
                 catch (e) { throw new Error(`${e.message} — antes: ${antesGuardar} — avisos: "${$('avisos').textContent}" · forma: "${$('pdFormaUnidad').querySelector('.dlg-avisos').textContent}" · dlg abierto ${$('dlg').open} «${$('dlgTitulo').textContent}» · forma abierta ${$('pdFormaUnidad').open}`); }
                 await confirmar('Póliza renovada, endoso 2');
-                await esperar(() => avisoCon('unidad actualizado'), 'unidad editada');
+                await esperar(() => avisoCon('La unidad actualizada'), 'unidad editada');
                 const u = filas('unidades')[0].fields;
                 R.ok('C-08: editar la unidad con cambio de PolizaVigencia pide motivo y lo deja en Notas (VIGENCIA, quién, cuándo)', String(u.PolizaVigencia).startsWith('2027-09-30') && /VIGENCIA/.test(String(u.Notas)) && String(u.Notas).includes('endoso 2') && String(u.Notas).includes(window.__CUENTA.username) && !$('pdFormaUnidad').open, String(u.Notas));
             } else R.ok('C-08: la unidad activa ofrece Editar', false, rEd ? rEd.textContent.slice(0, 60) : 'sin renglón');
@@ -1790,10 +1798,14 @@ try {
         viejoCerrado.fields.ChoferId = idChoferViejo;
         await fichaPd('CHOFER VIEJO');
         R.ok('el botón sigue ofreciendo Eliminar (la memoria no lo ve citado)', !!accionPd('eliminar'));
-        accionPd('eliminar').click(); await confirmar();
-        await esperar(() => avisoCon('se da de baja, no se elimina'), 'negativa por cita vieja');
-        R.ok('pero el borrado se NIEGA: la consulta en vivo lo encuentra citado fuera de la ventana',
-            filas('choferes').some(c => c.id === idChoferViejo));
+        accionPd('eliminar').click();
+        // U-145 (v0.78.0): la negativa ya no es un aviso sin salida: ofrece la baja en el mismo toque.
+        await esperar(() => $('dlg').open, 'diálogo tras la negativa por cita vieja');
+        R.ok('U-145: citado fuera de la ventana, Eliminar ofrece «Dar de baja» en vez de un callejón', $('dlgTitulo').textContent.startsWith('Dar de baja'), $('dlgTitulo').textContent);
+        await confirmar();
+        await esperar(() => avisoCon('El chofer dado de baja'), 'baja por cita vieja');
+        R.ok('pero el borrado se NIEGA: la consulta en vivo lo encuentra citado fuera de la ventana y lo da de baja',
+            filas('choferes').some(c => c.id === idChoferViejo && c.fields.Activo === false));
 
         // C-19 (v0.27.0): lo que la app hacia y ninguna asercion tocaba — la tarjeta de vigencias de Hoy (con U-29), el orden
         // C-05 al eliminar un carrier, el aviso ambar del segundo paso, las flechas del ticket, Salir, y el 401 que C-15 ya no
@@ -1819,6 +1831,10 @@ try {
             document.querySelector('#pestanas button[data-p="padron"]').click();
             clic('btnNuevoCarrier'); poner('pcTitle', 'CARRIER SUELTO'); poner('pcAut', '00-ASEA-T-RME-99-99'); poner('pcVig', '2028-01-01'); poner('pcFolio', 'UGI-SUELTO-0000-2025'); poner('pcCSF', '2027-01-01');
             document.querySelector('input[name="pcCorr"][value="base-agua"]').checked = true;
+            // C-82 (v0.78.0): la razón social repetida (misma, con otra puntuación y caja) no se guarda: la vigencia ASEA se liga por nombre.
+            poner('pcTitle', 'Transportes Demo, S.A. de C.V.'); clic('btnGuardarCarrier'); await dormir(60);
+            R.ok('C-82: un carrier con la razón social de otro no se guarda', (!!avisoCon('ya está en el padrón') || !!avisoCon('existe dado de baja')) && !filas('carriers').some(c => c.fields.Title === 'Transportes Demo, S.A. de C.V.'));
+            poner('pcTitle', 'CARRIER SUELTO');
             clic('btnGuardarCarrier'); await esperar(() => filas('carriers').some(c => c.fields.Title === 'CARRIER SUELTO'), 'carrier suelto');
             await esperar(() => filas('vigencias').some(v => String(v.fields.Title).includes('CARRIER SUELTO')), 'vigencia del carrier suelto');
             const nVig = filas('vigencias').length;

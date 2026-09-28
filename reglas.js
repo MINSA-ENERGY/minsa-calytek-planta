@@ -43,13 +43,17 @@ export function lista(texto) {
     return String(texto || '').split(';').map(s => s.trim()).filter(Boolean);
 }
 
-/** Dias entre hoy y una fecha ISO (negativo si ya paso). null si no hay fecha. */
+/**
+ * Dias entre hoy y una fecha ISO (negativo si ya paso). null si no hay fecha.
+ * C-79 (v0.78.0): dias de CALENDARIO de Mexico, no instantes. aIsoDia guarda la fecha a las 12:00 locales (T18:00Z) y restar
+ * instantes daba «vencida hace 1 dia» desde las 12:01 del dia en que la ASEA aun es legal.
+ */
 export function diasPara(fechaIso, hoy = new Date()) {
     if (!fechaIso) return null;
     const f = new Date(fechaIso);
     if (Number.isNaN(f.getTime())) return null;
-    const dia = 24 * 60 * 60 * 1000;
-    return Math.floor((f.getTime() - hoy.getTime()) / dia);
+    const dia = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+    return Math.round((dia(fechaMexico(f)) - dia(fechaMexico(hoy))) / 86400000);
 }
 
 /**

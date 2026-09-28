@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { autoformatoFecha, compuerta, firmaAmparaPrealta, horaMexico, limpiar, lista, palabraCompuerta, PUEDE, rolDe } from './reglas.js';
 
-export const VERSION = '0.77.1';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+export const VERSION = '0.78.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 export const $ = id => document.getElementById(id);
 export const L = CONFIG.listas;
 
@@ -17,6 +17,7 @@ export const estado = {
     certificadoAbierto: null,   // el certificado pintado en dlgCertificado
     certificadoEmbarque: null,  // v0.39.0: la gondola (embarque cerrado) cuyo certificado se esta viendo o emitiendo
     ultimaCompuerta: null,   // {resultado, hallazgos, campos}
+    asisEmbarqueId: null,    // C-85 (v0.78.0): la góndola del asistente, por id (un refresco sustituye el objeto)
     pesando: null,           // {embarque, fase: 'bruto'|'tara'}
     fotoBytes: null,
     fotoUrl: null,           // blob URL de la vista previa; se revoca al reemplazar la foto o cancelar (C-21)
@@ -122,12 +123,14 @@ export function botonAccion({ texto, alClic, accion, clase, deshabilitado }) {
  * Confirmacion propia (sustituye al confirm() nativo). Devuelve {ok, motivo}. Con `motivo: true`
  * el motivo es obligatorio y el boton OK no procede sin el; con 'opcional' se muestra y no se exige.
  */
-export function confirmar({ titulo, texto, ok = 'Confirmar', motivo = false, etiquetaMotivo = 'Motivo', peligro = false }) {
+// U-147 (v0.78.0): `cancelar` rotula la salida con lo que CONSERVA («Seguir pesando»): en «Cancelar el pesaje», un botón «Cancelar» hacía lo contrario.
+export function confirmar({ titulo, texto, ok = 'Confirmar', cancelar = 'Cancelar', motivo = false, etiquetaMotivo = 'Motivo', peligro = false }) {
     return new Promise(resolver => {
         const d = $('dlg');
         $('dlgTitulo').textContent = titulo;
         $('dlgTexto').textContent = texto || '';
         $('dlgOk').textContent = ok;
+        $('dlgCancelar').textContent = cancelar;
         $('dlgMotivoEtiqueta').textContent = etiquetaMotivo + (motivo === true ? ' · obligatorio' : '');
         $('dlgMotivoCampo').classList.toggle('oculto', !motivo);
         $('dlgMotivo').value = '';
@@ -207,13 +210,25 @@ export function anclar(clave, x) { const i = estado[clave].findIndex(y => y.id =
  * `btn` es un id, un elemento o null (escrituras que no nacen de un boton fijo).
  */
 export let escrituras = 0;
+// C-80 (v0.78.0): la otra mitad de C-23. recargar() solo mira `escrituras` al ENTRAR; una escritura que empieza con la
+// lectura ya en vuelo se perdia cuando cargarTodo() asignaba listas leidas antes de ella. Cada escritura sube la generacion
+// y cargarTodo() descarta su lectura si la generacion cambio mientras leia.
+let generacion = 0;
 export async function escribiendo(btn, fn) {
     const b = typeof btn === 'string' ? $(btn) : btn;
     if (b && b.disabled) return undefined;
     if (b) b.disabled = true;
-    escrituras++;
+    escrituras++; generacion++;
     try { return await fn(); }
     finally { escrituras--; if (b) b.disabled = false; }
+}
+/** C-87 (v0.78.0): Tab ciclico dentro de un panel modal que no es <dialog> (veredicto U-16, hoja Lo capturado U-81). */
+export function atraparFoco(contenedor, ev) {
+    const focables = [...contenedor.querySelectorAll('button, a[href], input, select, textarea')].filter(x => !x.disabled && x.offsetParent !== null);
+    if (!focables.length) return;
+    const i = focables.indexOf(document.activeElement);
+    ev.preventDefault();
+    focables[ev.shiftKey ? (i <= 0 ? focables.length - 1 : i - 1) : (i < 0 || i === focables.length - 1 ? 0 : i + 1)].focus();
 }
 /** C-26: un solo formateador para llenar formas (null/undefined -> ''). */
 export const textoDe = v => v === null || v === undefined ? '' : String(v);
@@ -480,22 +495,25 @@ export function fundirEnVentana(frescos) {
     }
 }
 
+/** Devuelve false si una escritura empezo mientras leia (C-80): entonces no asigna nada y el que llamo reintenta. */
 export async function cargarTodo() {
-    const c = estado.cliente, s = estado.siteId;
+    const c = estado.cliente, s = estado.siteId, g = generacion;
     // C-17 (v0.25.0): graph.js reintenta 429/503/red caida hasta 5.6 s; antes nadie recibia el aviso y la pantalla se
     // quedaba en «Leyendo las listas…». La franja de sync dice que esta reintentando.
     const av = texto => pintarSync(true, texto);
     // C-45 (v0.44.0): los certificados se acotan con los ids de los embarques, asi que van encadenados a ellos (y el resto en paralelo).
     const embarquesYCertificados = cargarEmbarques(c, s, av).then(async emb => [emb, await cargarCertificados(c, s, av, emb)]);
-    [estado.carriers, estado.unidades, estado.choferes, estado.prealtas, [estado.embarques, estado.certificados], estado.vigencias, estado.roles, estado.firmas] =
-        await Promise.all([
+    const leido = await Promise.all([
             c.renglones(s, L.carriers, null, av), c.renglones(s, L.unidades, null, av), c.renglones(s, L.choferes, null, av),
             c.renglones(s, L.prealtas, null, av), embarquesYCertificados, c.renglones(s, L.vigencias, null, av),
             c.renglones(s, L.roles, null, av), cargarFirmas(c, s, av)
         ]);
+    if (g !== generacion || escrituras > 0) return false;   // C-80
+    [estado.carriers, estado.unidades, estado.choferes, estado.prealtas, [estado.embarques, estado.certificados], estado.vigencias, estado.roles, estado.firmas] = leido;
     await cargarProgramasViejos(c, s, av);
     estado.cargadoEl = Date.now();
     reanclar();
+    return true;
 }
 
 /**

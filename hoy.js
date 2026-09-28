@@ -51,7 +51,7 @@ export function pintarKpisReportes({ cerradosHoy, cerradosAyer, cerradosSemana, 
     const med = el('div', 'medidor'); const mi = el('i'); mi.style.width = Math.min(100, Math.round(((cerradosHoy.length + activos.length) / CONFIG.techoGondolasDia) * 100)) + '%'; med.appendChild(mi); enP.appendChild(med);
     enP.appendChild(el('div', 't', `techo ${CONFIG.techoGondolasDia} al día`));
     kpi('Rechazos esta semana', rechazosSemana.length, null, el('div', 't', rechazosSemana.length ? 'legal · el residuo no entró' : 'ninguno'), rechazosSemana.length ? 'mal' : '');
-    kpi('Pre-altas por firmar', borradores.length, null, el('div', 't', borradores.length ? 'esperan al validador' : 'todas firmadas'), borradores.length ? 'ojo' : '');
+    kpi('Pre-altas por firmar', borradores.length, null, el('div', 't', borradores.length ? 'esperan a la Responsable Ambiental' : 'todas firmadas'), borradores.length ? 'ojo' : '');
 }
 
 
@@ -107,6 +107,6 @@ function exportarCsv() {
     a.href = exportarCsv.url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     a.download = `CALYTEK_Embarques_${fechaCorta(estado.ventanaDesde).replace(/\//g, '-')}_a_${fechaMexico()}.csv`;
     document.body.appendChild(a); a.click(); a.remove();
-    avisar(`CSV con ${plural(filas.length, 'embarque')} descargado.`, 'bien');
+    avisar(`CSV con ${plural(filas.length, 'góndola')} descargado.`, 'bien');
 }
 $('btnExportar').addEventListener('click', exportarCsv);

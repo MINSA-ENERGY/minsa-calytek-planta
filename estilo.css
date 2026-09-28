@@ -796,6 +796,9 @@ button.vig.abre .d::after { content: ' ›'; color: var(--mute); font-weight: 40
     .gtabla td.m-f { grid-area: f; text-align: left; white-space: normal; }
     .gtabla td.m-f:not(:empty) { margin-top: .45rem; }
     .gtabla td.m-x { display: none; }
+    /* U-149 (v0.78.0): el Historial dice de cuándo es cada folio también en celular: la fecha va a la derecha del estado. */
+    .gtabla tr.gfila:has(> td.m-g) { grid-template-areas: "a b" "c d" "e g" "f f"; }
+    .gtabla td.m-g { grid-area: g; text-align: right; align-self: end; font-size: .84rem; }
 }
 
 /* ---------------------------------------------------------------- REPORTES (v0.32.0): los KPI que salieron de Hoy + avance por programa y por carrier + toneladas por semana */
@@ -983,6 +986,7 @@ button.vig.abre .d::after { content: ' ›'; color: var(--mute); font-weight: 40
 /* M4 (tanda 4): en el veredicto las reglas verdes se pliegan detrás de «Ver las N reglas»; lo que hay que leer queda arriba. */
 .reglas.plegada li.ok { display: none; }
 .reglas.plegada:not(:has(li:not(.ok))) { display: none; }
+#btnVerReglas { display: inline-flex; align-items: center; min-height: 36px; }   /* U-152 (v0.78.0): alto de toque, como los enlaces del asistente */
 .enlace { align-self: flex-start; min-height: 0; padding: 0; border: 0; background: none; font: inherit; font-size: .88rem; font-weight: 600; color: var(--acc); cursor: pointer; }
 .enlace:hover { text-decoration: underline; }
 

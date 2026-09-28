@@ -322,10 +322,10 @@ async function referenciasPadronVivas(clave, x) {
 function botonesPadron(clave, x) {
     const editar = x.Activo !== false && PUEDE.capturarPrealta(estado.rol) ? [{ texto: 'Editar', accion: 'editar', clase: 'suave', alClic: () => abrirFormaPadron(clave, vivo(clave, x)) }] : [];
     if (!PUEDE.corregir(estado.rol)) return editar;
-    if (x.Activo === false) return [{ texto: 'Reactivar', accion: 'reactivar', clase: 'suave', alClic: () => activarPadron(clave, vivo(clave, x), true) }];
+    if (x.Activo === false) return [{ texto: 'Reactivar', accion: 'reactivar', clase: 'suave', alClic: ev => activarPadron(clave, vivo(clave, x), true, ev.currentTarget) }];
     return editar.concat(referenciasPadron(clave, x) === 0
-        ? [{ texto: 'Eliminar', accion: 'eliminar', clase: 'peligro', alClic: () => eliminarPadron(clave, vivo(clave, x)) }]
-        : [{ texto: 'Dar de baja', accion: 'baja', clase: 'peligro', alClic: () => activarPadron(clave, vivo(clave, x), false) }]);
+        ? [{ texto: 'Eliminar', accion: 'eliminar', clase: 'peligro', alClic: ev => eliminarPadron(clave, vivo(clave, x), ev.currentTarget) }]
+        : [{ texto: 'Dar de baja', accion: 'baja', clase: 'peligro', alClic: ev => activarPadron(clave, vivo(clave, x), false, ev.currentTarget) }]);
 }
 export const NOMBRE_PADRON = { carriers: 'carrier', unidades: 'unidad', choferes: 'chofer' };
 export function vigenciasDelCarrier(c) { return estado.vigencias.filter(v => v.Rol === 'carrier' && String(v.Title).endsWith(`· ${c.Title}`)); }
@@ -333,13 +333,17 @@ export function vigenciasDelCarrier(c) { return estado.vigencias.filter(v => v.R
 // el primero SI quedo y el aviso lo dice en ambar. Antes salia «No se pudo guardar» sobre un carrier ya guardado, el
 // operador lo reintentaba y lo duplicaba. Devuelve el mensaje del error, o null si el paso paso.
 export async function segundoPaso(fn) { try { await fn(); return null; } catch (e) { return e && e.message ? e.message : String(e); } }
-async function eliminarPadron(clave, x) {
+// U-153 (v0.78.0): «La unidad dada de baja», no «unidad dado de baja»: artículo, concordancia y mayúscula inicial.
+const quedo = (clave, participio) => { const a = ARTICULO_PADRON[clave]; return a[0].toUpperCase() + a.slice(1) + ' ' + (clave === 'unidades' ? participio.replace(/^(\w+)o\b/, '$1a') : participio); };
+// C-81 (v0.78.0): eliminar, dar de baja y reactivar pasan por escribiendo() como las demás escrituras: botón deshabilitado y sin refresco en medio.
+async function eliminarPadron(clave, x, btn) { await escribiendo(btn, async () => {
     let citas;
     try { citas = await referenciasPadronVivas(clave, x); }
     catch (err) { avisar('No pude confirmar quién lo cita (' + err.message + '). No se elimina: dale de baja.', 'error'); return; }
-    if (citas > 0) { avisar('Ya hay pre-altas o embarques que lo citan (incluso fuera de los últimos ' + CONFIG.ventanaDias + ' días): se da de baja, no se elimina.', 'error'); return; }
+    // U-145 (v0.78.0): la consulta en vivo encontró citas fuera de los 90 días cargados: en vez de un aviso sin salida, se ofrece la baja ahí mismo.
+    if (citas > 0) { await cambiarActivo(clave, x, false); return; }
     const { ok } = await confirmar({ titulo: `Eliminar ${NOMBRE_PADRON[clave]}`, peligro: true, ok: 'Eliminar',
-        texto: `«${x.Title}» no lo cita ninguna pre-alta ni embarque. Se borra del padrón${clave === 'carriers' ? ' junto con su vigencia ASEA' : ''}; si hacía falta corregirlo, se transcribe de nuevo del oficio.` });
+        texto: `«${x.Title}» no lo cita ninguna pre-alta ni góndola. Se borra del padrón${clave === 'carriers' ? ' junto con su vigencia ASEA' : ''}; si hacía falta corregirlo, se transcribe de nuevo del oficio.` });
     if (!ok) return;
     try {
         await refrescarCliente();
@@ -348,14 +352,15 @@ async function eliminarPadron(clave, x) {
         if (clave === 'carriers') for (const v of vigenciasDelCarrier(x)) { await estado.cliente.borrarRenglon(estado.siteId, L.vigencias, v.id); estado.vigencias = estado.vigencias.filter(y => y.id !== v.id); }
         await estado.cliente.borrarRenglon(estado.siteId, L[clave], x.id);
         estado[clave] = estado[clave].filter(y => y.id !== x.id);
-        avisar(`${NOMBRE_PADRON[clave]} eliminado.`, 'bien'); pintarPadron();
+        avisar(`${quedo(clave, 'eliminado')}.`, 'bien'); pintarPadron();
     } catch (e) { avisar('No se pudo eliminar: ' + e.message, 'error'); }
-}
-async function activarPadron(clave, x, activo) {
+}); }
+async function activarPadron(clave, x, activo, btn) { await escribiendo(btn, () => cambiarActivo(clave, x, activo)); }
+async function cambiarActivo(clave, x, activo) {
     const { ok, motivo } = await confirmar(activo
         ? { titulo: `Reactivar ${NOMBRE_PADRON[clave]}`, ok: 'Reactivar', texto: `«${x.Title}» vuelve a ampararse en la puerta y a salir en las listas.` }
         : { titulo: `Dar de baja ${NOMBRE_PADRON[clave]}`, peligro: true, ok: 'Dar de baja', motivo: 'opcional', etiquetaMotivo: 'Por qué (queda en Notas)',
-            texto: `«${x.Title}» ya lo citan pre-altas o embarques, así que no se borra: deja de ampararse en la puerta y de salir en las listas, y el historial lo sigue viendo.` });
+            texto: `«${x.Title}» ya lo citan pre-altas o góndolas, así que no se borra: deja de ampararse en la puerta y de salir en las listas, y el historial lo sigue viendo.` });
     if (!ok) return;
     try {
         await refrescarCliente();
@@ -372,11 +377,11 @@ async function activarPadron(clave, x, activo) {
             await estado.cliente.actualizarRenglon(estado.siteId, L[clave], x.id, campos);
         }
         aplicar(clave, x, campos);   // C-23
-        const pendiente = clave === 'carriers' ? await segundoPaso(async () => { for (const v of vigenciasDelCarrier(x)) { await estado.cliente.actualizarRenglon(estado.siteId, L.vigencias, v.id, { Activo: activo }); v.Activo = activo; } }) : null;
-        if (pendiente) avisar(`${NOMBRE_PADRON[clave]} ${activo ? 'reactivado' : 'dado de baja'}, pero su vigencia ASEA del tablero no cambió (${pendiente}). Edítalo y guarda para sincronizarla.`, 'ojo');
-        else if (activo) avisar(`${NOMBRE_PADRON[clave]} reactivado.`, 'bien');
-        else if (sinNotas) avisar(`${NOMBRE_PADRON[clave]} dado de baja, pero el motivo NO quedó` + (estado.rol === 'gerencia' ? ': la lista no tiene todavía la columna Notas (setup, tarea 9).' : '. Avisa a gerencia.'), 'ojo');   // U-31
-        else avisar(`${NOMBRE_PADRON[clave]} dado de baja${motivo ? ' · el motivo quedó en Notas' : ''}.`, 'bien');
+        const pendiente = clave === 'carriers' ? await segundoPaso(async () => { for (const v of vigenciasDelCarrier(x)) { await estado.cliente.actualizarRenglon(estado.siteId, L.vigencias, v.id, { Activo: activo }); aplicar('vigencias', v, { Activo: activo }); } }) : null;   // C-81: aplicar(), no v.Activo sobre un objeto que un refresco pudo sustituir
+        if (pendiente) avisar(`${quedo(clave, activo ? 'reactivado' : 'dado de baja')}, pero su vigencia ASEA del tablero no cambió (${pendiente}). Edítalo y guarda para sincronizarla.`, 'ojo');
+        else if (activo) avisar(`${quedo(clave, 'reactivado')}.`, 'bien');
+        else if (sinNotas) avisar(`${quedo(clave, 'dado de baja')}, pero el motivo NO quedó` + (estado.rol === 'gerencia' ? ': la lista no tiene todavía la columna Notas (setup, tarea 9).' : '. Avisa a gerencia.'), 'ojo');   // U-31
+        else avisar(`${quedo(clave, 'dado de baja')}${motivo ? ' · el motivo quedó en Notas' : ''}.`, 'bien');
         pintarPadron();
     } catch (e) { avisar('No se pudo cambiar: ' + e.message, 'error'); }
 }
@@ -413,6 +418,26 @@ function validarFormaPadron(clave) {
     if (clave === 'carriers' && !$('pcTitle').value.trim()) return 'Falta la razón social.';
     if (clave === 'unidades' && (!$('puuCarrier').value || !$('puuPlaca').value.trim())) return 'Carrier y placa son obligatorios.';
     if (clave === 'choferes' && (!$('pchCarrier').value || !$('pchNombre').value.trim())) return 'Carrier y nombre son obligatorios.';
+    const rep = repetidoPadron(clave); if (rep) return rep[1];
+    return null;
+}
+/**
+ * U-146 / C-82 (v0.78.0): lo que frena el alta —y la edición— por duplicado, en el paso 1 y al guardar.
+ * Unidad: una placa ACTIVA repetida (la puerta toma la primera que encuentra y rechazaba por «otro carrier»); la de baja solo
+ * se avisa, como hasta hoy. Carrier: la razón social repetida, activa o de baja, porque su vigencia ASEA del tablero se liga
+ * por nombre (vigenciasDelCarrier): dos carriers iguales compartían vigencias al editar, dar de baja y eliminar.
+ */
+const nombreComparable = t => normaliza(t).replace(/[^a-z0-9]/g, '');
+function repetidoPadron(clave) {
+    const edit = estado.padronEdit && estado.padronEdit.clave === clave ? estado.padronEdit.x : null, otro = x => !edit || x.id !== edit.id;
+    if (clave === 'unidades' && $('puuPlaca').value.trim()) {
+        const placa = placaNormal($('puuPlaca').value), rep = estado.unidades.find(u => activo(u) && placaNormal(u.Title) === placa && otro(u));
+        if (rep) return ['puuPlaca', `La placa ${rep.Title} ya está en el padrón con ${nombreDe(estado.carriers, rep.CarrierId)}: no se da de alta dos veces.`];
+    }
+    if (clave === 'carriers' && $('pcTitle').value.trim()) {
+        const t = nombreComparable($('pcTitle').value), rep = estado.carriers.find(c => nombreComparable(c.Title) === t && otro(c));
+        if (rep) return ['pcTitle', activo(rep) ? `«${rep.Title}» ya está en el padrón: ábrelo y edítalo en vez de darlo de alta otra vez.` : `«${rep.Title}» existe dado de baja: reactívalo desde su ficha en vez de duplicarlo.`];
+    }
     return null;
 }
 function llenarFormaPadron(clave, x) {
@@ -522,6 +547,7 @@ function irPasoPadron(n) {
 /** Lo que le falta a un paso: los obligatorios y las fechas del paso (vacías o bien escritas). [id, texto] o null. */
 function faltaPasoPadron(clave, paso) {
     for (const [id, texto] of (OBLIGATORIOS_PADRON[clave][paso] || [])) if (!$(id).value.trim()) return [id, texto];
+    if (paso === 1) { const rep = repetidoPadron(clave); if (rep) return rep; }   // U-146 / C-82
     for (const f of $(CUERPO_PADRON[clave]).querySelectorAll(`.pd-paso[data-paso="${paso}"] input.fecha`)) {
         if (!f.value.trim()) continue;
         try { aIsoDia(f.value); } catch { return [f.id, `Fecha mal escrita en «${document.querySelector(`label[for="${f.id}"]`).textContent}»: dd/mm/aaaa.`]; }
@@ -587,7 +613,7 @@ async function salirAsistentePadron(destino = null) {
     const p = estado.padronVista; if (!asistentePadronAbierto()) return true;
     const cuerpo = $('pdAsisCuerpo');
     if (hayCaptura(cuerpo) && huellaForma(cuerpo) !== $('pdAsis').dataset.huella) {
-        const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', texto: `${estado.padronEdit ? 'Los cambios' : 'Lo que llevas de esta alta'} no se ha guardado. Si sales, se pierde.` });
+        const { ok } = await confirmar({ titulo: 'Descartar lo capturado', peligro: true, ok: 'Descartar', cancelar: 'Seguir capturando', texto: `${estado.padronEdit ? 'Los cambios' : 'Lo que llevas de esta alta'} no se ha guardado. Si sales, se pierde.` });
         if (!ok) return false;
     }
     cerrarFormaPadron(p.asis.clave);
@@ -640,8 +666,8 @@ export async function guardarPadron(clave) {
                 else if (edit.VigenciaASEA) await altaVigencia(`Autorización ASEA transporte · ${edit.Title}`, 'tercero', 'carrier', 'legal', edit.VigenciaASEA, edit.FolioOficio);
             }) : null;
             cerrarFormaPadron(clave);
-            if (pendiente) avisar(`${NOMBRE_PADRON[clave]} actualizado, pero su vigencia ASEA del tablero no se sincronizó (${pendiente}). Guárdalo de nuevo para reintentar.`, 'ojo');
-            else avisarAlta(`${NOMBRE_PADRON[clave]} actualizado.`, clave, edit);
+            if (pendiente) avisar(`${quedo(clave, 'actualizado')}, pero su vigencia ASEA del tablero no se sincronizó (${pendiente}). Guárdalo de nuevo para reintentar.`, 'ojo');
+            else avisarAlta(`${quedo(clave, 'actualizado')}.`, clave, edit);
             pintarPadron();
         } else {
             const nuevo = await estado.cliente.crearRenglon(estado.siteId, L[clave], limpiar(campos));
@@ -649,7 +675,7 @@ export async function guardarPadron(clave) {
             estado.ultimoCarrierPadron = clave === 'carriers' ? nuevo.id : (nuevo.CarrierId ? Number(nuevo.CarrierId) : estado.ultimoCarrierPadron);   // U-46
             const pendiente = clave === 'carriers' && nuevo.VigenciaASEA ? await segundoPaso(() => altaVigencia(`Autorización ASEA transporte · ${nuevo.Title}`, 'tercero', 'carrier', 'legal', nuevo.VigenciaASEA, nuevo.FolioOficio)) : null;
             vaciarFormaPadron(clave); cerrarFormaPadron(clave);
-            if (pendiente) avisar(`${NOMBRE_PADRON[clave]} dado de alta, pero su vigencia ASEA NO quedó en el tablero (${pendiente}). Edítalo y guarda para crearla.`, 'ojo');
+            if (pendiente) avisar(`${quedo(clave, 'dado de alta')}, pero su vigencia ASEA NO quedó en el tablero (${pendiente}). Edítalo y guarda para crearla.`, 'ojo');
             else avisarAlta(AVISO_ALTA[clave], clave, nuevo);
             // U-10 (v0.23.0): si el alta vino desde la pre-alta (que sigue abierta atras), el carrier nuevo queda elegido en ella.
             if (clave === 'carriers' && asistentePrealtaAbierto()) elegirCarrierEnPrealta(nuevo);

@@ -12,6 +12,18 @@ import { pintarHoy } from './hoy.js';
 import { pintarReportes } from './reportes.js';
 import { pintarArchivos } from './archivos.js';
 
+// U-157 (v0.78.0): los errores frecuentes de MSAL, en una frase de planta; el código técnico queda al final, entre paréntesis.
+const FRASE_MSAL = {
+    interaction_in_progress: 'Ya hay un inicio de sesión abierto en otra pestaña o ventana: termínalo ahí o ciérrala y vuelve a intentar.',
+    user_cancelled: 'Se canceló el inicio de sesión.',
+    no_network_connectivity: 'Sin conexión con Microsoft: revisa la señal y vuelve a intentar.',
+    endpoints_resolution_error: 'Sin conexión con Microsoft: revisa la señal y vuelve a intentar.',
+    post_request_failed: 'Sin conexión con Microsoft: revisa la señal y vuelve a intentar.'
+};
+export function fraseEntrada(inicio, e) {
+    const codigo = e && (e.errorCode || e.code), frase = codigo && FRASE_MSAL[codigo];
+    return frase ? `${frase} (${codigo})` : inicio + (e && e.message ? e.message : e);
+}
 export async function entrar() {
     pasoEntrada('Entrando…');
     try {
@@ -20,7 +32,7 @@ export async function entrar() {
         await sesionIniciada();
     } catch (e) {
         pasoEntrada(null);
-        avisar('No se pudo entrar: ' + (e && e.message ? e.message : e), 'error');
+        avisar(fraseEntrada('No se pudo entrar: ', e), 'error');
         $('textoEntrar').textContent = 'Vuelve a intentarlo.';
     }
 }
@@ -34,7 +46,7 @@ export async function arrancar() {
         }
     } catch (e) {
         pasoEntrada(null);
-        avisar('No se pudo terminar el inicio de sesión: ' + (e && e.message ? e.message : e), 'error');
+        avisar(fraseEntrada('No se pudo terminar el inicio de sesión: ', e), 'error');
         $('textoEntrar').textContent = 'Vuelve a intentarlo.';
     }
 }
@@ -70,7 +82,7 @@ async function sesionIniciada() {
  * veredicto; el alta de un carrier en el celular se perdia a los 2 minutos por el refresco automatico y al
  * volver a la app (Carlos, 2026-09-08). Cubre todo formulario abierto y la puerta con algo tecleado.
  */
-function capturaAMedias() {
+export function capturaAMedias() {   // exportada en v0.78.0 (U-158)
     const abierto = id => !$(id).classList.contains('oculto');
     // Tanda 5 (decisión 11): el asistente de la báscula abierto —pesaje, pausa «A descargar» o ticket— cuenta entero.
     if (abierto('baAsis') || abierto('veredicto')) return true;
@@ -95,7 +107,8 @@ export async function recargar(silencioso = false) {
     pintarSync(true);
     try {
         await refrescarCliente();
-        await cargarTodo();
+        // C-80 (v0.78.0): se guardo algo mientras se leia: esta lectura ya es vieja. No se asigna ni se repinta; se reintenta en unos segundos.
+        if (!(await cargarTodo())) { setTimeout(() => recargar(true), 4000); if (!silencioso) avisar('Se guardó algo mientras leía: actualizo de nuevo en unos segundos.', 'ojo'); return; }
         // v0.33.0: el Actualizar a mano relee el arbol; el refresco de 2 min no lo tira (se pierden las carpetas abiertas).
         // C-34 (v0.34.0): se tira aqui, ya leido todo, y no antes del await: en medio un toggle del arbol caia sobre null.
         if (!silencioso) estado.archivos = null;
@@ -133,7 +146,7 @@ const pesajeConAlgo = () => !$('baPesar').classList.contains('oculto') && !!($('
 function descartarPesaje() { estado.pesando = null; estado.fotoBytes = null; soltarFotoPrevia(); cerrarAsistente(); }
 export async function soltarPesaje() {
     if (pesajeConAlgo()) {
-        const { ok } = await confirmar({ titulo: 'Cancelar el pesaje', peligro: true, ok: 'Descartar', texto: 'Se pierden el peso tecleado y la foto del indicador; habría que volver a tomarla.' });
+        const { ok } = await confirmar({ titulo: 'Cancelar el pesaje', peligro: true, ok: 'Descartar', cancelar: 'Seguir pesando', texto: 'Se pierden el peso tecleado y la foto del indicador; habría que volver a tomarla.' });
         if (!ok) return false;
     }
     descartarPesaje();

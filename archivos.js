@@ -141,9 +141,9 @@ export function pintarPendientesHoy(borradores, pendientes, botonesExcepcion) {
     $('tbPendientesN').classList.toggle('oculto', !nPend); $('tbPendientesN').textContent = String(nPend);
     if (!nPend) pf.appendChild(el('p', 'vacio', 'Nada pendiente.'));
     if (estado.firmasError) pf.appendChild(renglon('No se pudo leer el registro de firmas', `la app no firma ni autoriza y ningún sello vale sin su firma · Actualiza; si sigue, avisa a gerencia${estado.rol === 'gerencia' ? ` · PLANTA_Firmas: ${estado.firmasError} (permisos de la lista; setup-carlos.md, tarea 11)` : ''}`));   // U-31
-    for (const p of ssf) pf.appendChild(renglon(`Firma · ${p.Title}`, prealtaCambioTrasFirma(p) ? `cambió después de que la firmó ${quien(p.FirmadaPor) || '?'} (carrier, unidades, choferes, corriente o generador) · la puerta no la ve · se vuelve a firmar desde su detalle` : `falta la firma del validador (trae el sello de ${quien(p.FirmadaPor) || '?'}, sin firma registrada) · la puerta no la ve · se firma desde su detalle`, 'Ver', () => verPrealta(vivo('prealtas', p))));   // U-28 / U-31
+    for (const p of ssf) pf.appendChild(renglon(`Firma · ${p.Title}`, prealtaCambioTrasFirma(p) ? `cambió después de que la firmó ${quien(p.FirmadaPor) || '?'} (carrier, unidades, choferes, corriente o generador) · la puerta no la ve · se vuelve a firmar desde su detalle` : `falta la firma de la Responsable Ambiental (trae el sello de ${quien(p.FirmadaPor) || '?'}, sin firma registrada) · la puerta no la ve · se firma desde su detalle`, 'Ver', () => verPrealta(vivo('prealtas', p))));   // U-28 / U-31
     for (const { p, sm } of dormidas) pf.appendChild(renglon(`Programa · ${p.Title}`, `${sm.motivo} · ¿se cierra? Sigue saliendo en la puerta`, 'Ver', () => verPrealta(vivo('prealtas', p))));
-    for (const p of borradores) { const d = diasPara(p.FechaEstimada); pf.appendChild(renglon(`Pre-alta · ${p.Title}`, `firma del validador · 1er envío ${fechaCorta(p.FechaEstimada)}${d !== null ? ` (en ${d} días)` : ''} · capturó ${quien(p.CapturadaPor) || '?'}`, 'Ver', () => verPrealta(vivo('prealtas', p)))); }
+    for (const p of borradores) { const d = diasPara(p.FechaEstimada); pf.appendChild(renglon(`Pre-alta · ${p.Title}`, `firma de la Responsable Ambiental · 1er envío ${fechaCorta(p.FechaEstimada)}${d !== null ? ` (en ${d} días)` : ''} · capturó ${quien(p.CapturadaPor) || '?'}`, 'Ver', () => verPrealta(vivo('prealtas', p)))); }
     for (const e of pendientes) pf.appendChild(renglon(`Excepción · ${e.PlacaTractor}`, `${selloSinFirma(e)}autorización de gerencia · «${e.ExcepcionMotivo || 'sin motivo'}» · ${horaCorta(e.Arribo)}`, null, null, botonesExcepcion(e).map(b => ({ ...b, clase: b.accion === 'autorizar' ? '' : 'peligro' }))));
 }
 
@@ -200,6 +200,11 @@ function abrirGondolaDe(e) {
     $('baBusca').value = estado.vistaGondolas === 'historial' ? (e.Title || e.PlacaTractor || '') : '';
     irA('bascula');
 }
+function fichaDelTablero(v) {
+    if (v.Rol !== 'carrier') return null;
+    const c = estado.carriers.find(x => vigenciasDelCarrier(x).includes(v));
+    return c ? { clave: 'carriers', id: c.id, carrier: c.id } : null;
+}
 export function pintarVigenciasHoy() {
     const vg = $('tbVigencias'); vg.textContent = '';
     const prox = [...estado.vigencias.filter(v => v.Activo !== false), ...vigenciasPadronHoy()].map(v => ({ v, d: diasPara(v.Vence) })).filter(x => x.d !== null && x.d <= (Number(x.v.AvisoDias) || CONFIG.avisoVigenciaDias)).sort((a, b) => a.d - b.d);
@@ -207,9 +212,11 @@ export function pintarVigenciasHoy() {
     for (const { v, d } of prox) {
         const ventana = Number(v.AvisoDias) || CONFIG.avisoVigenciaDias;
         const clase = d < 0 ? 'mal' : d <= 7 ? 'ojo' : '';
-        // U-134 (v0.74.0): la del padrón es un botón que abre la ficha del chofer, unidad o carrier; la del tablero no tiene ficha.
-        const r = el(v.ficha ? 'button' : 'div', v.ficha ? 'vig abre' : 'vig');
-        if (v.ficha) { r.type = 'button'; r.title = 'Abrir su ficha en el Padrón'; r.addEventListener('click', () => abrirFichaDesdeHoy(v.ficha)); }
+        // U-134 (v0.74.0): la del padrón es un botón que abre la ficha del chofer, unidad o carrier.
+        // U-159 (v0.78.0): la ASEA del carrier que vive en el tablero también abre la ficha de su carrier; las demás del tablero no tienen ficha.
+        const ficha = v.ficha || fichaDelTablero(v);
+        const r = el(ficha ? 'button' : 'div', ficha ? 'vig abre' : 'vig');
+        if (ficha) { r.type = 'button'; r.title = 'Abrir su ficha en el Padrón'; r.addEventListener('click', () => abrirFichaDesdeHoy(ficha)); }
         const t = el('span', '', v.Title); t.appendChild(el('small', '', `${fechaCorta(v.Vence)} · ${v.Fuente || ''}${v.Dueno ? ' · dueño ' + v.Dueno : ''}`)); r.appendChild(t);
         r.appendChild(el('span', 'd ' + clase, d < 0 ? `−${-d} d` : `${d} d`));
         const bar = el('span', 'bar'); const i = el('i', clase); i.style.width = Math.max(4, Math.min(100, Math.round((1 - d / ventana) * 100))) + '%'; bar.appendChild(i); r.appendChild(bar);

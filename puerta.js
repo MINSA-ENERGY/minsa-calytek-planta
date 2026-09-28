@@ -3,7 +3,7 @@
 
 import { CONFIG } from './config.js';
 import { compuerta, CORRIENTES, etiquetaCorriente, lista, palabraCompuerta, placaNormal, plural, PUEDE, registroPuerta, siguienteFolio } from './reglas.js';
-import { $, anclar, avisar, el, embarquesDelAno, escribiendo, estado, firmar, fundirEnVentana, L, limpiarAvisos, nombreDe, opciones, porId, prealtaFirmada, refrescarCliente, renglon, vivo } from './nucleo.js';
+import { $, anclar, atraparFoco, avisar, el, embarquesDelAno, escribiendo, estado, firmar, fundirEnVentana, L, limpiarAvisos, nombreDe, opciones, porId, prealtaFirmada, refrescarCliente, renglon, vivo } from './nucleo.js';
 import { entrar, irA } from './navegacion.js';
 import { abrirPesaje, elegirVistaGondolas } from './gondolas.js';
 import { gondolasDe } from './prealtas.js';
@@ -18,7 +18,8 @@ export function pintarPuerta() {
     // S-01: la que trae sello pero no renglon en PLANTA_Firmas cuenta igual: la compuerta manda.
     const borradores = estado.prealtas.filter(p => p.Estado === 'borrador' || (p.Estado === 'firmada' && !prealtaFirmada(p)));
     const pp = $('puPendientes'); pp.classList.toggle('oculto', !borradores.length);
-    if (borradores.length) pp.textContent = `${borradores.length === 1 ? 'Hay 1 pre-alta por firmar' : `Hay ${borradores.length} pre-altas por firmar`}: ${borradores.map(p => p.Title).join(' · ')}. Sus góndolas no pueden entrar hasta que el validador firme.`;
+    // U-151 (v0.78.0): los nombres solo si son una o dos; con más, el conteo y dónde se firman. U-155: la Responsable Ambiental, no «el validador».
+    if (borradores.length) pp.textContent = `${borradores.length === 1 ? 'Hay 1 pre-alta por firmar' : `Hay ${borradores.length} pre-altas por firmar`}${borradores.length <= 2 ? `: ${borradores.map(p => p.Title).join(' · ')}` : ' en Pre-altas'}. Sus góndolas no pueden entrar hasta que la Responsable Ambiental firme.`;
     opciones($('puPrealta'), firmadas, p => p.id, p => `${p.Title} · ${etiquetaCorriente(p.Corriente) || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}`);
     if (!$('puPrealta').value && firmadas.length === 1) $('puPrealta').value = String(firmadas[0].id);   // U-40: una sola firmada no se hace elegir
     pintarProgramasPuerta(firmadas);
@@ -389,12 +390,7 @@ document.addEventListener('keydown', ev => {
     if (ev.key === 'Escape') { ev.preventDefault(); cerrarVeredicto(); return; }
     // U-16 (v0.22.0): el veredicto es role=dialog aria-modal pero no es un <dialog>: Tab se salia a la puerta que esta
     // detras. Se cicla entre lo enfocable del veredicto (motivo de la excepcion, si esta, y los dos botones).
-    if (ev.key !== 'Tab') return;
-    const focables = [...v.querySelectorAll('button, textarea, input, select')].filter(x => !x.disabled && x.offsetParent !== null);
-    if (!focables.length) return;
-    const i = focables.indexOf(document.activeElement);
-    const siguiente = ev.shiftKey ? (i <= 0 ? focables[focables.length - 1] : focables[i - 1]) : (i < 0 || i === focables.length - 1 ? focables[0] : focables[i + 1]);
-    ev.preventDefault(); siguiente.focus();
+    if (ev.key === 'Tab') atraparFoco(v, ev);
 });
 
 export async function registrarPuerta() {
