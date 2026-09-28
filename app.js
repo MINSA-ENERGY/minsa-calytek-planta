@@ -77,6 +77,9 @@ document.addEventListener('visibilitychange', () => {
 });
 // Sin red: el indicador lo dice al momento; al volver la señal se relee si el estado envejeció.
 window.addEventListener('offline', () => { if (estado.siteId) { pintarSync(); avisar('Sin conexión: puedes consultar lo cargado, pero nada se guarda hasta que vuelva la señal.', 'ojo'); } });
+// C-88 (v0.82.0): graph.js lo dispara cuando un POST quedo sin respuesta; si otra escritura sigue en vuelo o hay un dialogo
+// abierto, recargar() no lee y la relectura queda para el refresco periodico (CONFIG.refrescoMs).
+window.addEventListener('planta:releer', () => { if (estado.siteId) recargar(true); });
 window.addEventListener('online', () => { if (estado.siteId) { limpiarAvisos(); pintarSync(); if (Date.now() - estado.cargadoEl > 60000) recargar(true); } });
 // Y cada CONFIG.refrescoMs mientras la app esta a la vista: la excepcion que gerencia autoriza desde su sesion le
 // llega a la caseta sin tocar Actualizar (H8, auditoria del 7-sep). recargar() ya no pisa un pesaje ni un veredicto abiertos.

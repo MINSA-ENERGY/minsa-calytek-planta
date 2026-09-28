@@ -10,13 +10,31 @@ function valeReintentar(estado) {
     return estado === 429 || estado === 503 || estado === 504 || estado === 0;
 }
 
-export async function conReintento(hacer, alAvisar) {
+// C-93 (v0.82.0): tiempo limite de cada peticion; una colgada dejaba escrituras > 0 para siempre (refresco congelado,
+// boton deshabilitado). Subir una pieza de evidencia desde la caseta tarda mas que leer una lista.
+export const LIMITE_MS = 30000;
+export const LIMITE_SUBIDA_MS = 120000;
+
+/**
+ * C-88 (v0.82.0): un POST no es idempotente. Si la red se cae o llega un 504, SharePoint pudo haberlo escrito ya, y
+ * repetirlo duplicaba la gondola, la firma, el carrier o la carpeta del lote. Solo 429/503 (no se proceso) se reintentan;
+ * lo demas sale como `resultadoIncierto` y se relee (app.js escucha planta:releer) antes de que el usuario vuelva a guardar.
+ * El evento sale de AQUI y no de quien llama: los 12 llamadores atrapan el error para avisar y no lo relanzan (revisor,
+ * v0.82.0). El setTimeout lo deja caer despues del finally de nucleo.escribiendo, ya con escrituras en 0.
+ */
+function incierto(causa) {
+    if (typeof window !== 'undefined') setTimeout(() => window.dispatchEvent(new Event('planta:releer')), 0);
+    return Object.assign(new Error('SharePoint no contestó a tiempo: puede que SÍ se haya guardado. Revisa la lista (se actualiza sola) antes de volver a intentar.'), { status: 0, codigo: 'resultadoIncierto', causa });
+}
+
+export async function conReintento(hacer, alAvisar, idempotente = true) {
     let espera = 800;
     for (let intento = 1; intento <= REINTENTOS; intento++) {
         let r;
         try {
             r = await hacer();
         } catch (e) {
+            if (!idempotente) throw incierto(e);
             // el TypeError del navegador («Failed to fetch») no le dice nada al de la caseta: se traduce, con status 0
             if (intento === REINTENTOS) throw Object.assign(new Error('Sin conexión con SharePoint: no se guardó nada. Revisa la señal y vuelve a intentar.'), { status: 0, codigo: 'sinConexion', causa: e });
             if (alAvisar) alAvisar(`sin conexión, reintentando (${intento}/${REINTENTOS - 1})`);
@@ -24,6 +42,7 @@ export async function conReintento(hacer, alAvisar) {
             continue;
         }
         if (r.ok) return r;
+        if (!idempotente && r.status !== 429 && r.status !== 503) { if (valeReintentar(r.status)) throw incierto(null); return r; }
         if (!valeReintentar(r.status) || intento === REINTENTOS) return r;
         const dice = Number(r.headers.get('Retry-After'));
         const cuanto = Number.isFinite(dice) && dice > 0 ? dice * 1000 : espera;
@@ -85,10 +104,14 @@ export function crearCliente(graph, token, listasPorNombre = new Map()) {
     let listasEnVuelo = null;   // C-92: una sola lectura de /lists aunque la pidan varias listas a la vez
 
     async function pedir(url, opciones = {}, avisar) {
+        const metodo = (opciones.method || 'GET').toUpperCase();
+        const limite = opciones.body instanceof Blob || opciones.body instanceof ArrayBuffer || ArrayBuffer.isView(opciones.body) ? LIMITE_SUBIDA_MS : LIMITE_MS;
+        // C-93: el signal se crea en cada intento (uno vencido abortaria el reintento); su TimeoutError cae al catch como red caida.
         return conReintento(() => fetch(url, {
             ...opciones,
-            headers: { ...cab, ...(opciones.headers || {}) }
-        }), avisar);
+            headers: { ...cab, ...(opciones.headers || {}) },
+            signal: AbortSignal.timeout(limite)
+        }), avisar, metodo !== 'POST');
     }
 
     return {

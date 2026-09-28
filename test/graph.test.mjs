@@ -36,4 +36,42 @@ const resp = (status, cuerpo = {}) => ({ ok: status >= 200 && status < 300, stat
     const c2 = crearCliente('https://graph.example.invalid/v1.0', 't2', cache);
     assert.equal(await c2.idDeLista('s', 'B'), 'id-b'); assert.equal(lecturas, 1);
 }
-console.log('graph: ok (reintento 503 y red, 403 sin reintento, cache de listas compartido y una sola lectura de /lists)');
+// C-88 (v0.82.0): un POST NO se repite ante red caida, timeout o 504 — pudo haberse escrito; sale resultadoIncierto.
+for (const hacerFalla of [() => { throw new TypeError('Failed to fetch'); }, () => { throw new DOMException('timeout', 'TimeoutError'); }, () => resp(504)]) {
+    let n = 0;
+    await assert.rejects(conReintento(async () => { n++; return hacerFalla(); }, null, false), e => e.codigo === 'resultadoIncierto');
+    assert.equal(n, 1);
+}
+// ...y el resultado incierto pide la relectura (planta:releer) aunque quien llama se trague el error, como hacen los 12 llamadores.
+{
+    let releidas = 0;
+    globalThis.window = new EventTarget();
+    window.addEventListener('planta:releer', () => releidas++);
+    try { await conReintento(async () => resp(504), null, false); } catch (_) { /* el llamador avisa y no relanza */ }
+    await new Promise(res => setTimeout(res, 5));
+    assert.equal(releidas, 1);
+    delete globalThis.window;
+}
+// ...pero 429/503 (no se proceso) si se reintentan, y un 400 sale como respuesta sin reintento.
+{
+    let n = 0;
+    const r = await conReintento(async () => (++n === 1 ? resp(503) : resp(201)), null, false);
+    assert.equal(r.status, 201); assert.equal(n, 2);
+    n = 0;
+    const r2 = await conReintento(async () => { n++; return resp(400); }, null, false);
+    assert.equal(r2.status, 400); assert.equal(n, 1);
+}
+// C-88 + C-93: el cliente manda POST sin reintento y TODA peticion con un AbortSignal (uno nuevo por intento).
+{
+    const vistos = [];
+    globalThis.fetch = async (url, op) => {
+        vistos.push({ metodo: op.method || 'GET', signal: op.signal });
+        if (String(url).includes('/lists?')) return resp(200, { value: [{ id: 'id-a', name: 'A', displayName: 'A' }] });
+        throw new TypeError('Failed to fetch');
+    };
+    const c = crearCliente('https://graph.example.invalid/v1.0', 't', new Map());
+    await assert.rejects(c.crearRenglon('s', 'A', { Title: 'x' }), e => e.codigo === 'resultadoIncierto');
+    assert.equal(vistos.filter(v => v.metodo === 'POST').length, 1);
+    assert.ok(vistos.every(v => v.signal instanceof AbortSignal));
+}
+console.log('graph: ok (reintento 503 y red, 403 sin reintento, cache de listas compartido y una sola lectura de /lists, POST sin reintento incierto, timeout en cada peticion)');
