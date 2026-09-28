@@ -60,6 +60,12 @@ function programaG(e) {
     if (e.Manifiesto) s.appendChild(el('small', 'mono', e.Manifiesto));
     return s;
 }
+/** C-97 (v0.80.0): las tres columnas con que abren las tablas de Báscula, Cerradas hoy y Cerrados (antes, copiadas tres veces). */
+const COLS_GONDOLA = [
+    { t: 'Folio', m: 'a', v: folioG },
+    { t: 'Placa', m: 'b', v: e => e.PlacaTractor, clase: 'mono' },
+    { t: 'Programa', m: 'c', v: programaG },
+];
 export const kgG = n => `${Number(n).toLocaleString('es-MX')} kg`;
 /** Lo último que se capturó de una góndola en planta: el peso bruto, o la hora a la que pasó (o llegó, si espera). */
 function ultimoDatoG(e) {
@@ -107,7 +113,8 @@ function mostrarAsistente(e, pantalla, paso) {
     $('baQuien').textContent = e.Title ? `${e.Title} · ${e.PlacaTractor || ''}` : [e.PlacaTractor, e.PlacaPlana].filter(Boolean).join(' · ');
     $('baMiga').textContent = e.Title || e.PlacaTractor || 'Góndola';
     // U-88 (v0.51.0): cerrada, el dato que se le dice al chofer es el neto, no el bruto de la etapa anterior.
-    const peso = e.NetoKg ? `neto ${kgG(e.NetoKg)}` : e.BrutoKg ? `bruto ${kgG(e.BrutoKg)}` : null;
+    // U-162 (v0.80.0): en la pantalla de peso el bruto ya está en el término de la resta; aquí sería la segunda vez.
+    const peso = e.NetoKg ? `neto ${kgG(e.NetoKg)}` : e.BrutoKg && pantalla !== 'baPesar' ? `bruto ${kgG(e.BrutoKg)}` : null;
     $('baQuienSub').textContent = [nombreDe(estado.prealtas, e.PreAltaId), nombreDe(estado.carriers, e.CarrierId), peso].filter(x => x && x !== '—').join(' · ');
     pintarCapturado(e);
     cerrarHojaCapturado();
@@ -173,9 +180,7 @@ export function pintarListasGondolas() {
     // sin «Pesar» (decisión 10): se autoriza en Hoy › Pendiente revisar.
     const captura = PUEDE.puerta(estado.rol);
     tablaGondolas($('baLista'), [
-        { t: 'Folio', m: 'a', v: folioG },
-        { t: 'Placa', m: 'b', v: e => e.PlacaTractor, clase: 'mono' },
-        { t: 'Programa', m: 'c', v: programaG },
+        ...COLS_GONDOLA,
         { t: 'Carrier', m: 'x', v: e => nombreDe(estado.carriers, e.CarrierId) },
         { t: 'Siguiente paso', m: 'e', v: e => { const s = siguientePaso(e, excepcionAutorizada(e)); return el('span', 'paso e-' + s.tono, s.texto); } },
         { t: 'Último dato', m: 'd', num: true, v: ultimoDatoG, clase: 'mono' }
@@ -188,9 +193,7 @@ export function pintarListasGondolas() {
 
     // Cerradas hoy: el día de cierre es el de la tara (F1), y aquí vive el certificado (decisión 9).
     tablaGondolas($('gHoy'), [
-        { t: 'Folio', m: 'a', v: folioG },
-        { t: 'Placa', m: 'b', v: e => e.PlacaTractor, clase: 'mono' },
-        { t: 'Programa', m: 'c', v: programaG },
+        ...COLS_GONDOLA,
         { t: 'Tara', m: 'x', v: e => horaMexico(e.TaraHora, 'hora'), clase: 'mono mudo' },
         { t: 'Neto', m: 'd', num: true, v: e => kgG(e.NetoKg), clase: 'mono' },
         { t: 'Ticket báscula', m: 'x', v: e => e.TicketBascula, clase: 'mono' },
@@ -240,9 +243,7 @@ function pintarHistorial() {
         return vig ? el('span', 'paso e-ok', `cerrada · ${vig.Title}`) : el('span', 'paso e-ok', 'cerrada');
     };
     tablaGondolas($('baCerrados'), [
-        { t: 'Folio', m: 'a', v: folioG },
-        { t: 'Placa', m: 'b', v: e => e.PlacaTractor, clase: 'mono' },
-        { t: 'Programa', m: 'c', v: programaG },
+        ...COLS_GONDOLA,
         { t: 'Estado', m: 'e', v: estadoH },
         { t: 'Neto', m: 'd', num: true, v: e => (e.NetoKg ? kgG(e.NetoKg) : null), clase: 'mono' },
         { t: 'Fecha', m: 'g', v: e => horaMexico(momento(e)), clase: 'mono mudo' }   // U-149 (v0.78.0): m-g se ve en celular, junto al estado
@@ -359,7 +360,7 @@ export function abrirPesaje(e, fase) {
     const u = porId(estado.unidades, e.UnidadId);
     const manif = e.Manifiesto ? `Manifiesto ${e.Manifiesto}. ` : '';
     $('baSub').textContent = fase === 'bruto' ? `${manif}Primera pasada: la góndola cargada. Al guardar nace el folio E-.` :
-        `${manif}Segunda pasada: la góndola vacía. Bruto ${kgG(e.BrutoKg)}${u && u.CapacidadKg ? ` · capacidad ${kgG(u.CapacidadKg)}` : ''}.`;   // U-87: con separador de miles, como la resta
+        `${manif}Segunda pasada: la góndola vacía.${u && u.CapacidadKg ? ` Capacidad ${kgG(u.CapacidadKg)}.` : ''}`;   // U-162 (v0.80.0): el bruto, solo en la resta (U-87: con separador de miles)
     $('baKgLabel').textContent = fase === 'bruto' ? 'Bruto (kg)' : 'Tara (kg)';
     $('baKg').value = '';
     $('baFotoPrevia').classList.add('oculto');
@@ -529,15 +530,21 @@ export async function subirEvidencia(folio, fase, kg, avisar) {
     const { nombreReal, id: carpetaId } = await estado.cliente.crearCarpeta(estado.siteId, CONFIG.buzon, carpeta, avisar);
     const ruta = `${CONFIG.buzon}/${nombreReal}`;
     const archivo = `${fecha}_CALYTEK_Foto_${s}-01.jpg`;
-    await estado.cliente.subirPieza(estado.siteId, ruta, archivo, estado.fotoBytes, 'image/jpeg', avisar);
     const manifiesto = {
         app: 'calytek-planta', contrato: 1, app_version: VERSION, unidad: 'CALYTEK',
         etiqueta: CONFIG.evidencia.etiqueta, destino: destinoEvidencia(fecha), tipo: 'foto',
         fecha, concepto, archivos: [archivo], paginas: 1, subido: new Date().toISOString(),
         embarque: folio
     };
-    await estado.cliente.subirPieza(estado.siteId, ruta, '_lote.json',
-        new TextEncoder().encode(JSON.stringify(manifiesto, null, 2) + '\n'), 'application/json', avisar);
+    // C-91 (v0.80.0): si falla la foto o el _lote.json, la carpeta recien creada se retira, como guardarConLote tras el PATCH.
+    try {
+        await estado.cliente.subirPieza(estado.siteId, ruta, archivo, estado.fotoBytes, 'image/jpeg', avisar);
+        await estado.cliente.subirPieza(estado.siteId, ruta, '_lote.json',
+            new TextEncoder().encode(JSON.stringify(manifiesto, null, 2) + '\n'), 'application/json', avisar);
+    } catch (err) {
+        try { await estado.cliente.borrarItemDrive(estado.siteId, carpetaId); } catch (_) { /* se reporta el error original */ }
+        throw err;
+    }
     invalidarRama(CONFIG.buzon);   // C-31 (v0.34.0): Archivos ya no muestra el buzón de antes de este lote
     return { ref: `${fecha}|${concepto}`, carpetaId };
 }

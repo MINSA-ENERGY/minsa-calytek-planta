@@ -715,7 +715,7 @@ button:not(:disabled):active { transform: scale(.98); }
 .kpi { position: relative; overflow: hidden; background: var(--surf); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); display: flex; flex-direction: column; gap: .05rem; min-width: 0; }
 .kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--idle); }
 .kpi.is-ok::before { background: var(--ok); } .kpi.is-warn::before { background: var(--warn); } .kpi.is-danger::before { background: var(--bad); } .kpi.is-info::before { background: var(--info); }
-.kpi .l { font-size: .66rem; letter-spacing: .09em; color: var(--faint); }
+.kpi .l { font-size: .66rem; letter-spacing: .09em; color: var(--mute); }   /* U-165 (v0.80.0): --faint daba ~2.7:1 */
 .kpi .n { margin-top: var(--sp-1); font-family: var(--titulo); font-weight: 600; font-size: 1.9rem; line-height: 1.1; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
 .kpi .n small { font-family: var(--texto); font-weight: 500; font-size: .95rem; color: var(--mute); margin-left: 2px; letter-spacing: 0; }
 .kpi .n.mal { color: var(--bad-fg); }
@@ -922,6 +922,8 @@ button.vig.abre .d::after { content: ' ›'; color: var(--mute); font-weight: 40
 .asis-pantalla .pista { margin: 0; }
 .pregunta { font-family: var(--titulo); font-weight: 600; font-size: 1.3rem; color: var(--ink); margin: 0; text-wrap: balance; }
 .pregunta.chica { font-size: 1.1rem; margin-top: var(--sp-2); }
+/* U-168 (v0.80.0): el nombre del programa es el título del detalle, no un rótulo de 11 px */
+#paDetalleTitulo { font-family: var(--titulo); font-weight: 600; font-size: 1.1rem; letter-spacing: 0; text-transform: none; color: var(--ink); text-wrap: balance; }
 .pregunta:focus { outline: none; }
 .asis-pantalla .sub { font-size: .88rem; color: var(--mute); margin: calc(-1 * var(--sp-2)) 0 0; }
 /* M2: elegir tocando. Cada renglón es un botón que actúa como radio (aria-pressed); el select oculto guarda el valor. */

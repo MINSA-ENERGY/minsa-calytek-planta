@@ -2,7 +2,7 @@
 // Salió de app.js en C-76 (v0.75.0): código movido tal cual; solo se agregaron import/export.
 
 import { CONFIG } from './config.js';
-import { aIsoDia, basesRecientes, clienteDe, clientesPrealta, CORRIENTES, etiquetaCorriente, evaluarVigencia, fechaCorta, fechaDePestana, fechaMexico, huellaPrealta, limpiar, lista, mesesPrealtas, paraPatch, plural, prealtaSinMovimiento, PUEDE, siguienteFolio } from './reglas.js';
+import { aIsoDia, basesRecientes, clienteDe, clientesPrealta, CORRIENTES, etiquetaCorriente, evaluarVigencia, fechaCorta, fechaDePestana, fechaMexico, huellaPrealta, limpiar, lista, mesesPrealtas, PALABRA_CLASE, paraPatch, plural, prealtaSinMovimiento, PUEDE, siguienteFolio } from './reglas.js';
 import { $, abrirForma, anclar, aplicar, avisar, cerrarForma, confirmar, el, embarquesDeProgramas, esColumnaFaltante, escribiendo, estado, etiqueta, firmar, hayCaptura, horaCorta, huellaForma, L, limpiarAvisos, motivoSinFirmas, nombreDe, opciones, pintarInsignias, porId, prealtaCambioTrasFirma, prealtaFirmada, quien, reanclar, refrescarCliente, textoDe, vivo } from './nucleo.js';
 import { irA, repintar } from './navegacion.js';
 import { asegurarFolioUnico, renglonOpcion } from './puerta.js';
@@ -25,13 +25,13 @@ function conteoRecibidas(emb = embarquesDeProgramas()) {
     return m;
 }
 export function sinMovimientoDe(p, emb = embarquesDeProgramas()) { return prealtaSinMovimiento(p, emb, CONFIG.sinMovimientoDias); }
-function barraAvance({ rec, esp }) {
+function barraAvance({ rec, esp }, conCifra = true) {   // U-167: el detalle ya dice la cifra en texto
     const d = el('div', 'avance');
     if (esp) {
         const b = el('span', 'barra' + (rec ? '' : ' esp'));
         const i = el('i'); i.style.width = Math.min(100, Math.round(rec / esp * 100)) + '%';
         b.appendChild(i); d.appendChild(b);
-        d.appendChild(el('span', 'cifra', `${rec}/${esp}`));
+        if (conCifra) d.appendChild(el('span', 'cifra', `${rec}/${esp}`));
     } else d.appendChild(el('span', 'cifra', `${plural(rec, 'recibida')} · sin estimado`));
     return d;
 }
@@ -652,7 +652,7 @@ export function verPrealta(p) {
         ['Primer envío', fechaCorta(p.FechaEstimada)], ['Correo', [p.CorreoFecha ? fechaCorta(p.CorreoFecha) : '', p.CorreoRemitente].filter(Boolean).join(' · ') || '—'],   // U-128 (v0.73.0): sin separador colgando
         ['Capturó', quien(p.CapturadaPor) || '—'], ['Firmó', p.FirmadaPor ? `${quien(p.FirmadaPor)} · ${horaCorta(p.FirmadaEl)}${prealtaCambioTrasFirma(p) ? ' · cambió después de firmarse: la puerta no la ve hasta volver a firmar' : p.Estado === 'firmada' && !prealtaFirmada(p) ? ' · sello sin firma: la puerta no la ve' : ''}` : '—'], ['Cerró', p.CerradaPor ? `${quien(p.CerradaPor)} · ${horaCorta(p.CerradaEl)}` : '—'], ['Notas', p.Notas || '—']   // U-28 / U-31 (v0.26.0)
     ];
-    for (const [k, v] of filas) { const li = el('li', '', k); li.appendChild(el('span', 'd', v)); if (k === 'Góndolas') li.lastChild.appendChild(barraAvance(gondolasDe(p))); ul.appendChild(li); }   // U-127: con la barra de la lista
+    for (const [k, v] of filas) { const li = el('li', '', k); li.appendChild(el('span', 'd', v)); if (k === 'Góndolas') li.lastChild.appendChild(barraAvance(gondolasDe(p), false)); ul.appendChild(li); }   // U-127: con la barra de la lista; U-167 (v0.80.0): sin repetir la cifra
     // Cotejo automatico de vigencias (lo que el validador firma que reviso).
     const vg = $('paDetalleVigencias'); vg.textContent = '';
     const hallazgos = [];
@@ -666,7 +666,7 @@ export function verPrealta(p) {
     for (const id of lista(p.ChoferesIds)) { const ch = porId(estado.choferes, id); if (!ch) continue;
         const h = evaluarVigencia(`Chofer ${ch.Title} · licencia`, ch.LicenciaVigencia, 'comercial', CONFIG.avisoVigenciaDias); if (h) hallazgos.push(h); }
     if (!hallazgos.length) { const li = el('li', '', 'Vigencias '); li.appendChild(etiqueta('todo vigente', 'ok')); vg.appendChild(li); }
-    for (const h of hallazgos) { const li = el('li', '', h.regla + ' '); li.appendChild(etiqueta(h.clase, h.clase)); li.appendChild(el('span', 'd', h.detalle)); vg.appendChild(li); }
+    for (const h of hallazgos) { const li = el('li', '', h.regla + ' '); li.appendChild(etiqueta(PALABRA_CLASE[h.clase] || h.clase, h.clase)); li.appendChild(el('span', 'd', h.detalle)); vg.appendChild(li); }   // U-164 (v0.80.0)
     const hayLegal = hallazgos.some(h => h.clase === 'legal');
     const porFirmar = p.Estado === 'borrador' || (p.Estado === 'firmada' && !prealtaFirmada(p));   // S-01: el sello sin firma se firma aqui mismo
     $('btnFirmar').classList.toggle('oculto', !(porFirmar && PUEDE.firmarPrealta(estado.rol)));

@@ -40,7 +40,7 @@ function avisarAlta(texto, tipo, it) {
 }
 const CAMPOS_PADRON = {
     carriers: [['Autorización ASEA', 'AutorizacionASEA'], ['Vence ASEA', 'VigenciaASEA', 'fecha'], ['Corrientes', 'Corrientes', 'lista'], ['Folio del oficio', 'FolioOficio'], ['Registro SCT', 'RegistroSCT'], ['CSF vence', 'CSFVigencia', 'fecha'], ['Activo', 'Activo', 'si'], ['Notas', 'Notas']],
-    unidades: [['Placa plana', 'PlacaPlana'], ['Carrier', 'CarrierId', 'carrier'], ['Tipo', 'TipoUnidad'], ['Marca', 'Marca'], ['No. de serie', 'NumeroSerie'], ['Capacidad', 'CapacidadKg', 'kg'], ['Folio del oficio', 'FolioOficio'], ['Tarjeta de circulación', 'TarjetaCirc'], ['Tarjeta vence', 'TarjetaVigencia', 'fecha'], ['Póliza', 'Poliza'], ['Póliza vence', 'PolizaVigencia', 'fecha'], ['Activo', 'Activo', 'si'], ['Notas', 'Notas']],
+    unidades: [['Placa plana', 'PlacaPlana'], ['Carrier', 'CarrierId', 'carrier'], ['Tipo', 'TipoUnidad'], ['Marca', 'Marca'], ['No. de serie', 'NumeroSerie'], ['Capacidad', 'CapacidadKg', 'kg'], ['Folio del oficio', 'FolioOficio'], ['No. de tarjeta de circulación', 'TarjetaCirc'], ['Tarjeta vence', 'TarjetaVigencia', 'fecha'], ['No. de póliza', 'Poliza'], ['Póliza vence', 'PolizaVigencia', 'fecha'], ['Activo', 'Activo', 'si'], ['Notas', 'Notas']],
     choferes: [['Carrier', 'CarrierId', 'carrier'], ['Licencia', 'Licencia'], ['Licencia vence', 'LicenciaVigencia', 'fecha'], ['Activo', 'Activo', 'si'], ['Notas', 'Notas']],
 };
 export const ESCRITORIO = window.matchMedia('(min-width: 900px)');
@@ -219,7 +219,8 @@ function pintarExpedientePd(c) {
     const ver = xs => soloPend ? xs.filter(x => conPend.has(x)) : xs;
     kpisPd([[us.filter(activo).length, 'Unidades', !soloPend && p.sub === 'unidades', false, () => { p.soloPend = false; sub('unidades')(); }], [hs.filter(activo).length, 'Choferes', !soloPend && p.sub === 'choferes', false, () => { p.soloPend = false; sub('choferes')(); }],
         [pend.length, 'Por atender', soloPend, pend.length > 0, () => { p.soloPend = !soloPend; if (p.soloPend) p.sub = subPend; pintarPadron(); }]]);
-    $('pdnUnidades').textContent = us.length || ''; $('pdnChoferes').textContent = hs.length || '';
+    // U-161 (v0.80.0): la pestaña cuenta lo mismo que la banda (los activos); antes contaba también los de baja y daban dos cifras.
+    $('pdnUnidades').textContent = us.filter(activo).length || ''; $('pdnChoferes').textContent = hs.filter(activo).length || '';
     for (const b of $('pdSubTabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.sub === p.sub));
     $('pdpUnidades').hidden = p.sub !== 'unidades'; $('pdpChoferes').hidden = p.sub !== 'choferes';
     const ficha = (clave, x) => () => irPadron('ficha', { ficha: { clave, id: x.id }, desde: 'carrier' });
@@ -283,7 +284,7 @@ function pintarFichaPd(c) {
     const { dl: dlu, sec, fila } = dlPd();
     sec('Historial'); fila(`Pre-altas que ${clave === 'unidades' ? 'la' : 'lo'} citan`, String(u.prealtas)); fila(`Góndolas (últimos ${CONFIG.ventanaDias} días)`, String(u.gondolas));
     if (clave !== 'carriers') fila('Última entrada', u.ultima ? fechaCorta(u.ultima) : '');
-    if (x.Notas) { sec('Notas'); const nt = el('p', 'pd-notas', String(x.Notas).replace(/[\w.+-]+@[\w.-]+\.\w+/g, m => quien(m) || m)); dlu.appendChild(nt); }   // U-141 (v0.73.0): se guarda el correo, se lee el nombre
+    if (x.Notas) { sec('Notas'); const nt = el('p', 'pd-notas', String(x.Notas).replace(/[\w.+-]+@[\w.-]+\.\w+/g, m => quien(m) || m).replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$3/$2/$1')); dlu.appendChild(nt); }   // U-141 (v0.73.0): se guarda el correo, se lee el nombre; U-166 (v0.80.0): y la fecha ISO en dd/mm/aaaa
     a.appendChild(dlu);
     a.appendChild(el('p', 'pista', referenciasPadron(clave, x) ? 'Ya lo cita el historial: no se elimina, se da de baja.' : 'Nada lo cita todavía: se puede eliminar si se transcribió mal.'));
 }

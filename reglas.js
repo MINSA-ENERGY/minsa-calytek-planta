@@ -26,6 +26,8 @@ export function etiquetaCorriente(v) { const c = CORRIENTES.find(([k]) => k === 
  * «Lo capturado». `autorizada` la decide quien llama con la firma (excepcionAutorizada en app.js), nunca el sello solo.
  * Cualquier valor que no sea pasa ni rechazo cae en la espera: es lo que ya hacía la etiqueta de Hoy.
  */
+/** U-164 (v0.80.0): la clase de cada regla en palabras de caseta, las mismas de la vista previa de la puerta. */
+export const PALABRA_CLASE = { ok: 'en verde', aviso: 'aviso', comercial: 'para gerencia', legal: 'no pasa' };
 export function palabraCompuerta(compuerta, autorizada = false) {
     if (compuerta === 'pasa') return { palabra: 'Pasa', corta: 'pasa', clase: 'pasa', tono: 'ok' };
     if (compuerta === 'rechazo-legal') return { palabra: 'No entra', corta: 'no entró', clase: 'rechazo-legal', tono: 'bad' };

@@ -73,11 +73,6 @@ async function sesionIniciada() {
 }
 
 /**
- * Vuelve a leer las siete listas y repinta la pestana abierta. Antes el estado se leia UNA vez al
- * entrar: gerencia con «Hoy» abierto toda la manana no veia la excepcion nueva, y el basculista no
- * veia la gondola que la caseta acababa de registrar en otro celular (auditoria 2026-09-05).
- * Corre por el boton Actualizar y solo al volver a la app tras un rato (visibilitychange).
- *//**
  * Hay una captura a medias en pantalla: repintar la pestana la borraria. Antes solo protegia el pesaje y el
  * veredicto; el alta de un carrier en el celular se perdia a los 2 minutos por el refresco automatico y al
  * volver a la app (Carlos, 2026-09-08). Cubre todo formulario abierto y la puerta con algo tecleado.
@@ -96,6 +91,12 @@ export function capturaAMedias() {   // exportada en v0.78.0 (U-158); registrada
 registrarCapturaPendiente(capturaAMedias);   // U-150 (v0.79.0)
 
 let recargando = false;
+/**
+ * Vuelve a leer las siete listas y repinta la pestana abierta. Antes el estado se leia UNA vez al
+ * entrar: gerencia con «Hoy» abierto toda la manana no veia la excepcion nueva, y el basculista no
+ * veia la gondola que la caseta acababa de registrar en otro celular (auditoria 2026-09-05).
+ * Corre por el boton Actualizar y solo al volver a la app tras un rato (visibilitychange).
+ */   // C-96 (v0.80.0): la doc vuelve a su funcion
 export async function recargar(silencioso = false) {
     if (recargando || !estado.siteId) return;
     // C-23 (v0.28.0): con una escritura en vuelo o un confirm abierto NO se sustituyen las listas: el Object.assign que sigue

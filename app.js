@@ -108,11 +108,12 @@ $('btnCancelarPuerta').addEventListener('click', async () => {
 });
 // v0.72.0 (bug que reportó Carlos): regresar y cambiar de programa dejaba las placas y el chofer del programa anterior
 // —de otro carrier— capturados y en «Así va la góndola». Al cambiar de programa se limpian los datos que dependen de él.
-let prealtaPuertaPrevia = '';
+// C-90 (v0.80.0): el previo vive en el propio select (dataset.previa) y lo escribe TODO camino que asigna el programa: con una
+// sola firmada la app la preselecciona sin evento change (puerta.js), y la variable suelta se quedaba vacia y no limpiaba nada.
 $('puPrealta').addEventListener('change', () => {
-    const v = $('puPrealta').value;
-    if (prealtaPuertaPrevia && v !== prealtaPuertaPrevia) for (const id of ['puPlaca', 'puPlacaPlana', 'puChofer', 'puChoferNombre']) $(id).value = '';
-    prealtaPuertaPrevia = v;
+    const v = $('puPrealta').value, previa = $('puPrealta').dataset.previa || '';
+    if (previa && v !== previa) for (const id of ['puPlaca', 'puPlacaPlana', 'puChofer', 'puChoferNombre']) $(id).value = '';
+    $('puPrealta').dataset.previa = v;
     marcarOpcion($('puProgramas'), v); pintarChoferesPuerta(); pintarUnidadesPuerta(); pintarPrevioPuerta(); });
 $('puChofer').addEventListener('change', () => marcarOpcion($('puChoferes'), $('puChofer').value));
 // C-55 (v0.52.0): los tres controles de corriente salen del mismo catálogo (CORRIENTES, reglas.js).

@@ -77,10 +77,12 @@ export function aplanar(item) {
     return { ...f, id: Number(item.id ?? f.id), ...(por ? { _por: por } : {}) };
 }
 
-export function crearCliente(graph, token) {
+// C-92 (v0.80.0): el cache de ids de lista lo puede pasar quien llama y sobrevive al cliente: refrescarCliente crea uno por
+// token (cada 2 min y en cada escritura) y con el Map adentro cada carga pedia /lists hasta 8 veces en paralelo.
+export function crearCliente(graph, token, listasPorNombre = new Map()) {
     const cab = { Authorization: 'Bearer ' + token };
     const json = { 'Content-Type': 'application/json' };
-    const listasPorNombre = new Map();
+    let listasEnVuelo = null;   // C-92: una sola lectura de /lists aunque la pidan varias listas a la vez
 
     async function pedir(url, opciones = {}, avisar) {
         return conReintento(() => fetch(url, {
@@ -114,7 +116,7 @@ export function crearCliente(graph, token) {
         },
 
         async idDeLista(siteId, nombre) {
-            if (!listasPorNombre.has(nombre)) await this.listas(siteId);
+            if (!listasPorNombre.has(nombre)) await (listasEnVuelo ||= this.listas(siteId).finally(() => { listasEnVuelo = null; }));
             const id = listasPorNombre.get(nombre);
             // C-15: excepcion tipada como el 404 de Graph, para que quien llama no dependa del texto.
             if (!id) throw Object.assign(new Error(`no existe la lista ${nombre} en el sitio: hay que provisionarla (herramientas-dev/provisionar.html)`), { status: 404, codigo: 'listaNoExiste' });

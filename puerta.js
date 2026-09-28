@@ -2,7 +2,7 @@
 // Salió de app.js en C-76 (v0.75.0): código movido tal cual; solo se agregaron import/export.
 
 import { CONFIG } from './config.js';
-import { compuerta, CORRIENTES, etiquetaCorriente, lista, palabraCompuerta, placaNormal, plural, PUEDE, registroPuerta, siguienteFolio } from './reglas.js';
+import { compuerta, CORRIENTES, etiquetaCorriente, lista, PALABRA_CLASE, palabraCompuerta, placaNormal, plural, PUEDE, registroPuerta, siguienteFolio } from './reglas.js';
 import { $, anclar, atraparFoco, avisar, el, embarquesDelAno, escribiendo, estado, fundirEnVentana, L, limpiarAvisos, nombreDe, opciones, porId, prealtaFirmada, refrescarCliente, renglon, vivo } from './nucleo.js';
 import { irA } from './navegacion.js';
 import { abrirPesaje, elegirVistaGondolas } from './gondolas.js';
@@ -21,6 +21,7 @@ export function pintarPuerta() {
     if (borradores.length) pp.textContent = `${borradores.length === 1 ? 'Hay 1 pre-alta por firmar' : `Hay ${borradores.length} pre-altas por firmar`}${borradores.length <= 2 ? `: ${borradores.map(p => p.Title).join(' · ')}` : ' en Pre-altas'}. Sus góndolas no pueden entrar hasta que la Responsable Ambiental firme.`;
     opciones($('puPrealta'), firmadas, p => p.id, p => `${p.Title} · ${etiquetaCorriente(p.Corriente) || '?'} · ${nombreDe(estado.carriers, p.CarrierId)}`);
     if (!$('puPrealta').value && firmadas.length === 1) $('puPrealta').value = String(firmadas[0].id);   // U-40: una sola firmada no se hace elegir
+    $('puPrealta').dataset.previa = $('puPrealta').value;   // C-90: lo que la app deja elegido cuenta como previo
     pintarProgramasPuerta(firmadas);
     pintarChoferesPuerta();
     pintarUnidadesPuerta();
@@ -322,7 +323,7 @@ function pintarHallazgos(ul, hallazgos, decide) {
         const texto = el('span', '', h.regla);
         if (h.detalle) texto.appendChild(el('span', 'd', h.detalle));
         li.appendChild(texto);
-        li.appendChild(el('small', '', h.clase === 'ok' ? 'ok' : h.clase));
+        li.appendChild(el('small', '', PALABRA_CLASE[h.clase] || h.clase));   // U-164 (v0.80.0)
         ul.appendChild(li);
     }
 }

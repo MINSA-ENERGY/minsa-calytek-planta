@@ -146,7 +146,7 @@ function pintarCertificadoDeEmbarque() {
     const ident = (cert
         ? `${cert.Title} · ${imprimible ? 'vigente y firmado' : cert.Estado + (cert.Estado === 'vigente' ? ' · SIN FIRMA' : '')}`
         : `Góndola ${e.Title || '(sin folio)'} · sin certificado${borrador ? ' · abajo, el BORRADOR: así saldría el papel' : ''}`)
-        + ` · góndola ${e.Title || '—'}${e.Manifiesto ? ' · manifiesto ' + e.Manifiesto : ''}`
+        + (cert ? ` · góndola ${e.Title || '—'}` : '') + (e.Manifiesto ? ' · manifiesto ' + e.Manifiesto : '')   // U-169 (v0.80.0): sin certificado la góndola ya va al inicio
         + (certs.length > 1 ? ` · ${certs.length} emitidos para esta góndola` : '');
     const avisosCert = [
         vig && e.Etapa === 'anulado' ? '⚠ La góndola está anulada: cancela este certificado.' : '',   // U-70 (v0.40.0)

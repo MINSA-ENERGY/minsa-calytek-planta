@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { autoformatoFecha, firmaAmparaPrealta, horaMexico, limpiar, palabraCompuerta, PUEDE, rolDe } from './reglas.js';
 
-export const VERSION = '0.79.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+export const VERSION = '0.80.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 export const $ = id => document.getElementById(id);
 export const L = CONFIG.listas;
 
@@ -159,16 +159,6 @@ export function confirmar({ titulo, texto, ok = 'Confirmar', cancelar = 'Cancela
 }
 export function etiqueta(texto, clase) { return el('span', 'etiqueta ' + (clase || ''), texto); }
 /**
- * Un <div> que se abre al tocarlo (tarjeta de la fila del dia, renglon del padron) se vuelve alcanzable con
- * teclado y lector de pantalla (U-15, v0.22.0): role=button, tabindex=0, aria-expanded, y Enter/Espacio hacen
- * lo mismo que el clic. La tecla solo cuenta sobre el propio nodo: un Enter en un boton interior no lo abre.
- */
-function desplegable(nodo, abierto, alClic) {
-    nodo.setAttribute('role', 'button'); nodo.tabIndex = 0; nodo.setAttribute('aria-expanded', String(!!abierto));
-    nodo.addEventListener('click', alClic);
-    nodo.addEventListener('keydown', ev => { if (ev.target === nodo && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); alClic(ev); } });
-}
-/**
  * U-40 (v0.29.0): conserva el value anterior si sigue entre las opciones nuevas. Antes cada repintado (cambio de pestaña,
  * refresco de 2 minutos) rehacía el select en «— elige —» y la puerta perdía el programa elegido (los campos de texto sí
  * sobrevivían). Quien quiera empezar en blanco pone sel.value = '' después.
@@ -234,7 +224,6 @@ export function atraparFoco(contenedor, ev) {
 export const textoDe = v => v === null || v === undefined ? '' : String(v);
 /** C-26: el filtro del buscador (padron y cerrados): sin texto pega todo. */
 export const filtroTexto = q => (...campos) => !q || campos.some(v => normaliza(v).includes(q));
-const haySel = sel => sel !== null && sel !== undefined;
 export function nombreDe(coleccion, id) { if (id === null || id === undefined || id === '') return '—'; const x = porId(coleccion, id); return x ? x.Title : `#${id}`; }
 
 // ---------------------------------------------------------------- sesion
@@ -275,6 +264,7 @@ export async function salir() {
 }
 // U-150 (v0.79.0): nucleo no importa pantallas (C-76), asi que navegacion registra aqui su capturaAMedias().
 let capturaPendiente = () => false;
+const idsDeLista = new Map();   // C-92 (v0.80.0): el cache de ids de lista sobrevive a cada cliente nuevo
 export function registrarCapturaPendiente(fn) { capturaPendiente = fn; }
 export async function refrescarCliente() {
     try {
@@ -292,7 +282,7 @@ export async function refrescarCliente() {
         if (pideInteraccion) { avisar('La sesión caducó: volviendo a entrar…', 'ojo'); await pca.acquireTokenRedirect({ scopes: CONFIG.scopes, account: pca.getAllAccounts()[0] }); }
         throw e;
     }
-    estado.cliente = crearCliente(CONFIG.graph, estado.token);
+    estado.cliente = crearCliente(CONFIG.graph, estado.token, idsDeLista);
 }
 /**
  * U-51 / U-47 (v0.29.0): el rail y el menú «···» dicen QUIÉN entró por su nombre (quien(): PLANTA_Roles, luego la cuenta MSAL,
@@ -471,11 +461,11 @@ export async function embarquesDelAno(avisar) {
  * «Empezó» = Created de la pre-alta (lo pone SharePoint; ningún embarque es anterior), o su firma si no viene. Las cerradas
  * ya no reciben góndolas y se leen una vez por sesión; las firmadas, en cada carga.
  */
-async function cargarProgramasViejos(c, s, avisar) {
+async function cargarProgramasViejos(c, s, avisar, prealtas) {   // C-89: devuelve el mapa; cargarTodo lo asigna junto con las listas
     const desde = Date.parse(estado.ventanaDesde);
     const viejo = p => (p.Estado === 'firmada' || p.Estado === 'cerrada') && !(Date.parse(p.Created || p.FirmadaEl || '') >= desde);
     const antes = estado.fueraDeVentana, ahora = new Map(), faltan = [];
-    for (const p of estado.prealtas.filter(viejo)) {
+    for (const p of prealtas.filter(viejo)) {
         if (p.Estado === 'cerrada' && antes.has(p.id)) ahora.set(p.id, antes.get(p.id));
         else { ahora.set(p.id, []); faltan.push(p.id); }
     }
@@ -483,7 +473,7 @@ async function cargarProgramasViejos(c, s, avisar) {
         const ids = faltan.slice(i, i + 15);
         for (const e of await c.renglones(s, L.embarques, ids.map(id => `fields/PreAltaId eq ${id}`).join(' or '), avisar)) ahora.get(Number(e.PreAltaId))?.push(e);
     }
-    estado.fueraDeVentana = ahora;
+    return ahora;
 }
 /** Los embarques que cuentan para los programas: la ventana más los de programas viejos (C-68), sin repetir. */
 export function embarquesDeProgramas() {
@@ -516,9 +506,12 @@ export async function cargarTodo() {
             c.renglones(s, L.prealtas, null, av), embarquesYCertificados, c.renglones(s, L.vigencias, null, av),
             c.renglones(s, L.roles, null, av), cargarFirmas(c, s, av)
         ]);
+    // C-89 (v0.80.0): los programas viejos se leen ANTES de asignar: si esa lectura fallaba, las listas ya estaban cambiadas y
+    // reanclar() no corria, y el pesaje o la ficha abiertos quedaban apuntando a objetos que ya no estaban en estado.*.
+    const viejos = await cargarProgramasViejos(c, s, av, leido[3]);
     if (g !== generacion || escrituras > 0) return false;   // C-80
     [estado.carriers, estado.unidades, estado.choferes, estado.prealtas, [estado.embarques, estado.certificados], estado.vigencias, estado.roles, estado.firmas] = leido;
-    await cargarProgramasViejos(c, s, av);
+    estado.fueraDeVentana = viejos;
     estado.cargadoEl = Date.now();
     reanclar();
     return true;
