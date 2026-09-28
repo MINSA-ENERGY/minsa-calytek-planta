@@ -637,3 +637,12 @@ export function registroCertificado({ folio, prealtaId, embarqueId, papel, sufij
         Motivo: sustituye ? `Sustituye a ${sustituye.Title}: ${motivoSust}`.slice(0, 255) : null
     });
 }
+
+// C-86 (v0.79.0): puras, desde archivos.js — la UNA definicion de «rechazo o excepcion» (C-29) y la UNA lectura de
+// CompuertaDetalle (C-54). Las usan Hoy, Reportes y Gondolas.
+export const esRechazo = e => e.Etapa !== 'anulado' && (e.Etapa === 'rechazado' || e.Compuerta === 'excepcion-comercial');
+/** C-54 (v0.51.0): la ÚNICA lectura de CompuertaDetalle — los hallazgos de las clases pedidas; detalle ilegible = ninguno. */
+export function hallazgosDe(e, ...clases) {
+    try { return JSON.parse(e.CompuertaDetalle || '[]').filter(h => clases.includes(h.clase)); } catch (_) { return []; }
+}
+export const reglasDe = (e, ...clases) => hallazgosDe(e, ...clases).map(h => h.regla).join(', ');

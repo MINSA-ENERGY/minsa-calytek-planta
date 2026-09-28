@@ -3,14 +3,14 @@
 
 import { CONFIG } from './config.js';
 import { comprimir } from './imagen.js';
-import { accionCorreccion, avisoNeto, compuerta, etiquetaCorriente, fechaCorta, fechaMexico, horaMexico, limpiar, lista, plural, PUEDE, siguienteFolio, siguientePaso, slug, yaCapturado } from './reglas.js';
+import { accionCorreccion, avisoNeto, etiquetaCorriente, fechaCorta, fechaMexico, hallazgosDe, horaMexico, limpiar, lista, plural, PUEDE, reglasDe, siguienteFolio, siguientePaso, slug, yaCapturado } from './reglas.js';
 import { $, anclar, aplicar, avisar, botonAccion, confirmar, el, embarquesDelAno, enListaPlanta, enPlanta, esColumnaFaltante, escribiendo, esperaAutorizacion, estado, etiqueta, excepcionAutorizada, filtroTexto, firmar, fundirEnVentana, horaCorta, L, nombreDe, normaliza, palabraCompuertaDe, pintarInsignias, porId, quien, refrescarCliente, selloSinFirma, VERSION, vivo } from './nucleo.js';
-import { entrar, recargar, repintar } from './navegacion.js';
+import { repintar } from './navegacion.js';
 import { asegurarFolioUnico } from './puerta.js';
 import { abrirCertificadoDeEmbarque, camposCancelacion, certificadosDe, certificadoVigente } from './certificado.js';
 import { ESCRITORIO } from './padron.js';
 import { cortesDia, pintarHoy } from './hoy.js';
-import { hallazgosDe, invalidarRama, reglasDe } from './archivos.js';
+import { invalidarRama } from './archivos.js';
 
 // ================================================================ GONDOLAS (rediseño tanda 3, v0.48.0)
 

@@ -3,9 +3,9 @@
 
 import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
-import { autoformatoFecha, compuerta, firmaAmparaPrealta, horaMexico, limpiar, lista, palabraCompuerta, PUEDE, rolDe } from './reglas.js';
+import { autoformatoFecha, firmaAmparaPrealta, horaMexico, limpiar, palabraCompuerta, PUEDE, rolDe } from './reglas.js';
 
-export const VERSION = '0.78.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+export const VERSION = '0.79.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 export const $ = id => document.getElementById(id);
 export const L = CONFIG.listas;
 
@@ -273,6 +273,9 @@ export async function salir() {
     try { await pca.logoutRedirect({ account: estado.cuenta }); }
     catch (_) { sessionStorage.clear(); window.location.reload(); }
 }
+// U-150 (v0.79.0): nucleo no importa pantallas (C-76), asi que navegacion registra aqui su capturaAMedias().
+let capturaPendiente = () => false;
+export function registrarCapturaPendiente(fn) { capturaPendiente = fn; }
 export async function refrescarCliente() {
     try {
         estado.token = await token();
@@ -281,6 +284,11 @@ export async function refrescarCliente() {
         // login por redireccion en vez de dejar un "No se pudo guardar" que nadie sabe resolver.
         const pideInteraccion = (typeof msal !== 'undefined' && msal.InteractionRequiredAuthError && e instanceof msal.InteractionRequiredAuthError)
             || (e && e.errorCode === 'interaction_required');
+        // U-150 (v0.79.0): con un pesaje, una pre-alta o un alta a medias NO se redirige: la redireccion recarga la pagina y lo
+        // tecleado (y la foto) se perdian sin aviso, en el refresco de 2 min o al tocar Guardar. Se dice y se espera a que la
+        // captura se descarte; el siguiente refresco (o «Actualizar») ya sin captura es el que vuelve a entrar. El texto va en el
+        // ERROR y no en un avisar(): cada llamador lo pinta en su catch («No se pudo guardar: …») y un avisar() previo quedaba pisado.
+        if (pideInteraccion && capturaPendiente()) throw new Error('la sesión caducó y no se puede guardar. Anota lo capturado, descártalo y toca «Actualizar» para volver a entrar.');
         if (pideInteraccion) { avisar('La sesión caducó: volviendo a entrar…', 'ojo'); await pca.acquireTokenRedirect({ scopes: CONFIG.scopes, account: pca.getAllAccounts()[0] }); }
         throw e;
     }

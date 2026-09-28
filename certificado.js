@@ -2,8 +2,8 @@
 // Salió de app.js en C-76 (v0.75.0): código movido tal cual; solo se agregaron import/export.
 
 import { CONFIG } from './config.js';
-import { aIsoDia, datosCertificado, fechaCorta, fechaMexico, lista, plural, PUEDE, registroCertificado, residuoDe, siguienteFolio, sufijoVerificacion, toneladas, urlVerificacion } from './reglas.js';
-import { $, anclar, aplicar, avisar, confirmar, el, escribiendo, estado, etiqueta, firmaDe, firmar, iso, L, limpiarAvisos, motivoSinFirmas, porId, quien, refrescarCliente, renglon, textoDe, VERSION } from './nucleo.js';
+import { datosCertificado, fechaCorta, fechaMexico, lista, plural, PUEDE, registroCertificado, residuoDe, siguienteFolio, sufijoVerificacion, toneladas, urlVerificacion } from './reglas.js';
+import { $, anclar, aplicar, avisar, confirmar, el, escribiendo, estado, etiqueta, firmaDe, firmar, L, limpiarAvisos, motivoSinFirmas, porId, quien, refrescarCliente, textoDe, VERSION } from './nucleo.js';
 import { asegurarFolioUnico } from './puerta.js';
 import { pintarListasGondolas } from './gondolas.js';
 import { segundoPaso } from './padron.js';
@@ -29,12 +29,12 @@ const diaCert = iso => (iso ? fechaCorta(fechaMexico(new Date(iso))) : '—');
  */
 let indiceCertificados = { lista: null, n: -1, porEmbarque: new Map() };
 export function certificadosDe(e) {
-    const lista = estado.certificados;
-    if (indiceCertificados.lista !== lista || indiceCertificados.n !== lista.length) {
+    const certs = estado.certificados;   // C-83: no tapa lista() de reglas.js
+    if (indiceCertificados.lista !== certs || indiceCertificados.n !== certs.length) {
         const porEmbarque = new Map();
-        for (const c of lista) { const k = Number(c.EmbarqueId); if (!porEmbarque.has(k)) porEmbarque.set(k, []); porEmbarque.get(k).push(c); }
+        for (const c of certs) { const k = Number(c.EmbarqueId); if (!porEmbarque.has(k)) porEmbarque.set(k, []); porEmbarque.get(k).push(c); }
         for (const v of porEmbarque.values()) v.sort((a, b) => b.id - a.id);
-        indiceCertificados = { lista, n: lista.length, porEmbarque };
+        indiceCertificados = { lista: certs, n: certs.length, porEmbarque };
     }
     return indiceCertificados.porEmbarque.get(Number(e.id)) || [];
 }

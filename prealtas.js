@@ -4,10 +4,10 @@
 import { CONFIG } from './config.js';
 import { aIsoDia, basesRecientes, clienteDe, clientesPrealta, CORRIENTES, etiquetaCorriente, evaluarVigencia, fechaCorta, fechaDePestana, fechaMexico, huellaPrealta, limpiar, lista, mesesPrealtas, paraPatch, plural, prealtaSinMovimiento, PUEDE, siguienteFolio } from './reglas.js';
 import { $, abrirForma, anclar, aplicar, avisar, cerrarForma, confirmar, el, embarquesDeProgramas, esColumnaFaltante, escribiendo, estado, etiqueta, firmar, hayCaptura, horaCorta, huellaForma, L, limpiarAvisos, motivoSinFirmas, nombreDe, opciones, pintarInsignias, porId, prealtaCambioTrasFirma, prealtaFirmada, quien, reanclar, refrescarCliente, textoDe, vivo } from './nucleo.js';
-import { entrar, irA, repintar } from './navegacion.js';
+import { irA, repintar } from './navegacion.js';
 import { asegurarFolioUnico, renglonOpcion } from './puerta.js';
 import { pintarCertificadoEnDetalle } from './certificado.js';
-import { activo, etiquetaVigencia, sinFecha, vigenciasPadron } from './padron.js';
+import { etiquetaVigencia, sinFecha, vigenciasPadron } from './padron.js';
 
 // ================================================================ PRE-ALTAS
 

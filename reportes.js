@@ -5,8 +5,7 @@ import { CONFIG } from './config.js';
 import { fechaCorta, sumarDias } from './reglas.js';
 import { $, el, enPlanta, estado, nombreDe, renglon } from './nucleo.js';
 import { gondolasDe } from './prealtas.js';
-import { cortesDia, pintarKpisReportes } from './hoy.js';
-import { rechazosYExcepciones, renglonRechazo } from './archivos.js';
+import { cortesDia, rechazosYExcepciones, renglonRechazo } from './hoy.js';
 
 // ================================================================ REPORTES (v0.32.0, sección aparte; artifact 1GvBJaYooYvjZT4rMRtL9Q)
 // Los cinco KPI que vivían en Hoy, más lo que se lee de lo cargado: avance por programa, por carrier, toneladas por semana,
@@ -69,4 +68,28 @@ export function pintarReportes() {
     const nCerr = cerrados(() => true).length;
     if (!fuera.length) nt.appendChild(el('p', 'vacio', !nCerr ? 'Ninguno: todavía no hay góndolas cerradas en lo cargado.' : nCerr === 1 ? 'Ninguno: la góndola cerrada quedó dentro de la banda.' : `Ninguno: las ${nCerr} cerradas quedaron dentro de la banda.`));
     for (const e of fuera) nt.appendChild(renglon(`${e.Title} · ${e.PlacaTractor}`, `${fechaCorta(e.TaraHora || e.Arribo)} · neto ${Number(e.NetoKg).toLocaleString('es-MX')} kg · ${(e.Notas || '').replace(/\n.*$/s, '')}`));
+}
+
+// C-86 (v0.79.0): desde hoy.js, donde vivía desde C-76; solo los pinta Reportes.
+// KPI: numero, tendencia y techo.
+export function pintarKpisReportes({ cerradosHoy, cerradosAyer, cerradosSemana, activos, rechazosSemana, borradores }) {
+    const kg = xs => xs.reduce((a, e) => a + (Number(e.NetoKg) || 0), 0);
+    const k = $('tbKpis'); k.textContent = '';
+    const kpi = (l, n, unidad, t, clase) => {
+        const d = el('div', 'kpi ' + ({ mal: 'is-danger', ojo: 'is-warn', ok: 'is-ok', info: 'is-info' }[clase] || '')); d.appendChild(el('div', 'l', l));
+        const num = el('div', 'n' + (clase === 'mal' || clase === 'ojo' ? ' ' + clase : ''), String(n)); if (unidad) num.appendChild(el('small', '', unidad)); d.appendChild(num);
+        if (t) d.appendChild(t); k.appendChild(d); return d;
+    };
+    const tend = (h, a, texto) => {
+        const t = el('div', 't'); const dif = h - a;
+        if (dif !== 0) t.appendChild(el('span', dif > 0 ? 'sube' : 'baja', (dif > 0 ? '▲ ' : '▼ ') + Math.abs(dif) + ' '));
+        t.appendChild(document.createTextNode(texto)); return t;
+    };
+    kpi('Góndolas cerradas hoy', cerradosHoy.length, null, tend(cerradosHoy.length, cerradosAyer.length, 'vs ayer'), 'ok');
+    kpi('Toneladas netas hoy', (kg(cerradosHoy) / 1000).toFixed(1), 't', el('div', 't', cerradosHoy.length ? `${(kg(cerradosHoy) / 1000 / cerradosHoy.length).toFixed(1)}\u00a0t por góndola · semana ${(kg(cerradosSemana) / 1000).toFixed(1)}\u00a0t` : `semana ${(kg(cerradosSemana) / 1000).toFixed(1)}\u00a0t`), 'ok');   // espacio duro: la «t» caía sola en otro renglón
+    const enP = kpi('En planta ahora', activos.length, null, el('div', 't', `${activos.filter(e => e.Etapa === 'bruto').length} por tara · ${activos.filter(e => e.Etapa === 'compuerta').length} por bruto`), 'info');
+    const med = el('div', 'medidor'); const mi = el('i'); mi.style.width = Math.min(100, Math.round(((cerradosHoy.length + activos.length) / CONFIG.techoGondolasDia) * 100)) + '%'; med.appendChild(mi); enP.appendChild(med);
+    enP.appendChild(el('div', 't', `techo ${CONFIG.techoGondolasDia} al día`));
+    kpi('Rechazos esta semana', rechazosSemana.length, null, el('div', 't', rechazosSemana.length ? 'legal · el residuo no entró' : 'ninguno'), rechazosSemana.length ? 'mal' : '');
+    kpi('Pre-altas por firmar', borradores.length, null, el('div', 't', borradores.length ? 'esperan a la Responsable Ambiental' : 'todas firmadas'), borradores.length ? 'ojo' : '');
 }

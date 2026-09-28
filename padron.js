@@ -3,7 +3,7 @@
 
 import { CONFIG } from './config.js';
 import { aIsoDia, etiquetaCorriente, evaluarVigencia, fechaCorta, fechaMexico, limpiar, lista, paraPatch, placaNormal, plural, PUEDE } from './reglas.js';
-import { $, abrirForma, anclar, aplicar, asistentePadronAbierto, asistentePrealtaAbierto, avisar, cerrarForma, confirmar, el, esColumnaFaltante, escribiendo, estado, etiqueta, filtroTexto, hayCaptura, huellaForma, L, limpiarAvisos, nombreDe, normaliza, opciones, porId, quien, refrescarCliente, salir, textoDe, vivo } from './nucleo.js';
+import { $, abrirForma, anclar, aplicar, asistentePadronAbierto, asistentePrealtaAbierto, avisar, cerrarForma, confirmar, el, esColumnaFaltante, escribiendo, estado, etiqueta, filtroTexto, hayCaptura, huellaForma, L, limpiarAvisos, nombreDe, normaliza, opciones, porId, quien, refrescarCliente, textoDe, vivo } from './nucleo.js';
 import { elegirCarrierEnPrealta } from './prealtas.js';
 
 // ================================================================ PADRON

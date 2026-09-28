@@ -2,8 +2,8 @@
 // Salió de app.js en C-76 (v0.75.0): código movido tal cual; solo se agregaron import/export.
 
 import { CONFIG } from './config.js';
-import { lista, rolDe } from './reglas.js';
-import { $, asistentePadronAbierto, asistentePrealtaAbierto, avisar, cargarTodo, confirmar, el, escrituras, estado, limpiarAvisos, pasoEntrada, pca, pintarInsignias, pintarSync, ponerQuien, prepararMsal, refrescarCliente } from './nucleo.js';
+import { rolDe } from './reglas.js';
+import { $, asistentePadronAbierto, asistentePrealtaAbierto, avisar, cargarTodo, registrarCapturaPendiente, confirmar, escrituras, estado, limpiarAvisos, pasoEntrada, pca, pintarInsignias, pintarSync, ponerQuien, prepararMsal, refrescarCliente } from './nucleo.js';
 import { cerrarVeredicto, pintarPuerta, puertaConCaptura } from './puerta.js';
 import { cerrarAsistente, pintarGondolas, soltarFotoPrevia } from './gondolas.js';
 import { ocultarListoPrealta, pintarPrealtas } from './prealtas.js';
@@ -82,7 +82,7 @@ async function sesionIniciada() {
  * veredicto; el alta de un carrier en el celular se perdia a los 2 minutos por el refresco automatico y al
  * volver a la app (Carlos, 2026-09-08). Cubre todo formulario abierto y la puerta con algo tecleado.
  */
-export function capturaAMedias() {   // exportada en v0.78.0 (U-158)
+export function capturaAMedias() {   // exportada en v0.78.0 (U-158); registrada en nucleo para refrescarCliente (U-150)
     const abierto = id => !$(id).classList.contains('oculto');
     // Tanda 5 (decisión 11): el asistente de la báscula abierto —pesaje, pausa «A descargar» o ticket— cuenta entero.
     if (abierto('baAsis') || abierto('veredicto')) return true;
@@ -92,6 +92,8 @@ export function capturaAMedias() {   // exportada en v0.78.0 (U-158)
     if (estado.pestana === 'puerta' && puertaConCaptura()) return true;
     return false;
 }
+
+registrarCapturaPendiente(capturaAMedias);   // U-150 (v0.79.0)
 
 let recargando = false;
 export async function recargar(silencioso = false) {

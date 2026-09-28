@@ -10,7 +10,7 @@
 
 import { CONFIG } from './config.js';
 import { CORRIENTES, placaNormal, subpasoDeRegla } from './reglas.js';
-import { $, abrirForma, atraparFoco, avisar, cerrarForma, confirmar, el, estado, hayCaptura, huellaForma, limpiarAvisos, pintarSync, porId, salir, VERSION, vivo } from './nucleo.js';
+import { $, abrirForma, atraparFoco, avisar, cerrarForma, confirmar, el, estado, hayCaptura, huellaForma, limpiarAvisos, pintarSync, porId, salir, VERSION } from './nucleo.js';
 import { arrancar, botonesRail, capturaAMedias, entrar, irDesdePestana, recargar, repintar, soltarPesaje } from './navegacion.js';
 import { camposCapturaPuerta, cerrarVeredicto, correrCompuerta, enfocarCampoPuerta, irSubpaso, marcarChip, marcarOpcion, pintarChoferesPuerta, pintarCorrientesPuerta, pintarPrevioPuerta, pintarUnidadesPuerta, puertaConCaptura, registrarPuerta, subpasoInicial } from './puerta.js';
 import { abrirHojaCapturado, abrirTicketPop, cerrarAsistente, cerrarHojaCapturado, guardarPeso, kgG, revisarNeto, tomarFoto } from './gondolas.js';

@@ -3,12 +3,11 @@
 
 import { CONFIG } from './config.js';
 import { compuerta, CORRIENTES, etiquetaCorriente, lista, palabraCompuerta, placaNormal, plural, PUEDE, registroPuerta, siguienteFolio } from './reglas.js';
-import { $, anclar, atraparFoco, avisar, el, embarquesDelAno, escribiendo, estado, firmar, fundirEnVentana, L, limpiarAvisos, nombreDe, opciones, porId, prealtaFirmada, refrescarCliente, renglon, vivo } from './nucleo.js';
-import { entrar, irA } from './navegacion.js';
+import { $, anclar, atraparFoco, avisar, el, embarquesDelAno, escribiendo, estado, fundirEnVentana, L, limpiarAvisos, nombreDe, opciones, porId, prealtaFirmada, refrescarCliente, renglon, vivo } from './nucleo.js';
+import { irA } from './navegacion.js';
 import { abrirPesaje, elegirVistaGondolas } from './gondolas.js';
 import { gondolasDe } from './prealtas.js';
 import { etiquetaVigencia } from './padron.js';
-import { esRechazo } from './archivos.js';
 
 // ================================================================ PUERTA
 
@@ -280,21 +279,21 @@ export function pintarPrevioPuerta() {
  */
 const REGLAS_DEL_CAMPO = { 'el programa': ['Pre-alta', 'Carrier'], 'la placa del tractor': ['Placa'], 'el manifiesto': ['Manifiesto'], 'la corriente': ['Corriente'] };
 function pintarVivoPuerta(e, faltan) {
-    const vivo = $('puVivo'); vivo.textContent = '';
-    if (faltan.includes('el programa')) { vivo.textContent = 'Elige el programa: la revisión en vivo empieza con él.'; return; }
+    const caja = $('puVivo'); caja.textContent = '';
+    if (faltan.includes('el programa')) { caja.textContent = 'Elige el programa: la revisión en vivo empieza con él.'; return; }
     const callar = new Set(faltan.flatMap(f => REGLAS_DEL_CAMPO[f] || []));
     if (!String($('puChofer').value).trim() && !$('puChoferNombre').value.trim()) callar.add('Chofer');
     if (faltan.length) callar.add('Art. 79');   // la casilla vive en la última pantalla: avisar antes de llegar a ella es ruido
     const hs = e.hallazgos.filter(h => !callar.has(h.regla));
     const n = c => hs.filter(h => h.clase === c).length;
-    const cifra = (texto, tono) => { vivo.appendChild(document.createTextNode(' · ')); vivo.appendChild(el('b', 'e-' + tono, texto)); };
-    if (faltan.length) vivo.appendChild(el('span', '', 'Hasta ahora'));
-    else { const def = VEREDICTOS[e.resultado]; vivo.appendChild(document.createTextNode('Va a salir ')); vivo.appendChild(el('b', def.clase.replace('v-', 'e-'), def.palabra)); }
+    const cifra = (texto, tono) => { caja.appendChild(document.createTextNode(' · ')); caja.appendChild(el('b', 'e-' + tono, texto)); };
+    if (faltan.length) caja.appendChild(el('span', '', 'Hasta ahora'));
+    else { const def = VEREDICTOS[e.resultado]; caja.appendChild(document.createTextNode('Va a salir ')); caja.appendChild(el('b', def.clase.replace('v-', 'e-'), def.palabra)); }
     cifra(`${n('ok')} en verde`, 'ok');
     if (n('aviso')) cifra(plural(n('aviso'), 'aviso'), 'warn');
     if (n('comercial')) cifra(`${n('comercial')} para gerencia`, 'warn');
     if (n('legal')) cifra(`${n('legal')} no ${n('legal') === 1 ? 'pasa' : 'pasan'}`, 'bad');
-    if (faltan.length) vivo.appendChild(el('span', 'falta', ` · falta ${faltan.join(', ')}`));
+    if (faltan.length) caja.appendChild(el('span', 'falta', ` · falta ${faltan.join(', ')}`));
 }
 
 /**

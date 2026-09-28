@@ -1672,10 +1672,32 @@ try {
             clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto baja');
             R.ok('una unidad de baja ya no ampara: la puerta la rechaza', $('veredicto').classList.contains('v-bad'));
             clic('btnVolverVeredicto');
+            // C-84 (v0.79.0): la placa repetida DE BAJA no frena el alta (U-146 solo frena la activa): lo dice y ofrece «Abrir su ficha».
+            await fichaPd('55XY9K');
+            [...$('pdMigas').querySelectorAll('button.miga')].find(b => b.textContent.includes('TRANSPORTES DEMO')).click();   // de la ficha (abierta por búsqueda) al expediente de su carrier
+            await esperar(() => !$('pdExpediente').hidden, 'expediente para la placa de baja');
+            document.querySelector('#pdSubTabs button[data-sub="unidades"]').click();
+            clic('btnNuevaUnidad'); await esperar(() => !$('pdAsis').hidden, 'alta con placa de baja');
+            poner('puuCarrier', String(carrierId)); poner('puuPlaca', '55XY9K');
+            const abrirRep = await esperar(() => $('btnPdAbrirRepetida'), 'Abrir su ficha').catch(() => null);
+            R.ok('C-84: la placa repetida de baja lo dice y ofrece «Abrir su ficha»', !!abrirRep && $('pdAsiVa').textContent.includes('dada de baja'), $('pdAsiVa').textContent.slice(-120));
+            if (abrirRep) {
+                abrirRep.click(); await confirmar();
+                const llego = await esperar(() => !$('pdFicha').hidden && $('pdTitulo').textContent.includes('55XY9K'), 'ficha de la placa de baja').then(() => true).catch(() => false);
+                R.ok('C-84: «Abrir su ficha» lleva a la ficha de la unidad de baja', llego, $('pdTitulo').textContent);
+            }
             await fichaPd('55XY9K');
             const reac = accionPd('reactivar');
             R.ok('v0.71.0: la unidad de baja dice «de baja» y ofrece Reactivar grande', !!reac && reac.classList.contains('bien') && $('pdTitulo').textContent.includes('de baja'));
             if (reac) { reac.click(); await confirmar(); await esperar(() => filas('unidades')[0].fields.Activo === true, 'reactivada'); R.ok('unidad reactivada', filas('unidades')[0].fields.Activo === true); }
+            // C-84 (v0.79.0): la reactivación deja rastro en Notas (U-133) y la ficha lee el nombre de quien escribió, no su correo (U-141).
+            if (reac) {
+                const n = String(filas('unidades')[0].fields.Notas);
+                R.ok('C-84 / U-133: reactivar escribe REACTIVADA en Notas con quién y cuándo', n.includes('REACTIVADA') && n.includes(window.__CUENTA.username), n);
+                await fichaPd('55XY9K');
+                const notas = await esperar(() => document.querySelector('#pdUso .pd-notas'), 'notas en la ficha').catch(() => null);
+                R.ok('C-84 / U-141: la ficha muestra el nombre de quien escribió en Notas, no su correo', !!notas && notas.textContent.includes('REACTIVADA') && !notas.textContent.includes(window.__CUENTA.username), notas ? notas.textContent.slice(0, 160) : 'sin notas');
+            }
         }
         // C-08 (v0.23.0): editar una unidad cambiando la vigencia de la poliza pide motivo y lo deja en Notas.
         {
@@ -1824,6 +1846,16 @@ try {
                 vigLic.click();
                 const fichaOk = await esperar(() => visible('p-padron') && !$('pdFicha').hidden && $('pdTitulo').textContent.includes(nombreCh), 'ficha del chofer desde Hoy').then(() => true).catch(() => false);
                 R.ok('U-134: tocarla abre la ficha del chofer en el Padrón', fichaOk, `padrón ${visible('p-padron')} · ficha ${!$('pdFicha').hidden}`);
+                // C-84 (v0.79.0) / U-137: con la licencia por vencer, «Por atender» del expediente filtra las tablas a lo pendiente y queda marcado.
+                if (fichaOk) {
+                    clic('btnPdVolver');
+                    const kPend = await esperar(() => !$('pdExpediente').hidden && [...$('pdKpis').querySelectorAll('button')].find(b => b.textContent.includes('Por atender')), 'KPI Por atender').catch(() => null);
+                    if (kPend) kPend.click();
+                    const kPend2 = [...$('pdKpis').querySelectorAll('button')].find(b => b.textContent.includes('Por atender'));
+                    const filasCh = [...document.querySelectorAll('#pdChoferes .pd-fila:not(.pd-cab)')];
+                    R.ok('C-84 / U-137: «Por atender» filtra los choferes a lo pendiente y queda marcado', !!kPend2 && kPend2.getAttribute('aria-pressed') === 'true' && !$('pdpChoferes').hidden && filasCh.length === 1 && filasCh[0].textContent.includes(nombreCh), filasCh.map(f => f.textContent.slice(0, 30)).join(' | '));
+                    if (kPend2) kPend2.click();   // lo suelta
+                }
                 document.querySelector('#pestanas button[data-p="hoy"]').click();
             }
             R.ok('C-19/U-29: la ASEA del carrier (2028) no sale: vive en el tablero y está fuera de la ventana', ![...document.querySelectorAll('#tbVigencias .vig')].some(v => v.textContent.includes('ASEA')), $('tbVigencias').textContent.slice(0, 160));
@@ -2135,6 +2167,14 @@ try {
         window.__tokenReal = pcaFalso.PublicClientApplication.prototype.acquireTokenSilent;   // tanda 5: las capturas (`&asis=pausa|ticket`) guardan después de esta prueba
         pcaFalso.PublicClientApplication.prototype.acquireTokenSilent = async () => { throw new pcaFalso.InteractionRequiredAuthError('interaction_required'); };
         pcaFalso.PublicClientApplication.prototype.acquireTokenRedirect = async () => { redirigio = true; };
+        // U-150 (v0.79.0): con una captura a medias NO se redirige (la recarga la perdía): se dice, y vuelve a entrar ya sin captura.
+        document.querySelector('#pestanas button[data-p="padron"]').click();
+        clic('btnNuevoCarrier'); await esperar(() => !$('pdAsis').hidden, 'alta a medias para la sesión caducada'); poner('pcTitle', 'A MEDIAS CADUCADA');
+        clic('btnActualizar'); await esperar(() => avisoCon('sesión caducó y no se puede guardar'), 'aviso de sesión caducada con captura');
+        R.ok('U-150: sesión caducada con un alta a medias NO redirige y lo tecleado sigue ahí', !redirigio && !$('pdAsis').hidden && $('pcTitle').value === 'A MEDIAS CADUCADA');
+        clic('btnPdCancelar'); await esperar(() => $('dlg').open, 'descartar lo capturado (caducada)'); clic('dlgOk');
+        await esperar(() => $('pdAsis').hidden, 'alta descartada (caducada)');
+        $('avisos').textContent = '';   // el «No se pudo actualizar» del paso U-150 cumpliría la espera antes de la redirección
         clic('btnActualizar'); await esperar(() => redirigio || avisoCon('No se pudo actualizar'), 'token caducado');
         R.ok('token caducado → acquireTokenRedirect (vuelve al login)', redirigio);
     } else {

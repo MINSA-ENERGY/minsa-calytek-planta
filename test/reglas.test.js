@@ -1,7 +1,7 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { diasPara, compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, textoHuellaPrealta, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, claveMes, mesesPrealtas, registroPuerta, registroCertificado } from '../reglas.js';
+import { diasPara, esRechazo, hallazgosDe, reglasDe, compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, textoHuellaPrealta, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, claveMes, mesesPrealtas, registroPuerta, registroCertificado } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -97,6 +97,16 @@ assert.equal(slug('Bruto E-26-00001 · góndola'), 'bruto-e-26-00001-gondola');
 assert.equal(rolDe('Validador@example.invalid', [{ Title: 'validador@example.invalid', Rol: 'validador' }]), 'validador');
 assert.equal(rolDe('nadie@example.invalid', []), 'lectura');
 assert.equal(evaluarVigencia('x', null, 'legal', 30, hoy).ok, false);
+// C-86 (v0.79.0): las puras que salieron de archivos.js — rechazo o excepcion (C-29) y la lectura de CompuertaDetalle (C-54).
+assert.equal(esRechazo({ Etapa: 'rechazado' }), true);
+assert.equal(esRechazo({ Etapa: 'bruto', Compuerta: 'excepcion-comercial' }), true);
+assert.equal(esRechazo({ Etapa: 'anulado', Compuerta: 'excepcion-comercial' }), false);
+assert.equal(esRechazo({ Etapa: 'cerrado', Compuerta: 'pasa' }), false);
+const detalle = JSON.stringify([{ clase: 'legal', regla: 'ASEA' }, { clase: 'comercial', regla: 'Póliza' }, { clase: 'aviso', regla: 'Neto' }]);
+assert.deepEqual(hallazgosDe({ CompuertaDetalle: detalle }, 'legal').map(h => h.regla), ['ASEA']);
+assert.equal(reglasDe({ CompuertaDetalle: detalle }, 'legal', 'comercial'), 'ASEA, Póliza');
+assert.deepEqual(hallazgosDe({ CompuertaDetalle: '{roto' }, 'legal'), []);
+assert.equal(reglasDe({}, 'aviso'), '');
 // C-79: el dia del vencimiento es legal hasta las 23:59 de Mexico, no hasta mediodia (aIsoDia guarda T18:00Z).
 const venceHoy = aIsoDia('28/09/2026');
 assert.equal(diasPara(venceHoy, new Date('2026-09-28T17:59:00Z')), 0);   // 11:59 Mexico
