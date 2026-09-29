@@ -2,6 +2,7 @@
 //
 //   node servidor-local.js                                    -> sirve index.html en la raiz
 //   node servidor-local.js ../herramientas-dev/paso0.html     -> sirve esa pagina en la raiz
+//   node servidor-local.js test/pruebas.html --puerto 0       -> puerto EFIMERO; el real sale en la primera linea (PUERTO n)
 //
 // Sirve el archivo indicado EN LA RAIZ a proposito: la URL de redireccion registrada en
 // Entra es exactamente 'http://localhost:8080/'. Si la pagina se abriera como
@@ -21,8 +22,11 @@ import { fileURLToPath } from 'node:url';
 // En modulos ES no existe __dirname. import.meta.dirname llega en Node 20.11+;
 // el fallback cubre versiones anteriores.
 const RAIZ = import.meta.dirname || path.dirname(fileURLToPath(import.meta.url));
-const PUERTO = 8080;
-const INDICE = process.argv[2] || 'index.html';
+// `--puerto N` (0 = el que de el sistema), portado de proyectos C-01 (v0.90.0); sin el, 8080, que es la URL de redireccion
+// registrada en Entra. test/capturas.mjs lo usa en 0 para no medir el servidor de OTRA sesion (obs. 618, 28-sep).
+const ARGS = process.argv.slice(2), iPuerto = ARGS.indexOf('--puerto');
+const PUERTO = iPuerto >= 0 ? Number(ARGS[iPuerto + 1]) : 8080;
+const INDICE = ARGS.find((a, i) => !a.startsWith('--') && !(iPuerto >= 0 && i === iPuerto + 1)) || 'index.html';
 
 // El unico archivo que puede vivir fuera de RAIZ: el que se pidio por argumento.
 const ARCHIVO_INDICE = path.resolve(RAIZ, INDICE);
@@ -116,11 +120,14 @@ const servidor = http.createServer((req, res) => {
 // S-34: solo escucha como programa principal; importado (sw.test.js prueba rutaVedada y hostValido) no abre el puerto.
 const esPrincipal = !!process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (esPrincipal) servidor.listen(PUERTO, '127.0.0.1', () => {
+    const puerto = servidor.address().port;
+    for (const h of ['localhost', '127.0.0.1']) { ORIGENES.add(`http://${h}:${puerto}`); HOSTS.add(`${h}:${puerto}`); }
+    console.log(`PUERTO ${puerto}`);   // primera linea, fija: test/capturas.mjs la lee para saber a donde apuntar Edge
     console.log('');
     console.log(`Sirviendo ${RAIZ}`);
     console.log(`Indice: ${INDICE}`);
     console.log('');
-    console.log(`  ABRE:  http://localhost:8080/`);
+    console.log(`  ABRE:  http://localhost:${puerto}/`);
     console.log('');
     console.log('(Ctrl+C para detener)');
     console.log('');

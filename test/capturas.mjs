@@ -18,7 +18,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const PUERTO_CDP = 9334;
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const VISTAS_TODAS = {
@@ -48,8 +47,23 @@ if (pedidas) for (const n of pedidas.split(',')) if (!VISTAS_TODAS[n]) { console
 fs.mkdirSync(salida, { recursive: true });
 
 const dormir = ms => new Promise(r => setTimeout(r, ms));
-const srv = spawn('node', ['servidor-local.js', 'test/pruebas.html'], { cwd: APP, stdio: 'ignore' });
-const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', `--remote-debugging-port=${PUERTO_CDP}`, '--user-data-dir=' + path.join(os.tmpdir(), 'cdp-planta'), 'about:blank'], { stdio: 'ignore' });
+// obs. 618 (28-sep): servidor y Edge en puertos EFIMEROS. Con 8080 y 9334 fijos, si otra sesion (o el arnes de proyectos)
+// ya los tenia, el hijo moria en silencio y se capturaba la app de OTRA sesion con los nombres de vistas de esta.
+const srv = spawn('node', ['servidor-local.js', 'test/pruebas.html', '--puerto', '0'], { cwd: APP, stdio: ['ignore', 'pipe', 'ignore'] });
+const PUERTO_WEB = await new Promise(res => {
+    let buf = ''; const t = setTimeout(() => res(null), 5000);
+    srv.stdout.on('data', d => { buf += d; const m = /PUERTO (\d+)/.exec(buf); if (m) { clearTimeout(t); res(Number(m[1])); } });
+    srv.on('exit', () => { clearTimeout(t); res(null); });
+});
+if (!PUERTO_WEB) { console.error('SERVIDOR SIN PUERTO: murio al arrancar o no anuncio «PUERTO n» en 5 s. Nada se midio.'); srv.kill(); process.exit(2); }
+// Con puerto 0, Edge escribe el que le dieron en <perfil>/DevToolsActivePort; el perfil es de esta corrida, asi que es SU Edge.
+const perfil = path.join(os.tmpdir(), 'cdp-planta-' + Date.now());
+const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--remote-debugging-port=0', '--user-data-dir=' + perfil, 'about:blank'], { stdio: 'ignore' });
+let PUERTO_CDP = null;
+for (let i = 0; i < 75 && !PUERTO_CDP; i++) {
+    try { PUERTO_CDP = Number(fs.readFileSync(path.join(perfil, 'DevToolsActivePort'), 'utf8').split('\n')[0]) || null; } catch { await dormir(200); }
+}
+if (!PUERTO_CDP) { console.error('EDGE SIN PUERTO CDP: no escribio DevToolsActivePort en 15 s. Nada se midio.'); edge.kill(); srv.kill(); process.exit(2); }
 let ws; let n = 0; const pend = new Map();
 const cdp = (method, params = {}, sessionId) => new Promise(res => { const id = ++n; pend.set(id, res); ws.send(JSON.stringify({ id, method, params, sessionId })); });
 try {
@@ -65,9 +79,11 @@ try {
         const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
         await cdp('Emulation.setDeviceMetricsOverride', { width: w, height: w < 900 ? 844 : 900, deviceScaleFactor: 1, mobile: false }, sessionId);
         await cdp('Page.enable', {}, sessionId);
-        await cdp('Page.navigate', { url: `http://localhost:8080/?rol=gerencia&${q}` }, sessionId);
+        await cdp('Page.navigate', { url: `http://localhost:${PUERTO_WEB}/?rol=gerencia&${q}` }, sessionId);
         let listo = false;
         for (let i = 0; i < 240 && !listo; i++) { await dormir(500); const r = await cdp('Runtime.evaluate', { expression: "document.getElementById('resultados')?.hidden === true", returnByValue: true }, sessionId); listo = r.result?.value === true; }
+        // El resumen de la E2E de ESTA vista va a su linea: comparar-capturas.py rechaza una base con fallas (obs. 615).
+        const e2e = listo ? String((await cdp('Runtime.evaluate', { expression: 'document.title', returnByValue: true }, sessionId)).result?.value || '').replace(/^PRUEBAS TERMINADAS:\s*/, '') : 'NO TERMINO';
         if (accion) await cdp('Runtime.evaluate', { expression: accion }, sessionId);
         await dormir(1500);
         const m = await cdp('Runtime.evaluate', { returnByValue: true, expression: `(() => { const vis = e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden'; };
@@ -75,7 +91,7 @@ try {
           return 'overflowX=' + (document.documentElement.scrollWidth - innerWidth) + ' docH=' + document.documentElement.scrollHeight + ' chicos(' + chicos.length + ') ' + chicos.join(' '); })()` }, sessionId);
         const { data } = await cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }, sessionId);
         fs.writeFileSync(path.join(salida, `${nombre}-${w}.png`), Buffer.from(data, 'base64'));
-        med.push(`${nombre}-${w}${listo ? '' : ' [SIN VISTA: la corrida no termino]'} · ${m.result?.value}`);
+        med.push(`${nombre}-${w}${listo ? '' : ' [SIN VISTA: la corrida no termino]'} · E2E ${e2e} · ${m.result?.value}`);
         console.log(med.at(-1));
         await cdp('Target.closeTarget', { targetId });
     }
@@ -85,4 +101,7 @@ try {
     const previas = fs.existsSync(archivoMed) ? fs.readFileSync(archivoMed, 'utf8').split('\n').filter(l => l && !med.some(x => clave(x) === clave(l))) : [];
     fs.writeFileSync(archivoMed, [...previas, ...med].sort().join('\n'));
     console.log(`capturas en ${salida}`);
-} finally { try { ws?.close(); } catch {} edge.kill(); srv.kill(); }
+} finally {
+    try { ws?.close(); } catch {} edge.kill(); srv.kill();
+    await dormir(500); try { fs.rmSync(perfil, { recursive: true, force: true }); } catch { /* el perfil temporal no siempre se suelta */ }
+}
