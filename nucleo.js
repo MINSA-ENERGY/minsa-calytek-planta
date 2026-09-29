@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { crearCliente } from './graph.js';
 import { autoformatoFecha, firmaAmparaPrealta, horaMexico, limpiar, palabraCompuerta, PUEDE, rolDe } from './reglas.js';
 
-export const VERSION = '0.82.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
+export const VERSION = '0.83.0';   // la misma cadena va en package.json y en sw.js (CACHE); test/version.test.js lo exige
 export const $ = id => document.getElementById(id);
 export const L = CONFIG.listas;
 
@@ -338,8 +338,26 @@ export const enListaPlanta = () => estado.embarques.filter(e => enPlanta(e) || e
  * cuenta a la que le quitaran Leer en la lista corria como antes de S-01. Otro error (red, 5xx) sube y la recarga falla entera.
  */
 const CAMPOS_FIRMA = ['Title', 'Tipo', 'ObjetoId', 'Firmante', 'FirmadoEl', 'Motivo', 'Created'];   // v0.76.0: las de esquema.json + Created (S-29 lo lee), nada mas
-async function cargarFirmas(c, s, avisar) {
-    try { const f = await c.renglones(s, L.firmas, null, avisar, CAMPOS_FIRMA); estado.firmasError = null; return f; }
+/**
+ * C-94 (v0.83.0): la lista crece sin tope (una firma por excepcion, por pre-alta y por certificado) y se leia ENTERA en cada
+ * carga. Ahora solo las de lo cargado, como C-45: ObjetoId (indexada) ge el menor id de embarque o certificado de la ventana
+ * —cubre excepcion y certificado— mas las pre-altas FIRMADAS de id menor, por eq de 15 en 15 (solo esas consultan su firma:
+ * prealtaFirmada exige Estado firmada). Sin nada que cotejar se lee igual, con un filtro que no trae nada: S-07 necesita
+ * saber si la lista se puede leer.
+ */
+function filtrosFirmas(embarques, certificados, prealtas) {
+    const ids = [...embarques, ...certificados].map(x => Number(x.id));
+    const desde = ids.length ? Math.min(...ids) : Infinity;
+    const sueltas = prealtas.filter(p => p.Estado === 'firmada' && Number(p.id) < desde).map(p => Number(p.id));
+    const filtros = desde === Infinity ? [] : [`fields/ObjetoId ge ${desde}`];
+    for (let i = 0; i < sueltas.length; i += 15) filtros.push(sueltas.slice(i, i + 15).map(id => `fields/ObjetoId eq ${id}`).join(' or '));
+    return filtros.length ? filtros : ['fields/ObjetoId eq 0'];   // los ids de SharePoint empiezan en 1
+}
+async function cargarFirmas(c, s, avisar, embarques, certificados, prealtas) {
+    try {
+        const partes = await Promise.all(filtrosFirmas(embarques, certificados, prealtas).map(f => c.renglones(s, L.firmas, f, avisar, CAMPOS_FIRMA)));
+        estado.firmasError = null; return partes.flat();   // los rangos no se enciman: las eq van todas bajo el ge
+    }
     catch (e) {
         if (!(e && (e.status === 404 || e.status === 403))) throw e;   // C-15: por status (idDeLista tipa su 404), no por texto
         estado.firmasError = String(e.message); return [];
@@ -501,10 +519,13 @@ export async function cargarTodo() {
     const av = texto => pintarSync(true, texto);
     // C-45 (v0.44.0): los certificados se acotan con los ids de los embarques, asi que van encadenados a ellos (y el resto en paralelo).
     const embarquesYCertificados = cargarEmbarques(c, s, av).then(async emb => [emb, await cargarCertificados(c, s, av, emb)]);
+    const prealtas = c.renglones(s, L.prealtas, null, av);
+    // C-94 (v0.83.0): las firmas se acotan con los ids de embarques, certificados y pre-altas, asi que van despues de esas tres.
+    const firmas = Promise.all([embarquesYCertificados, prealtas]).then(([[emb, cert], pa]) => cargarFirmas(c, s, av, emb, cert, pa));
     const leido = await Promise.all([
             c.renglones(s, L.carriers, null, av), c.renglones(s, L.unidades, null, av), c.renglones(s, L.choferes, null, av),
-            c.renglones(s, L.prealtas, null, av), embarquesYCertificados, c.renglones(s, L.vigencias, null, av),
-            c.renglones(s, L.roles, null, av), cargarFirmas(c, s, av)
+            prealtas, embarquesYCertificados, c.renglones(s, L.vigencias, null, av),
+            c.renglones(s, L.roles, null, av), firmas
         ]);
     // C-89 (v0.80.0): los programas viejos se leen ANTES de asignar: si esa lectura fallaba, las listas ya estaban cambiadas y
     // reanclar() no corria, y el pesaje o la ficha abiertos quedaban apuntando a objetos que ya no estaban en estado.*.

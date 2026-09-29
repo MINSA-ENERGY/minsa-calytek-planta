@@ -2113,6 +2113,27 @@ try {
                 const getsCert = DB.llamadas.slice(nLlC).filter(x => x.startsWith('GET /sites/sitio-falso/lists/lista-certificados/items?'));
                 R.ok('C-45 (v0.44.0): PLANTA_Certificados se lee con filtro EmbarqueId ge (nunca entera) y deja fuera los de góndolas no cargadas', getsCert.length === 1 && /EmbarqueId%20ge%20[0-9]+/.test(getsCert[0]) && !$('baCerrados').textContent.includes('CT-26-0900') && !$('paDetalleCertificado').textContent.includes('CT-26-0900'), getsCert.join(' | ').slice(0, 160));
                 filas('certificados').splice(filas('certificados').indexOf(viejo), 1);
+                // C-94 (v0.83.0): PLANTA_Firmas tampoco se lee entera: ObjetoId ge el menor embarque/certificado cargado, mas las
+                // pre-altas firmadas de id menor por eq. La compuerta sigue viendo sus firmas (el resto de la suite lo prueba).
+                const getsFirmas = DB.llamadas.slice(nLlC).filter(x => x.startsWith('GET /sites/sitio-falso/lists/lista-firmas/items'));
+                R.ok('C-94 (v0.83.0): PLANTA_Firmas se lee con filtro por ObjetoId (ge de la ventana + eq de pre-altas firmadas), nunca entera', getsFirmas.length >= 1 && getsFirmas.every(x => /\$filter=fields%2FObjetoId%20(ge|eq)%20-?[0-9]/.test(x)) && getsFirmas.some(x => /ObjetoId%20ge%20[0-9]/.test(x)), getsFirmas.join(' | ').slice(0, 200));
+                // C-94, la rama de riesgo: una pre-alta FIRMADA de id menor que toda la ventana (programa largo) trae su firma
+                // por eq y la compuerta la sigue viendo firmada; una firma de un objeto que nadie carga ya no entra.
+                {
+                    const { huellaPrealta } = await import('./reglas.js');
+                    const pV = { id: -3, fields: { ...filas('prealtas')[0].fields, Title: 'C94 VIEJA-POZO 1-2026', Estado: 'firmada', FirmadaPor: 'validador@example.invalid', FirmadaEl: new Date().toISOString() } };
+                    const fV = { id: DB.siguienteId++, fields: { Title: 'prealta · C94 VIEJA', Tipo: 'prealta', ObjetoId: -3, Firmante: 'validador@example.invalid', FirmadoEl: new Date().toISOString(), Created: new Date().toISOString(), Motivo: huellaPrealta(pV.fields) } };
+                    const fHuerfana = { id: DB.siguienteId++, fields: { Title: 'excepcion · C94 huerfana', Tipo: 'excepcion', ObjetoId: -9, Firmante: 'gerente@example.invalid', FirmadoEl: new Date().toISOString(), Created: new Date().toISOString() } };
+                    filas('prealtas').push(pV); filas('firmas').push(fV, fHuerfana); const nLl94 = DB.llamadas.length;
+                    // No se espera «Datos actualizados»: el aviso de la recarga de arriba sigue en pantalla y casaria sin recargar.
+                    const lecturas94 = () => DB.llamadas.slice(nLl94).filter(x => x.startsWith('GET /sites/sitio-falso/lists/lista-firmas/items'));
+                    clic('btnActualizar'); await esperar(() => lecturas94().length > 0, 'recarga C-94 con pre-alta vieja'); await dormir(300);
+                    const gets94 = lecturas94();
+                    R.ok('C-94 (v0.83.0): la pre-alta firmada vieja se lee por eq y NO sale como «sello sin firma» en Hoy; la firma de un objeto no cargado no se pide',
+                        gets94.some(x => x.includes('ObjetoId%20eq%20-3')) && !gets94.some(x => x.includes('%20-9')) && !$('tbPendientes').textContent.includes('C94 VIEJA'), gets94.join(' | ').slice(0, 240));
+                    filas('prealtas').splice(filas('prealtas').indexOf(pV), 1);
+                    filas('firmas').splice(filas('firmas').indexOf(fV), 1); filas('firmas').splice(filas('firmas').indexOf(fHuerfana), 1);
+                }
                 vistaG('historial'); await dormir(20);
                 botonCert(g1.fields.Title).click(); await esperar(() => $('dlgCertificado').open, 'vista para el tercero');
                 // C-38 (v0.40.0): otra sesión emitió mientras el diálogo estaba abierto (el renglón existe en la lista pero no en
