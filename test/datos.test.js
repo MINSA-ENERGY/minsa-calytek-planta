@@ -40,4 +40,29 @@ for (const f of rastreados) {
     }
 }
 assert.deepEqual(fallas, [], 'datos que no deben estar en el repo publico:\n  ' + fallas.join('\n  '));
-console.log(`datos: ok (${rastreados.length} archivos, ${fijas.length} reglas fijas, ${privadas.length} privadas${privadas.length ? '' : ' — lista privada no encontrada'})`);
+
+// Tercera capa (auditoria del repo 2026-09-29): el HISTORIAL. Borrar un dato de HEAD no lo saca
+// del repo publico — el commit viejo sigue en origin/main. Se barren solo las lineas AGREGADAS
+// (+) de `git log -p --all`: la que lo retira trae el dato con `-` y no debe contar. ~0.5 s.
+// Deuda declarada: commits que YA publicaron un dato y que se decidio NO reescribir (2026-09-29,
+// Carlos: reescribir no lo saca de clones ni de la cache de GitHub, y exige quitar proteger-main).
+// Un acierto en un commit fuera de esta lista es un dato NUEVO que entro despues de la decision.
+const DEUDA_HISTORICA = new Set([
+    '400d19f', // historial reiniciado (2026-09-08): dos entradas de la lista privada; retiradas en 3e837a4
+    'a040309'  // v0.35.0: correo generico de contacto en certificado/; retirado en 393d9ed
+]);
+const log = execSync('git log -p --all --no-color --format=@@C%h -- . ":(exclude)vendor" ":(exclude)' + ESTE + '"',
+    { cwd: raiz, encoding: 'utf8', maxBuffer: 1 << 30 });
+const enHistoria = new Set();
+let commit = '', archivo = '', commits = 0;
+for (const ln of log.split('\n')) {
+    if (ln.startsWith('@@C')) { commit = ln.slice(3, 10); commits++; continue; }
+    if (ln.startsWith('+++ b/')) { archivo = ln.slice(6); continue; }
+    if (!ln.startsWith('+') || ln.startsWith('+++') || DEUDA_HISTORICA.has(commit)) continue;
+    // Sin el valor: el mensaje de la prueba no debe republicar lo que encontro.
+    for (const [re, que] of [...fijas, ...privadas]) if (re.test(ln)) enHistoria.add(`${commit} ${archivo}: ${que}`);
+}
+assert.ok(commits > 10, 'git log no devolvio commits');
+assert.deepEqual([...enHistoria], [], 'datos en el HISTORIAL del repo publico (borrarlos de HEAD no basta):\n  '
+    + [...enHistoria].join('\n  '));
+console.log(`datos: ok (${rastreados.length} archivos y ${commits} commits, ${fijas.length} reglas fijas, ${privadas.length} privadas${privadas.length ? '' : ' — lista privada no encontrada'}, ${DEUDA_HISTORICA.size} commits de deuda declarada)`);
