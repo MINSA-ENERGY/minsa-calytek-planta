@@ -446,6 +446,8 @@ assert.ok(!firmaAmparaPrealta('', pf), 'firma sin huella y sin Created: no ampar
     assert.equal(avisoTara(17600, ant, 0.03), null);                 // +420 kg, 2.4 %
     assert.match(avisoTara(14200, ant, 0.03), /se aparta 2,980 kg/); // el digito mal tecleado
     assert.match(avisoTara(17800, ant, 0.03), /tolerancia 3 %/);     // +620 kg, 3.6 %
+    assert.equal(avisoTara(17800, ant, 0.05), null);                 // la misma, con el 5 % de config.js
+    assert.match(avisoTara(18100, ant, 0.05), /tolerancia 5 %/);     // +920 kg, 5.4 %
     assert.equal(avisoTara(14200, null, 0.03), null);
     assert.equal(avisoTara('', ant, 0.03), null);
 }

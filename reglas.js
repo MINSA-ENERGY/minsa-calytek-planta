@@ -213,7 +213,7 @@ export function avisoNeto(brutoKg, taraKg, capacidadKg, tol) {
 
 const kgMx = n => Number(n).toLocaleString('es-MX');
 /**
- * R-01 (v0.84.0; decision de Carlos, 28-sep: ±3 %, avisa y pide motivo, no bloquea): la misma gondola vacia pesa casi lo
+ * R-01 (v0.84.0; decision de Carlos, 28-sep: ±5 %, avisa y pide motivo, no bloquea): la misma gondola vacia pesa casi lo
  * mismo cada vez, y la banda del neto no ve una tara mal tecleada por un digito (14,200 por 17,200 cae dentro). La tara
  * anterior es la de la ultima gondola CERRADA y no anulada de esa unidad, por TaraHora; sin ella no hay aviso.
  */

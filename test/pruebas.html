@@ -1272,8 +1272,8 @@ try {
         filaG('baLista', emb2.fields.Title).querySelector('button').click();
         await esperar(() => visible('baPesar'), 'tara 2');
         R.ok('R-01 (v0.84.0): la tara muestra la anterior de la misma unidad (la de la góndola 1)', visible('baTaraAnterior') && $('baTaraAnterior').textContent.includes('23,380 kg'), $('baTaraAnterior').textContent);
-        poner('baKg', '23900'); await dormir(30);
-        R.ok('R-01 (v0.84.0): una tara dentro del 3 % de la anterior no avisa', !visible('baAvisoNeto') && !visible('baMotivoNetoCampo'), $('baAvisoNeto').textContent);
+        poner('baKg', '24300'); await dormir(30);   // +920 kg, 3.9 %: avisaria con 3 %, no con el 5 % que decidio Carlos
+        R.ok('R-01 (v0.84.0): una tara dentro del 5 % de la anterior (3.9 %) no avisa', !visible('baAvisoNeto') && !visible('baMotivoNetoCampo'), $('baAvisoNeto').textContent);
         poner('baKg', '21000'); await dormir(30);   // neto 23,600 de 25 t: en banda; la tara, 10 % abajo de la anterior
         R.ok('R-01 (v0.84.0): con el neto en banda y SOLO la tara fuera, el aviso habla de la tara y pide motivo, sin decir «neto»', visible('baAvisoNeto') && visible('baMotivoNetoCampo') && $('baAvisoNeto').textContent.includes('se aparta 2,380 kg') && !/neto/i.test($('baAvisoNeto').textContent), $('baAvisoNeto').textContent);
         poner('baTicketBascula', emb1.fields.TicketBascula); await dormir(20);
