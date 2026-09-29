@@ -2,7 +2,7 @@
 // Salió de app.js en C-76 (v0.75.0): código movido tal cual; solo se agregaron import/export.
 
 import { CONFIG } from './config.js';
-import { compuerta, CORRIENTES, etiquetaCorriente, lista, PALABRA_CLASE, palabraCompuerta, placaNormal, plural, PUEDE, registroPuerta, siguienteFolio } from './reglas.js';
+import { compuerta, CORRIENTES, etiquetaCorriente, lista, PALABRA_CLASE, palabraCompuerta, placaNormal, plural, PUEDE, horaMexico, registroPuerta, siguienteFolio, yaUsadoEn } from './reglas.js';
 import { $, anclar, atraparFoco, avisar, el, embarquesDelAno, escribiendo, estado, fundirEnVentana, L, limpiarAvisos, nombreDe, opciones, porId, prealtaFirmada, refrescarCliente, renglon, vivo } from './nucleo.js';
 import { irA } from './navegacion.js';
 import { abrirPesaje, elegirVistaGondolas } from './gondolas.js';
@@ -239,6 +239,10 @@ const CAMPOS_PUERTA = [['puPrealta', 'el programa'], ['puPlaca', 'la placa del t
  */
 export function pintarPrevioPuerta() {
     const e = evaluarPuerta();
+    // R-02 (v0.84.0): un manifiesto que ya trae otra góndola de la ventana se avisa junto al campo; no toca la compuerta.
+    const otraM = yaUsadoEn(estado.embarques, 'Manifiesto', $('puManifiesto').value, null);
+    $('puManifiestoUsado').textContent = otraM ? `Ya usado en ${otraM.Title || 'otra góndola'} (${horaMexico(otraM.Arribo)}). Revisa el papel.` : '';
+    $('puManifiestoUsado').classList.toggle('oculto', !otraM);
     const faltan = CAMPOS_PUERTA.filter(([id]) => !String($(id).value).trim()).map(([, n]) => n);
 
     // U-48 (v0.29.0): cada dato del bloque es una lista de alternativas (el chofer vale por el select O por el nombre en

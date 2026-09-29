@@ -167,6 +167,7 @@
           <div class="campo">
             <label for="puManifiesto">No. de manifiesto</label>
             <input type="text" id="puManifiesto" class="mono" autocapitalize="characters" placeholder="MINSA/RME/000/2026">
+            <small class="ya-usado oculto" id="puManifiestoUsado" role="status"></small><!-- R-02 (v0.84.0) -->
           </div>
           <span class="etiqueta-campo" id="puCorrienteTitulo">Corriente declarada en el manifiesto</span>
           <div class="opciones" id="puCorrientes" role="group" aria-labelledby="puCorrienteTitulo"></div>
@@ -249,6 +250,7 @@
           <span class="op" aria-hidden="true">=</span>
           <div class="term res oculto" id="baNetoVivo"><span class="etiqueta-campo">Neto</span><b id="baNvNeto"></b><small id="baNvCapBox">capacidad <span id="baNvCap"></span> kg</small></div>
         </div>
+        <p class="pista mono oculto" id="baTaraAnterior"></p><!-- R-01 (v0.84.0) -->
         <p class="pista">Solo kilogramos enteros, nunca m³. Lo que marca el indicador, ahora.</p>
         <!-- U-80 (v0.51.0): la evidencia va ANTES del teclado: con el Guardar pegado debajo, la foto obligatoria quedaba tapada. -->
         <div class="evidencia">
@@ -264,6 +266,7 @@
           <label for="baTicketBascula">Ticket de báscula · obligatorio</label>
           <input type="text" id="baTicketBascula" maxlength="40" autocomplete="off" placeholder="Número del ticket">
           <small class="pista">El número impreso en el ticket de la báscula.</small>
+          <small class="ya-usado oculto" id="baTicketUsado" role="status"></small><!-- R-02 (v0.84.0) -->
         </div>
         </div>
         <div class="teclado" id="teclado" aria-label="Teclado numérico">
@@ -274,7 +277,7 @@
         </div>
         <div id="baAvisoNeto" class="mensaje ojo oculto"></div>
         <div class="campo oculto" id="baMotivoNetoCampo">
-          <label for="baMotivoNeto">Si el neto se sale de la banda, di por qué se cierra igual</label>
+          <label for="baMotivoNeto">Si el neto o la tara no cuadran, di por qué se cierra igual</label>
           <textarea id="baMotivoNeto" maxlength="200"></textarea>
         </div>
         <button id="btnGuardarPeso" class="principal enviar" type="button">Guardar</button>

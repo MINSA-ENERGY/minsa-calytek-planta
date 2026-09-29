@@ -1,7 +1,7 @@
 // node test/reglas.test.js — las reglas de la puerta contra los casos de la verificacion del plan.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { diasPara, esRechazo, hallazgosDe, reglasDe, compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, textoHuellaPrealta, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, claveMes, mesesPrealtas, registroPuerta, registroCertificado } from '../reglas.js';
+import { diasPara, esRechazo, hallazgosDe, reglasDe, compuerta, siguienteFolio, avisoNeto, placaNormal, slug, rolDe, evaluarVigencia, lista, accionCorreccion, PUEDE, prealtaSinMovimiento, horaMexico, aIsoDia, fechaCorta, autoformatoFecha, plural, limpiar, paraPatch, tipoDeArchivo, lunesDe, sumarDias, esLoteDeLaApp, residuoDe, sufijoVerificacion, datosCertificado, urlVerificacion, toneladas, siguientePaso, yaCapturado, CORRIENTES, etiquetaCorriente, palabraCompuerta, subpasoDeRegla, PANTALLA_DE_REGLA, clienteDe, sha256Hex, textoHuellaPrealta, huellaPrealta, firmaAmparaPrealta, basesRecientes, clientesPrealta, fechaDePestana, claveMes, mesesPrealtas, registroPuerta, registroCertificado, taraAnterior, avisoTara, yaUsadoEn, tiempoEnPlanta, notasPeso, faltaMotivoPeso } from '../reglas.js';
 
 const hoy = new Date('2026-10-15T12:00:00Z');
 const en = dias => new Date(hoy.getTime() + dias * 86400000).toISOString();
@@ -428,4 +428,65 @@ assert.ok(!firmaAmparaPrealta('', pf), 'firma sin huella y sin Created: no ampar
     assert.equal(c.Estado, 'vigente'); assert.equal(c.Generador, 'DEMO'); assert.equal(c.Ticket, undefined); assert.equal(c.Motivo, undefined);
     const s2 = registroCertificado({ folio: 'C-26-00002', prealtaId: 5, embarqueId: 7, papel: {}, sufijo: 'x', usuario: 'g', ahora: 'x', version: 'v', sustituye: { Title: 'C-26-00001' }, motivoSust: 'x'.repeat(400) });
     assert.ok(s2.Motivo.startsWith('Sustituye a C-26-00001: ')); assert.equal(s2.Motivo.length, 255);
+}
+
+// R-01 (v0.84.0): la tara contra la ultima cerrada de la misma unidad, ±3 %; la anulada, la de otra unidad y la propia no cuentan.
+{
+    const emb = [
+        { id: 1, UnidadId: 10, Etapa: 'cerrado', TaraKg: 17000, TaraHora: '2026-09-10T10:00:00Z', Title: 'E-26-00001' },
+        { id: 2, UnidadId: 10, Etapa: 'cerrado', TaraKg: 17180, TaraHora: '2026-09-12T10:00:00Z', Title: 'E-26-00002' },
+        { id: 3, UnidadId: 10, Etapa: 'cerrado', TaraKg: 9000, TaraHora: '2026-09-13T10:00:00Z', AnuladoPor: 'g@x', Title: 'E-26-00003' },
+        { id: 4, UnidadId: 11, Etapa: 'cerrado', TaraKg: 30000, TaraHora: '2026-09-14T10:00:00Z' },
+        { id: 5, UnidadId: 10, Etapa: 'bruto', BrutoKg: 40000 }
+    ];
+    const ant = taraAnterior(emb, 10, 5);
+    assert.deepEqual(ant, { kg: 17180, hora: '2026-09-12T10:00:00Z', folio: 'E-26-00002' });
+    assert.equal(taraAnterior(emb, 12, 5), null);
+    assert.equal(taraAnterior(emb, null, 5), null);
+    assert.equal(avisoTara(17600, ant, 0.03), null);                 // +420 kg, 2.4 %
+    assert.match(avisoTara(14200, ant, 0.03), /se aparta 2,980 kg/); // el digito mal tecleado
+    assert.match(avisoTara(17800, ant, 0.03), /tolerancia 3 %/);     // +620 kg, 3.6 %
+    assert.equal(avisoTara(14200, null, 0.03), null);
+    assert.equal(avisoTara('', ant, 0.03), null);
+}
+// R-02 (v0.84.0): manifiesto / ticket ya usado, sin mayusculas ni espacios; anulada, rechazada y la propia no cuentan.
+{
+    const emb = [
+        { id: 1, Etapa: 'cerrado', Manifiesto: 'MINSA/RME/001/2026', TicketBascula: '4471' },
+        { id: 2, Etapa: 'anulado', Manifiesto: 'MINSA/RME/002/2026' },
+        { id: 3, Etapa: 'rechazado', Manifiesto: 'MINSA/RME/003/2026' },
+        { id: 4, Etapa: 'cerrado', AnuladoPor: 'g@x', TicketBascula: '9000' }
+    ];
+    assert.equal(yaUsadoEn(emb, 'Manifiesto', ' minsa/rme/001/2026 ', 9).id, 1);
+    assert.equal(yaUsadoEn(emb, 'Manifiesto', 'MINSA/RME/001/2026', 1), null);
+    assert.equal(yaUsadoEn(emb, 'Manifiesto', 'MINSA/RME/002/2026', 9), null);
+    assert.equal(yaUsadoEn(emb, 'Manifiesto', 'MINSA/RME/003/2026', 9), null);
+    assert.equal(yaUsadoEn(emb, 'TicketBascula', '4471', 9).id, 1);
+    assert.equal(yaUsadoEn(emb, 'TicketBascula', '9000', 9), null);
+    assert.equal(yaUsadoEn(emb, 'TicketBascula', '  ', 9), null);
+}
+// R-03 (v0.84.0): tiempo en planta; el cambio de dia es el de Mexico (UTC-6), no el de UTC.
+{
+    const ahora = new Date('2026-09-28T18:00:00Z');   // 12:00 en Mexico
+    assert.equal(tiempoEnPlanta('2026-09-28T17:35:00Z', ahora).texto, 'hace 25 min');
+    assert.equal(tiempoEnPlanta('2026-09-28T14:50:00Z', ahora).texto, 'hace 3 h');
+    assert.equal(tiempoEnPlanta('2026-09-28T07:00:00Z', ahora).texto, 'hace 11 h');    // 01:00 del 28 en Mexico: mismo dia
+    assert.equal(tiempoEnPlanta('2026-09-28T05:00:00Z', ahora).texto, 'desde ayer');   // 23:00 del 27 en Mexico
+    assert.equal(tiempoEnPlanta('2026-09-25T18:00:00Z', ahora).texto, 'desde hace 3 días');
+    assert.ok(Math.abs(tiempoEnPlanta('2026-09-28T14:00:00Z', ahora).horas - 4) < 1e-9);
+    assert.equal(tiempoEnPlanta('', ahora), null);
+    assert.equal(tiempoEnPlanta('no', ahora), null);
+}
+// R-01 (v0.84.0): Notas y el error. Solo la tara fuera NO cuenta en Reportes (reportes.js busca /Neto fuera de banda/).
+{
+    const soloTara = notasPeso(null, 'la tara (21,000 kg) se aparta 2,380 kg');
+    assert.equal(soloTara, 'Tara fuera de lo esperado (la tara (21,000 kg) se aparta 2,380 kg)');
+    assert.ok(!/Neto fuera de banda/.test(soloTara));
+    const ambos = notasPeso('neto 4600 kg es menos del 30 %', 'la tara se aparta');
+    assert.ok(/Neto fuera de banda/.test(ambos) && ambos.includes('. Tara fuera de lo esperado ('));
+    assert.equal(notasPeso(null, null), null);
+    assert.equal(faltaMotivoPeso('x', null), 'El neto se sale de la banda: re-captura, o di por qué se cierra igual.');
+    assert.equal(faltaMotivoPeso(null, 'x'), 'La tara no cuadra con la anterior de esta unidad: re-captura, o di por qué se cierra igual.');
+    assert.equal(faltaMotivoPeso('x', 'y'), 'El neto se sale de la banda y la tara no cuadra con la anterior de esta unidad: re-captura, o di por qué se cierra igual.');
+    assert.equal(faltaMotivoPeso(null, null), null);
 }

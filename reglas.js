@@ -211,6 +211,71 @@ export function avisoNeto(brutoKg, taraKg, capacidadKg, tol) {
     return null;
 }
 
+const kgMx = n => Number(n).toLocaleString('es-MX');
+/**
+ * R-01 (v0.84.0; decision de Carlos, 28-sep: ±3 %, avisa y pide motivo, no bloquea): la misma gondola vacia pesa casi lo
+ * mismo cada vez, y la banda del neto no ve una tara mal tecleada por un digito (14,200 por 17,200 cae dentro). La tara
+ * anterior es la de la ultima gondola CERRADA y no anulada de esa unidad, por TaraHora; sin ella no hay aviso.
+ */
+export function taraAnterior(embarques, unidadId, excluirId) {
+    let mejor = null;
+    for (const e of embarques || []) {
+        if (e.id === excluirId || !unidadId || Number(e.UnidadId) !== Number(unidadId) || e.Etapa !== 'cerrado' || e.AnuladoPor || !(Number(e.TaraKg) > 0)) continue;
+        if (!mejor || String(e.TaraHora || '') > String(mejor.TaraHora || '')) mejor = e;
+    }
+    return mejor ? { kg: Number(mejor.TaraKg), hora: mejor.TaraHora || null, folio: mejor.Title || null } : null;
+}
+/** @returns {null|string} por que la tara tecleada no cuadra con la anterior de la unidad */
+export function avisoTara(taraKg, anterior, tolFraccion) {
+    const t = Number(taraKg);
+    if (!anterior || !Number.isFinite(t) || t <= 0) return null;
+    const dif = t - anterior.kg;
+    if (Math.abs(dif) <= anterior.kg * tolFraccion) return null;
+    return `la tara (${kgMx(t)} kg) se aparta ${kgMx(Math.abs(dif))} kg de la anterior de esta unidad (${kgMx(anterior.kg)} kg; tolerancia ${Math.round(tolFraccion * 100)} %)`;
+}
+
+/**
+ * Lo que va a Notas cuando el peso no cuadra, o null. La tara lleva su propio prefijo a proposito: Reportes cuenta los
+ * cierres por «Neto fuera de banda» (reportes.js) y una tara rara con el neto en banda no es un neto fuera de banda.
+ */
+export function notasPeso(aNeto, aTara) {
+    return [aNeto && `Neto fuera de banda (${aNeto})`, aTara && `Tara fuera de lo esperado (${aTara})`].filter(Boolean).join('. ') || null;
+}
+/** La frase del error cuando falta el motivo: nombra lo que de verdad no cuadra, uno o los dos. */
+export function faltaMotivoPeso(aNeto, aTara) {
+    const partes = [aNeto && 'el neto se sale de la banda', aTara && 'la tara no cuadra con la anterior de esta unidad'].filter(Boolean);
+    if (!partes.length) return null;
+    const t = partes.join(' y ');
+    return `${t[0].toUpperCase()}${t.slice(1)}: re-captura, o di por qué se cierra igual.`;
+}
+
+/**
+ * R-02 (v0.84.0): el manifiesto y el ticket de bascula los emite un tercero y van impresos en el certificado. Un numero
+ * que ya trae otra gondola de la ventana se AVISA (no bloquea): la anulada y la rechazada no cuentan —una rechazada
+ * vuelve corregida con el mismo manifiesto—. Se compara sin mayusculas ni espacios.
+ */
+const normaDoc = v => String(v || '').replace(/\s+/g, '').toUpperCase();
+export function yaUsadoEn(embarques, campo, valor, excluirId) {
+    const v = normaDoc(valor);
+    if (!v) return null;
+    return (embarques || []).find(e => e.id !== excluirId && e.Etapa !== 'anulado' && e.Etapa !== 'rechazado' && !e.AnuladoPor && normaDoc(e[campo]) === v) || null;
+}
+
+/**
+ * R-03 (v0.84.0; umbral de Carlos, 28-sep: 4 h): cuanto lleva una gondola en planta, redondeado, para que la atorada se
+ * note. «desde ayer» / «desde hace N días» cuando cambia el dia de Mexico, aunque hayan pasado menos de 24 h.
+ * @returns {{texto: string, horas: number}|null}
+ */
+export function tiempoEnPlanta(desdeIso, ahora = new Date()) {
+    const d = new Date(desdeIso);
+    if (!desdeIso || Number.isNaN(d.getTime())) return null;
+    const horas = Math.max(0, (ahora.getTime() - d.getTime()) / 3600000);
+    const dias = Math.round((Date.parse(fechaMexico(ahora)) - Date.parse(fechaMexico(d))) / 86400000);
+    const texto = dias >= 2 ? `desde hace ${dias} días` : dias === 1 ? 'desde ayer'
+        : horas < 1 ? `hace ${Math.max(1, Math.floor(horas * 60))} min` : `hace ${Math.floor(horas)} h`;
+    return { texto, horas };
+}
+
 /**
  * Una pre-alta FIRMADA que ya no se mueve (Carlos, 2026-09-08: «¿siguen saliendo en la puerta si no llegan
  * los camiones?» — si, hasta cerrarla a mano; esto la senala). Devuelve null si no hay nada que decir, o

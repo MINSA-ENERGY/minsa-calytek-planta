@@ -1324,3 +1324,6 @@ select, .archivos-filtros select, .con-boton select {
 .pd-asis-botones #btnPdSiguiente { margin-left: auto; }
 .pd-resumen > .mensaje { margin: 0; display: grid; gap: var(--sp-2); justify-items: start; }
 .pd-resumen > .mensaje button { width: auto; margin: 0; }
+/* R-02 / R-03 (v0.84.0): avisos que no bloquean, en ambar de texto (no chip) */
+.ya-usado { display: block; color: var(--warn-fg); font-weight: 600; margin-top: var(--sp-1); }
+.ultimo-ambar { color: var(--warn-fg); font-weight: 600; }

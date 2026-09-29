@@ -1225,6 +1225,13 @@ try {
         // 8. Neto fuera de banda pide motivo.
         irPuerta();
         elegirPorTexto('puPrealta', 'CLIENTE DEMO'); await dormir(20);
+        {   // R-02 (v0.84.0): un manifiesto que ya trae otra góndola se avisa junto al campo, sin bloquear; con uno nuevo se va.
+            poner('puManifiesto', ' ' + emb1.fields.Manifiesto.toLowerCase()); await dormir(20);
+            const avisoM = visible('puManifiestoUsado') && $('puManifiestoUsado').textContent.includes(emb1.fields.Title);
+            const textoM = $('puManifiestoUsado').textContent;
+            poner('puManifiesto', 'MINSA/RME/106/2025'); await dormir(20);
+            R.ok('R-02 (v0.84.0): el manifiesto ya usado (aun en minúsculas y con espacio) se avisa con el folio de la otra góndola; con uno nuevo el aviso se va', avisoM && !visible('puManifiestoUsado'), textoM);
+        }
         poner('puManifiesto', 'MINSA/RME/106/2025'); poner('puPlaca', '55XY9K'); poner('puPlacaPlana', '66ZW3M'); elegirPorTexto('puChofer', 'JUAN'); poner('puCorriente', 'base-aceite');
         clic('btnCompuerta'); await esperar(() => visible('veredicto'), 'veredicto 2');
         R.ok('sin art. 79 marcado sale como aviso, no bloquea', $('vkW').textContent === 'Pasa' && $('puHallazgos').textContent.includes('Art. 79'));
@@ -1252,10 +1259,30 @@ try {
         clic('btnActualizar'); await esperar(() => avisoCon('Datos actualizados'), 'recarga en Hoy tras la pausa');
         irGondolas();
         R.ok('C-51: al volver, Góndolas abre en la lista, no en la pausa vieja', !visible('baAsis') && !!filaG('baLista', emb2.fields.Title));
+        {   // R-03 (v0.84.0): «Último dato» dice cuánto lleva; ámbar de texto desde CONFIG.enPlantaAmbarHoras (4 h).
+            const f0 = filaG('baLista', emb2.fields.Title);
+            const reciente = f0.textContent.includes('· hace ') && !f0.querySelector('.ultimo-ambar');
+            const bh = emb2.fields.BrutoHora; emb2.fields.BrutoHora = new Date(Date.now() - 5 * 3600000).toISOString();
+            clic('btnActualizar'); await esperar(() => filaG('baLista', emb2.fields.Title)?.querySelector('.ultimo-ambar'), 'R-03: ámbar con 5 h');
+            const viejo = filaG('baLista', emb2.fields.Title).querySelector('.ultimo-ambar').textContent;
+            emb2.fields.BrutoHora = bh;
+            clic('btnActualizar'); await esperar(() => filaG('baLista', emb2.fields.Title) && !filaG('baLista', emb2.fields.Title).querySelector('.ultimo-ambar'), 'R-03: de vuelta sin ámbar');
+            R.ok('R-03 (v0.84.0): la góndola recién pesada dice «hace…» sin ámbar; con 5 h desde el bruto se pinta en ámbar', reciente && /bruto .* · (hace 5 h|desde ayer)/.test(viejo), `${f0.textContent.slice(0, 80)} | ${viejo}`);
+        }
         filaG('baLista', emb2.fields.Title).querySelector('button').click();
         await esperar(() => visible('baPesar'), 'tara 2');
+        R.ok('R-01 (v0.84.0): la tara muestra la anterior de la misma unidad (la de la góndola 1)', visible('baTaraAnterior') && $('baTaraAnterior').textContent.includes('23,380 kg'), $('baTaraAnterior').textContent);
+        poner('baKg', '23900'); await dormir(30);
+        R.ok('R-01 (v0.84.0): una tara dentro del 3 % de la anterior no avisa', !visible('baAvisoNeto') && !visible('baMotivoNetoCampo'), $('baAvisoNeto').textContent);
+        poner('baKg', '21000'); await dormir(30);   // neto 23,600 de 25 t: en banda; la tara, 10 % abajo de la anterior
+        R.ok('R-01 (v0.84.0): con el neto en banda y SOLO la tara fuera, el aviso habla de la tara y pide motivo, sin decir «neto»', visible('baAvisoNeto') && visible('baMotivoNetoCampo') && $('baAvisoNeto').textContent.includes('se aparta 2,380 kg') && !/neto/i.test($('baAvisoNeto').textContent), $('baAvisoNeto').textContent);
+        poner('baTicketBascula', emb1.fields.TicketBascula); await dormir(20);
+        const avisoT = visible('baTicketUsado') && $('baTicketUsado').textContent.includes(emb1.fields.Title);
+        poner('baTicketBascula', ''); await dormir(20);
+        R.ok('R-02 (v0.84.0): el ticket de báscula ya usado en otra góndola se avisa junto al campo y se va al borrarlo', avisoT && !visible('baTicketUsado'));
         poner('baKg', '40000'); await dormir(30);
         R.ok('neto 4,600 kg (< 30 % de 25 t) dispara el aviso y pide motivo', visible('baAvisoNeto') && visible('baMotivoNetoCampo'));
+        R.ok('R-01 (v0.84.0): la tara de 40,000 contra 23,380 de la unidad también se dice en el aviso', $('baAvisoNeto').textContent.includes('se aparta 16,620 kg'), $('baAvisoNeto').textContent);
         await foto(); window.__sinTicket = true; clic('btnGuardarPeso'); await dormir(50); window.__sinTicket = false;
         R.ok('C-43 (v0.42.0): sin ticket de báscula la tara no se guarda y la góndola sigue en planta', !!avisoCon('Falta el número del ticket de báscula') && emb2.fields.Etapa !== 'cerrado' && document.activeElement === $('baTicketBascula'), `etapa ${emb2.fields.Etapa}`);
         // v0.77.0 (2ª corrida): tara >= bruto o kilos con decimales no cierran ni con motivo escrito (antes: neto 0/negativo o 11500.1999…).
@@ -1269,6 +1296,7 @@ try {
         poner('baMotivoNeto', 'Góndola venía a un cuarto, confirmado con el chofer'); clic('btnGuardarPeso');
         await esperar(() => avisoCon(`${emb2.fields.Title} cerrada`), 'tara 2 guardada');
         R.ok('motivo del neto queda en Notas', String(emb2.fields.Notas).includes('fuera de banda') && String(emb2.fields.Notas).includes('un cuarto'));
+        R.ok('R-01 (v0.84.0): la tara fuera de lo esperado queda en Notas con su propio prefijo (Reportes sigue contando solo «Neto fuera de banda»)', /^Neto fuera de banda \(.*\)\. Tara fuera de lo esperado \(.*\)\. Motivo: /.test(String(emb2.fields.Notas)), String(emb2.fields.Notas).slice(0, 200));
 
         // 9. Caso 4 del plan: placa no transcrita -> rechazo legal R-, sin consumir E-.
         irPuerta();
@@ -1576,6 +1604,7 @@ try {
             // La app relee el renglon antes de subir la foto: no cierra, no sube lote y lo dice.
             e110.fields.Etapa = 'anulado'; e110.fields.AnuladoPor = 'gerencia@example.invalid';
             poner('baKg', '20000'); await foto();
+            if (visible('baMotivoNetoCampo')) poner('baMotivoNeto', 'C-13: aquí se prueba la carrera, no el peso');   // R-01 (v0.84.0): la unidad ya tiene tara anterior
             const carpetasC13 = DB.carpetas.length;
             clic('btnGuardarPeso'); await esperar(() => avisoCon('lo movió otra sesión'), 'tara rechazada por carrera');
             R.ok('decisión 11 (gana el primero): el aviso dice qué hizo la otra sesión y quién, y el pesaje sigue abierto con lo tecleado', !!avisoCon('la anuló') && visible('baPesar') && $('baKg').value === '20000', (avisoCon('lo movió otra sesión') || {}).textContent);

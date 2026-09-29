@@ -76,6 +76,11 @@ export const CONFIG = {
     // Tolerancia del neto contra la capacidad de la unidad (decision 6): fuera de la banda se
     // pide re-captura antes de cerrar el folio. Es cinturon, no barrera: con motivo se cierra.
     tolerancia: { minFraccion: 0.3, maxFraccion: 1.25 },
+    // R-01 (v0.84.0; Carlos, 28-sep): la tara que se aparta mas de esta fraccion de la anterior de la MISMA unidad avisa y
+    // pide motivo, como el neto fuera de banda. No bloquea.
+    toleranciaTara: 0.03,
+    // R-03 (v0.84.0; Carlos, 28-sep): horas en planta a partir de las cuales «Último dato» se pinta en ambar.
+    enPlantaAmbarHoras: 4,
 
     // Dias de anticipacion con que la puerta avisa (no bloquea) de un vencimiento cercano.
     avisoVigenciaDias: 30,

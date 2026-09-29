@@ -3,7 +3,7 @@
 
 import { CONFIG } from './config.js';
 import { comprimir } from './imagen.js';
-import { accionCorreccion, avisoNeto, etiquetaCorriente, fechaCorta, fechaMexico, hallazgosDe, horaMexico, limpiar, lista, plural, PUEDE, reglasDe, siguienteFolio, siguientePaso, slug, yaCapturado } from './reglas.js';
+import { accionCorreccion, avisoNeto, avisoTara, faltaMotivoPeso, notasPeso, taraAnterior, tiempoEnPlanta, yaUsadoEn, etiquetaCorriente, fechaCorta, fechaMexico, hallazgosDe, horaMexico, limpiar, lista, plural, PUEDE, reglasDe, siguienteFolio, siguientePaso, slug, yaCapturado } from './reglas.js';
 import { $, anclar, aplicar, avisar, botonAccion, confirmar, el, embarquesDelAno, enListaPlanta, enPlanta, esColumnaFaltante, escribiendo, esperaAutorizacion, estado, etiqueta, excepcionAutorizada, filtroTexto, firmar, fundirEnVentana, horaCorta, L, nombreDe, normaliza, palabraCompuertaDe, pintarInsignias, porId, quien, refrescarCliente, selloSinFirma, VERSION, vivo } from './nucleo.js';
 import { repintar } from './navegacion.js';
 import { asegurarFolioUnico } from './puerta.js';
@@ -69,8 +69,11 @@ const COLS_GONDOLA = [
 export const kgG = n => `${Number(n).toLocaleString('es-MX')} kg`;
 /** Lo último que se capturó de una góndola en planta: el peso bruto, o la hora a la que pasó (o llegó, si espera). */
 function ultimoDatoG(e) {
-    if (e.Etapa === 'bruto') return `bruto ${kgG(e.BrutoKg)}`;
-    return `${esperaAutorizacion(e) ? 'arribo' : 'pasó'} ${horaMexico(e.Arribo, 'hora')}`;
+    const dato = e.Etapa === 'bruto' ? `bruto ${kgG(e.BrutoKg)}` : `${esperaAutorizacion(e) ? 'arribo' : 'pasó'} ${horaMexico(e.Arribo, 'hora')}`;
+    // R-03 (v0.84.0): cuánto lleva así, desde el bruto o desde que pasó; ámbar de texto desde CONFIG.enPlantaAmbarHoras.
+    const t = tiempoEnPlanta(e.Etapa === 'bruto' ? (e.BrutoHora || e.Arribo) : e.Arribo);
+    if (!t) return dato;
+    return el('span', t.horas >= CONFIG.enPlantaAmbarHoras ? 'ultimo-ambar' : '', `${dato} · ${t.texto}`);
 }
 /** Ticket (si hay folio), el certificado de la góndola cerrada y Anular/Eliminar. `lista` es la que recorre el ticket con ‹ ›. */
 function botonesCerrada(e, lista) {
@@ -376,10 +379,14 @@ export function abrirPesaje(e, fase) {
         $('baNvCapBox').classList.toggle('oculto', !(u && u.CapacidadKg));
         revisarNeto();
     }
+    // R-01 (v0.84.0): la tara anterior de esta unidad, a la vista mientras se teclea la nueva.
+    const ant = fase === 'tara' ? taraAnterior(estado.embarques, e.UnidadId, e.id) : null;
+    $('baTaraAnterior').textContent = ant ? `Tara anterior de esta unidad: ${kgG(ant.kg)}${ant.hora ? ` (${horaMexico(ant.hora)})` : ''}` : '';
+    $('baTaraAnterior').classList.toggle('oculto', !ant);
     // v0.39.0: el ticket de bascula (el que imprime el indicador) se captura al cerrar la TARA — cubre tara y destara,
     // y es lo que va impreso en el certificado de esa gondola (Carlos, 2026-09-22).
     $('baTicketCampo').classList.toggle('oculto', fase !== 'tara');
-    $('baTicketBascula').value = '';
+    $('baTicketBascula').value = ''; revisarTicket();
     $('baAvisoNeto').classList.add('oculto');
     $('baMotivoNetoCampo').classList.add('oculto');
     $('baMotivoNeto').value = '';
@@ -404,13 +411,20 @@ export async function tomarFoto(archivo) {
     } catch (e) { avisar('No se pudo leer la foto: ' + e.message, 'error'); }
 }
 
+/** El neto contra la banda y (R-01, v0.84.0) la tara contra la anterior de la unidad, de la tara que está en pantalla. */
+function avisosPeso(p) {
+    const u = porId(estado.unidades, p.embarque.UnidadId);
+    return { aNeto: avisoNeto(p.embarque.BrutoKg, $('baKg').value, u ? u.CapacidadKg : null, CONFIG.tolerancia),
+             aTara: avisoTara($('baKg').value, taraAnterior(estado.embarques, p.embarque.UnidadId, p.embarque.id), CONFIG.toleranciaTara) };
+}
+/** Devuelve lo que va a Notas si el peso no cuadra (notasPeso: cada uno con su prefijo), o null. */
 export function revisarNeto() {
     const p = estado.pesando; if (!p || p.fase !== 'tara') return null;
-    const u = porId(estado.unidades, p.embarque.UnidadId);
-    const aviso = avisoNeto(p.embarque.BrutoKg, $('baKg').value, u ? u.CapacidadKg : null, CONFIG.tolerancia);
+    const { aNeto, aTara } = avisosPeso(p);
+    const aviso = notasPeso(aNeto, aTara);
     $('baAvisoNeto').classList.toggle('oculto', !aviso);
     $('baMotivoNetoCampo').classList.toggle('oculto', !aviso);
-    if (aviso) $('baAvisoNeto').textContent = 'Revisa el indicador: ' + aviso;
+    if (aviso) $('baAvisoNeto').textContent = 'Revisa el indicador: ' + [aNeto, aTara].filter(Boolean).join(' · ');
     // I2: el neto se ve conforme se teclea; ambar si se sale de la banda; el boton dice lo que va a cerrar.
     const tara = Number($('baKg').value), bruto = Number(p.embarque.BrutoKg);
     const neto = Number.isFinite(tara) && tara > 0 ? bruto - tara : null;
@@ -420,6 +434,15 @@ export function revisarNeto() {
     $('btnGuardarPeso').textContent = neto === null || neto <= 0 ? 'Guardar tara' : `Guardar tara · neto ${neto.toLocaleString('es-MX')} kg ›`;
     return aviso;
 }
+
+/** R-02 (v0.84.0): el ticket tecleado que ya trae otra góndola de la ventana se avisa junto al campo; no bloquea. */
+export function revisarTicket() {
+    const p = estado.pesando;
+    const otra = p && p.fase === 'tara' ? yaUsadoEn(estado.embarques, 'TicketBascula', $('baTicketBascula').value, p.embarque.id) : null;
+    $('baTicketUsado').textContent = otra ? `Ya usado en ${otra.Title || 'otra góndola'} (${horaMexico(otra.TaraHora || otra.Arribo)}). Revisa el ticket.` : '';
+    $('baTicketUsado').classList.toggle('oculto', !otra);
+}
+$('baTicketBascula').addEventListener('input', revisarTicket);
 
 export async function guardarPeso() {
     const p = estado.pesando; if (!p) return;
@@ -432,7 +455,7 @@ export async function guardarPeso() {
     // El ticket de bascula es obligatorio al cerrar: despues no hay donde capturarlo, y el certificado de la gondola lo lleva impreso.
     if (p.fase === 'tara' && !$('baTicketBascula').value.trim()) { avisar('Falta el número del ticket de báscula: es lo que va impreso en el certificado de esta góndola.', 'error'); $('baTicketBascula').focus(); return; }
     const aviso = revisarNeto();
-    if (aviso && !$('baMotivoNeto').value.trim()) { avisar('El neto se sale de la banda: re-captura, o di por qué se cierra igual.', 'error'); return; }
+    if (aviso && !$('baMotivoNeto').value.trim()) { const { aNeto, aTara } = avisosPeso(p); avisar(faltaMotivoPeso(aNeto, aTara), 'error'); return; }
     await escribiendo('btnGuardarPeso', async () => {   // C-24 / C-23: boton deshabilitado y sin refresco mientras sube
     $('avance').classList.remove('oculto');
     const paso = t => { $('textoAvance').textContent = t; };
@@ -507,7 +530,7 @@ async function guardarTara(e, kg, ahora, aviso, paso) {
     const campos = limpiar({ Etapa: 'cerrado', TaraKg: kg, TaraHora: ahora, TaraFoto: lote.ref, NetoKg: neto,
         TicketBascula: $('baTicketBascula').value.trim() || null,
         InicioAlmacen: e.BrutoHora || ahora,
-        Notas: aviso ? `Neto fuera de banda (${aviso}). Motivo: ${$('baMotivoNeto').value.trim()}` : null });
+        Notas: aviso ? `${aviso}. Motivo: ${$('baMotivoNeto').value.trim()}` : null });   // R-01: el prefijo ya viene de revisarNeto
     await guardarConLote(e, lote, campos, paso);
     aplicar('embarques', e, campos);
     avisar(`Góndola ${e.Title} cerrada: neto ${kgG(neto)}.`, 'bien');   // U-87: el vocabulario de la sección
